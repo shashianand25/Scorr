@@ -4,7 +4,7 @@ import tseslint from "typescript-eslint";
 import { globalIgnores } from "eslint/config";
 
 export default [
-  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "node_modules/**", "public/sw.js"]),
+  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "node_modules/**", "public/sw.js", "mobile/**"]),
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

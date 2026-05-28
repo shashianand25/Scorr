@@ -42,7 +42,7 @@ export function UserMenu() {
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 rounded-xl py-1.5 pl-2 pr-3 transition-colors hover:bg-white/5"
+        className="flex items-center gap-1.5 sm:gap-2 rounded-xl py-1.5 px-1.5 sm:pl-2 sm:pr-3 transition-colors hover:bg-white/5"
       >
         <div
           className="grid size-8 place-items-center rounded-lg text-xs font-bold"
@@ -50,10 +50,10 @@ export function UserMenu() {
         >
           {initials}
         </div>
-        <span className="max-w-[120px] truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+        <span className="hidden sm:inline max-w-[120px] truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>
           {user.name || user.email}
         </span>
-        <ChevronDown className="size-3.5" style={{ color: "var(--text-tertiary)" }} />
+        <ChevronDown className="hidden sm:inline size-3.5" style={{ color: "var(--text-tertiary)" }} />
       </button>
 
       <AnimatePresence>

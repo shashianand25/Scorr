@@ -41,11 +41,11 @@ function Header({
         borderBottom: "1px solid rgba(255,255,255,0.07)",
       }}
     >
-      <div className="mx-auto flex max-w-6xl items-center gap-2 px-5 py-0">
+      <div className="mx-auto flex max-w-6xl items-center gap-1.5 px-4 py-0 sm:gap-2 sm:px-5">
         {/* Logo */}
         <button
           onClick={() => onNavigate({ id: "dashboard" })}
-          className="mr-4 flex items-center gap-2.5 py-4 transition-opacity hover:opacity-80"
+          className="mr-2 flex items-center gap-2 py-4 transition-opacity hover:opacity-80 sm:mr-4 sm:gap-2.5"
         >
           <div
             className="grid size-7 place-items-center rounded-lg"
@@ -56,13 +56,13 @@ function Header({
           >
             <Brain className="size-4" style={{ color: "#07090e" }} />
           </div>
-          <span className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>
+          <span className="hidden sm:inline text-sm font-bold" style={{ color: "var(--text-primary)" }}>
             QuizForge
           </span>
         </button>
 
         {/* Nav links */}
-        <nav className="flex items-center gap-1">
+        <nav className="flex items-center gap-0.5 sm:gap-1">
           <NavLink
             active={page.id === "dashboard"}
             onClick={() => onNavigate({ id: "dashboard" })}
@@ -77,11 +77,11 @@ function Header({
           />
           {page.id === "quiz" && quizTitle && (
             <>
-              <span className="px-1" style={{ color: "var(--text-tertiary)" }}>
+              <span className="hidden sm:inline px-0.5 sm:px-1" style={{ color: "var(--text-tertiary)" }}>
                 <ChevronRight className="size-3.5" />
               </span>
               <span
-                className="max-w-[160px] truncate py-4 text-sm font-medium"
+                className="hidden sm:inline max-w-[160px] truncate py-4 text-sm font-medium"
                 style={{ color: "var(--text-primary)" }}
               >
                 {quizTitle}
@@ -90,10 +90,10 @@ function Header({
           )}
           {page.id === "add" && (
             <>
-              <span className="px-1" style={{ color: "var(--text-tertiary)" }}>
+              <span className="hidden sm:inline px-1" style={{ color: "var(--text-tertiary)" }}>
                 <ChevronRight className="size-3.5" />
               </span>
-              <span className="py-4 text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+              <span className="hidden sm:inline py-4 text-sm font-medium" style={{ color: "var(--text-primary)" }}>
                 Add Quiz
               </span>
             </>
@@ -103,12 +103,12 @@ function Header({
         {/* Spacer */}
         <div className="flex-1" />
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <UserMenu />
           {/* Add Quiz button */}
           <button
             onClick={() => onNavigate({ id: "add" })}
-            className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold transition-all hover:opacity-90"
+            className="flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-semibold transition-all hover:opacity-90 sm:gap-1.5 sm:px-4"
             style={{
               background: page.id === "add" ? "var(--accent-primary)" : "rgba(0,229,160,0.12)",
               color: page.id === "add" ? "#07090e" : "var(--accent-primary)",
@@ -116,7 +116,7 @@ function Header({
             }}
           >
             <Plus className="size-4" />
-            Add Quiz
+            <span className="hidden sm:inline">Add Quiz</span>
           </button>
         </div>
       </div>
@@ -138,15 +138,15 @@ function NavLink({
   return (
     <button
       onClick={onClick}
-      className="relative flex items-center gap-1.5 px-3 py-4 text-sm font-medium transition-colors"
+      className="relative flex items-center gap-1 px-2.5 py-4 text-sm font-medium transition-colors sm:gap-1.5 sm:px-3"
       style={{ color: active ? "var(--text-primary)" : "var(--text-tertiary)" }}
     >
       {icon}
-      {label}
+      <span className="hidden sm:inline">{label}</span>
       {active && (
         <motion.div
           layoutId="nav-underline"
-          className="absolute inset-x-3 bottom-0 h-0.5 rounded-full"
+          className="absolute inset-x-2.5 bottom-0 h-0.5 rounded-full sm:inset-x-3"
           style={{ background: "var(--accent-primary)" }}
           transition={{ type: "spring", stiffness: 400, damping: 35 }}
         />
