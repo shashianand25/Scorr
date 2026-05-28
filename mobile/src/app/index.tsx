@@ -394,22 +394,25 @@ export default function HomeScreen() {
               </Text>
 
               <View style={styles.codeBlockContainer}>
-                <Text style={styles.codeLine}><Text style={styles.codeTag}>#title</Text> World Geography Quiz</Text>
-                <Text style={styles.codeLine}><Text style={styles.codeTag}>#category</Text> Geography</Text>
+                <Text style={styles.codeLine}><Text style={styles.codeTag}>@title</Text>: World Geography Quiz</Text>
+                <Text style={styles.codeLine}><Text style={styles.codeTag}>@category</Text>: Geography</Text>
                 <Text style={styles.codeLine}></Text>
-                <Text style={styles.codeLine}>1. What is the capital of France?</Text>
-                <Text style={styles.codeLine}>A) Berlin</Text>
-                <Text style={styles.codeLine}>B) Madrid</Text>
-                <Text style={styles.codeLine}>C) Paris</Text>
-                <Text style={styles.codeLine}>D) Rome</Text>
-                <Text style={styles.codeLine}><Text style={styles.codeAnswer}>Answer: C</Text></Text>
+                <Text style={styles.codeLine}><Text style={styles.codeComment}># This is a comment</Text></Text>
+                <Text style={styles.codeLine}><Text style={styles.codeTag}>?</Text> What is the capital of France?</Text>
+                <Text style={styles.codeLine}><Text style={styles.codeWrong}>-</Text> Berlin</Text>
+                <Text style={styles.codeLine}><Text style={styles.codeWrong}>-</Text> Madrid</Text>
+                <Text style={styles.codeLine}><Text style={styles.codeAnswer}>+</Text> Paris</Text>
+                <Text style={styles.codeLine}><Text style={styles.codeWrong}>-</Text> Rome</Text>
                 <Text style={styles.codeLine}></Text>
-                <Text style={styles.codeLine}>2. Which ocean is the largest?</Text>
-                <Text style={styles.codeLine}>...</Text>
+                <Text style={styles.codeLine}><Text style={styles.codeTag}>?</Text> Name the muscle tone characteristic of children in the first months of life:</Text>
+                <Text style={styles.codeLine}><Text style={styles.codeWrong}>-</Text> physiological hypotension of flexor muscles</Text>
+                <Text style={styles.codeLine}><Text style={styles.codeWrong}>-</Text> decreased muscle tone in the hands</Text>
+                <Text style={styles.codeLine}><Text style={styles.codeAnswer}>+</Text> physiological hypertension of flexor muscles</Text>
+                <Text style={styles.codeLine}><Text style={styles.codeWrong}>-</Text> decreased muscle tone in the legs</Text>
               </View>
               
               <Text style={styles.guideStepTip}>
-                <Ionicons name="bulb-outline" size={13} color="#00e5a0" style={{ marginRight: 4 }} /> Tip: Ensure options start with A), B), C), D) and the correct answer starts with "Answer:".
+                <Ionicons name="bulb-outline" size={13} color="#00e5a0" style={{ marginRight: 4 }} /> Tip: Use '@key: value' for quiz parameters. Start questions with '?' and prefix answer choices with '+' (correct) and '-' (incorrect).
               </Text>
             </View>
 
@@ -1677,6 +1680,14 @@ const styles = StyleSheet.create({
   },
   codeAnswer: {
     color: "#00e5a0",
+    fontWeight: "600",
+  },
+  codeComment: {
+    color: "#6272a4",
+    fontStyle: "italic",
+  },
+  codeWrong: {
+    color: "#ff5555",
     fontWeight: "600",
   },
   guideStepTip: {
