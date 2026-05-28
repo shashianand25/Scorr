@@ -89,6 +89,7 @@ function Stepper({
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<"home" | "dashboard" | "add" | "guide" | "menu">("home");
+  const [showAddMenu, setShowAddMenu] = useState<boolean>(false);
   const [selectedQuiz, setSelectedQuiz] = useState<any | null>(null);
   const [selectionMode, setSelectionMode] = useState<"all" | "random" | "range" | "unanswered" | "wrong">("all");
   const [randomCount, setRandomCount] = useState<number>(5);
@@ -610,7 +611,7 @@ export default function HomeScreen() {
         {/* Tab 3: Center Plus button (double ring) */}
         <View style={styles.centerTabContainer}>
           <Pressable
-            onPress={() => setActiveTab("add")}
+            onPress={() => setShowAddMenu(true)}
             style={({ pressed }) => [
               styles.centerOuterRing,
               pressed && styles.centerRingPressed,
@@ -949,6 +950,72 @@ export default function HomeScreen() {
             </ScrollView>
           </View>
         </View>
+      </Modal>
+
+      {/* Add Test Bottom Sheet Modal */}
+      <Modal
+        visible={showAddMenu}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowAddMenu(false)}
+      >
+        <Pressable 
+          style={styles.modalBackdrop} 
+          onPress={() => setShowAddMenu(false)}
+        >
+          <View style={styles.bottomSheetCard} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalDragHandle} />
+            <Text style={styles.bottomSheetTitle}>Add Test</Text>
+
+            <View style={styles.bottomSheetOptionsContainer}>
+              <Pressable
+                onPress={() => {
+                  setShowAddMenu(false);
+                  const msg = "Simulating file upload...\nSelect a .txt or .qst file from your device.";
+                  if (Platform.OS === "web") {
+                    alert(msg);
+                  } else {
+                    Alert.alert("Load from File", msg);
+                  }
+                }}
+                style={({ pressed }) => [styles.bottomSheetOptionBtn, pressed && styles.opacityPress]}
+              >
+                <View style={[styles.bottomSheetIconBox, { backgroundColor: "rgba(0, 229, 160, 0.1)" }]}>
+                  <Ionicons name="document-text-outline" size={20} color="#00e5a0" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.bottomSheetOptionText}>Load from File (.txt)</Text>
+                  <Text style={styles.bottomSheetOptionSub}>Import questions from a formatted text file</Text>
+                </View>
+                <Feather name="chevron-right" size={16} color="#6e727a" />
+              </Pressable>
+
+              <Pressable
+                onPress={() => {
+                  setShowAddMenu(false);
+                  setActiveTab("add");
+                }}
+                style={({ pressed }) => [styles.bottomSheetOptionBtn, pressed && styles.opacityPress]}
+              >
+                <View style={[styles.bottomSheetIconBox, { backgroundColor: "rgba(59, 130, 246, 0.1)" }]}>
+                  <Ionicons name="create-outline" size={20} color="#3b82f6" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.bottomSheetOptionText}>Create New</Text>
+                  <Text style={styles.bottomSheetOptionSub}>Draft a new custom quiz manually</Text>
+                </View>
+                <Feather name="chevron-right" size={16} color="#6e727a" />
+              </Pressable>
+            </View>
+
+            <Pressable
+              onPress={() => setShowAddMenu(false)}
+              style={({ pressed }) => [styles.bottomSheetCancelBtn, pressed && styles.opacityPress]}
+            >
+              <Text style={styles.bottomSheetCancelBtnText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </Pressable>
       </Modal>
     </SafeAreaView>
   );
@@ -1930,6 +1997,67 @@ const styles = StyleSheet.create({
   dialogConfirmText: {
     color: "#000000",
     fontSize: 14,
+    fontWeight: "bold",
+  },
+  bottomSheetCard: {
+    backgroundColor: "#0d0f14",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 10,
+    paddingHorizontal: 24,
+    paddingBottom: Platform.OS === "ios" ? 40 : 24,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    borderTopWidth: 1,
+    width: "100%",
+  },
+  bottomSheetTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#ffffff",
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  bottomSheetOptionsContainer: {
+    gap: 12,
+    marginBottom: 20,
+  },
+  bottomSheetOptionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.03)",
+    borderColor: "rgba(255, 255, 255, 0.06)",
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    gap: 12,
+  },
+  bottomSheetIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bottomSheetOptionText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  bottomSheetOptionSub: {
+    color: "#6e727a",
+    fontSize: 11,
+    marginTop: 2,
+  },
+  bottomSheetCancelBtn: {
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bottomSheetCancelBtnText: {
+    color: "#ffffff",
+    fontSize: 15,
     fontWeight: "bold",
   },
 });
