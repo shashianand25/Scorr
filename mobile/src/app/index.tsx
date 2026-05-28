@@ -11,6 +11,7 @@ import {
   Dimensions,
   Alert,
   TextInput,
+  Linking,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons, FontAwesome6 } from "@expo/vector-icons";
@@ -87,7 +88,7 @@ function Stepper({
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const [activeTab, setActiveTab] = useState<"home" | "dashboard" | "add" | "wallet" | "menu">("home");
+  const [activeTab, setActiveTab] = useState<"home" | "dashboard" | "add" | "guide" | "menu">("home");
   const [selectedQuiz, setSelectedQuiz] = useState<any | null>(null);
   const [selectionMode, setSelectionMode] = useState<"all" | "random" | "range" | "unanswered" | "wrong">("all");
   const [randomCount, setRandomCount] = useState<number>(5);
@@ -349,39 +350,102 @@ export default function HomeScreen() {
           </ScrollView>
         );
 
-      case "wallet":
+      case "guide":
         return (
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
             <View style={styles.tabHeader}>
-              <Text style={styles.tabTitle}>Wallet & Points</Text>
-              <Text style={styles.tabSubtitle}>Check your loyalty stats and points balance</Text>
+              <Text style={styles.tabTitle}>How to Create a Quiz</Text>
+              <Text style={styles.tabSubtitle}>Learn how to build, format, and load custom MCQ quizzes</Text>
             </View>
 
-            <View style={styles.walletCard}>
-              <Text style={styles.walletCardLabel}>Points Balance</Text>
-              <Text style={styles.walletCardValue}>12,450 XP</Text>
-              <Text style={styles.walletCardSubtitle}>Equivalent to approx. ₹1,245.00</Text>
-            </View>
-
-            <Text style={styles.sectionHeading}>Unlocked Achievements</Text>
-            {[
-              { title: "First Quiz Complete", desc: "Successfully finished an exam", xp: "+100 XP", icon: "ribbon" },
-              { title: "Perfect Score Badge", desc: "Scored 100% on any biology quiz", xp: "+500 XP", icon: "shield-checkmark" },
-              { title: "Daily Scholar (7d)", desc: "Opened the app for 7 consecutive days", xp: "+250 XP", icon: "calendar" },
-            ].map((ach, i) => (
-              <View key={i} style={styles.quizCard}>
-                <View style={styles.quizCardLeft}>
-                  <View style={[styles.quizAvatar, { backgroundColor: "rgba(245, 158, 11, 0.1)" }]}>
-                    <Ionicons name={ach.icon as any} size={18} color="#f59e0b" />
-                  </View>
-                  <View>
-                    <Text style={styles.quizCardTitle}>{ach.title}</Text>
-                    <Text style={styles.quizCardMeta}>{ach.desc}</Text>
-                  </View>
+            {/* Video Tutorial Placeholder */}
+            <Text style={styles.sectionHeading}>Watch Tutorial Video</Text>
+            <Pressable
+              onPress={() => {
+                const url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"; // Placeholder YouTube link
+                Linking.openURL(url).catch((err) => {
+                  if (Platform.OS === "web") {
+                    alert("Opening YouTube video: " + url);
+                  } else {
+                    Alert.alert("Open Video", "Opening video in browser...");
+                  }
+                });
+              }}
+              style={({ pressed }) => [styles.videoPlayerCard, pressed && styles.opacityPress]}
+            >
+              <View style={styles.videoThumbnailPlaceholder}>
+                {/* Visual mock: dark background with red YouTube play button */}
+                <View style={styles.youtubePlayCircle}>
+                  <Ionicons name="play" size={24} color="#ffffff" style={{ marginLeft: 2 }} />
                 </View>
-                <Text style={[styles.quizTime, { color: "#00e5a0", fontWeight: "bold" }]}>{ach.xp}</Text>
+                <Text style={styles.videoDurationBadge}>1:45</Text>
               </View>
-            ))}
+              <View style={styles.videoCardDetails}>
+                <Text style={styles.videoCardTitle}>Video: Formatting & Importing Quizzes</Text>
+                <Text style={styles.videoCardSub}>Step-by-step video guide for teachers and students</Text>
+              </View>
+            </Pressable>
+
+            {/* Format Instructions */}
+            <Text style={styles.sectionHeading}>Step 1: Format Your Text File (.qst)</Text>
+            <View style={styles.guideStepCard}>
+              <Text style={styles.guideStepText}>
+                QuizForge reads custom quizzes written in a simple text format. Create a plain text file ending in <Text style={{ color: "#00e5a0", fontWeight: "bold" }}>.qst</Text> and follow this layout:
+              </Text>
+
+              <View style={styles.codeBlockContainer}>
+                <Text style={styles.codeLine}><Text style={styles.codeTag}>#title</Text> World Geography Quiz</Text>
+                <Text style={styles.codeLine}><Text style={styles.codeTag}>#category</Text> Geography</Text>
+                <Text style={styles.codeLine}></Text>
+                <Text style={styles.codeLine}>1. What is the capital of France?</Text>
+                <Text style={styles.codeLine}>A) Berlin</Text>
+                <Text style={styles.codeLine}>B) Madrid</Text>
+                <Text style={styles.codeLine}>C) Paris</Text>
+                <Text style={styles.codeLine}>D) Rome</Text>
+                <Text style={styles.codeLine}><Text style={styles.codeAnswer}>Answer: C</Text></Text>
+                <Text style={styles.codeLine}></Text>
+                <Text style={styles.codeLine}>2. Which ocean is the largest?</Text>
+                <Text style={styles.codeLine}>...</Text>
+              </View>
+              
+              <Text style={styles.guideStepTip}>
+                <Ionicons name="bulb-outline" size={13} color="#00e5a0" style={{ marginRight: 4 }} /> Tip: Ensure options start with A), B), C), D) and the correct answer starts with "Answer:".
+              </Text>
+            </View>
+
+            {/* Import Instructions */}
+            <Text style={styles.sectionHeading}>Step 2: Create or Load in App</Text>
+            <View style={styles.guideStepCard}>
+              <View style={styles.stepItemRow}>
+                <View style={styles.stepBadge}>
+                  <Text style={styles.stepBadgeText}>1</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.stepItemTitle}>Tap the Add (+) Button</Text>
+                  <Text style={styles.stepItemDesc}>Go to the center tab on the bottom menu to open the Quiz Creator.</Text>
+                </View>
+              </View>
+
+              <View style={styles.stepItemRow}>
+                <View style={styles.stepBadge}>
+                  <Text style={styles.stepBadgeText}>2</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.stepItemTitle}>Define Quiz Settings</Text>
+                  <Text style={styles.stepItemDesc}>Type in the title, choose a category, and specify the number of questions to draft your structure.</Text>
+                </View>
+              </View>
+
+              <View style={[styles.stepItemRow, { borderBottomWidth: 0, paddingBottom: 0 }]}>
+                <View style={styles.stepBadge}>
+                  <Text style={styles.stepBadgeText}>3</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.stepItemTitle}>Play & Customize</Text>
+                  <Text style={styles.stepItemDesc}>Select your quiz on the Home screen to configure options like Shuffle, range selection, or question timers, then play!</Text>
+                </View>
+              </View>
+            </View>
           </ScrollView>
         );
 
@@ -556,12 +620,12 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
-        {/* Tab 4: Wallet */}
-        <Pressable onPress={() => setActiveTab("wallet")} style={styles.tabItem}>
+        {/* Tab 4: Guide */}
+        <Pressable onPress={() => setActiveTab("guide")} style={styles.tabItem}>
           <Ionicons
-            name={activeTab === "wallet" ? "wallet" : "wallet-outline"}
+            name={activeTab === "guide" ? "play-circle" : "play-circle-outline"}
             size={24}
-            color={activeTab === "wallet" ? "#ffffff" : "#6e727a"}
+            color={activeTab === "guide" ? "#ffffff" : "#6e727a"}
           />
         </Pressable>
 
@@ -1527,31 +1591,135 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
   },
-  walletCard: {
-    backgroundColor: "rgba(0, 229, 160, 0.06)",
-    borderColor: "rgba(0, 229, 160, 0.15)",
+  videoPlayerCard: {
+    backgroundColor: "rgba(255, 255, 255, 0.03)",
+    borderColor: "rgba(255, 255, 255, 0.06)",
     borderWidth: 1,
-    borderRadius: 20,
-    padding: 24,
-    alignItems: "center",
-    marginBottom: 28,
+    borderRadius: 16,
+    overflow: "hidden",
+    marginBottom: 20,
   },
-  walletCardLabel: {
+  videoThumbnailPlaceholder: {
+    height: 160,
+    backgroundColor: "#16181e",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  youtubePlayCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#ff0000",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#ff0000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+  },
+  videoDurationBadge: {
+    position: "absolute",
+    bottom: 8,
+    right: 8,
+    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    color: "#ffffff",
+    fontSize: 11,
+    fontWeight: "600",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  videoCardDetails: {
+    padding: 12,
+  },
+  videoCardTitle: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  videoCardSub: {
+    color: "#6e727a",
+    fontSize: 11,
+    marginTop: 2,
+  },
+  guideStepCard: {
+    backgroundColor: "rgba(255, 255, 255, 0.03)",
+    borderColor: "rgba(255, 255, 255, 0.06)",
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+  },
+  guideStepText: {
+    color: "#cccccc",
     fontSize: 13,
-    color: "#00e5a0",
-    textTransform: "uppercase",
-    letterSpacing: 1,
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  codeBlockContainer: {
+    backgroundColor: "rgba(0, 0, 0, 0.3)",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.04)",
+  },
+  codeLine: {
+    color: "#b0b4bc",
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  codeTag: {
+    color: "#ff79c6",
     fontWeight: "600",
   },
-  walletCardValue: {
-    fontSize: 32,
-    fontWeight: "bold",
-    color: "#ffffff",
-    marginTop: 8,
+  codeAnswer: {
+    color: "#00e5a0",
+    fontWeight: "600",
   },
-  walletCardSubtitle: {
+  guideStepTip: {
+    color: "#888888",
+    fontSize: 11,
+    fontStyle: "italic",
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 4,
+  },
+  stepItemRow: {
+    flexDirection: "row",
+    gap: 12,
+    paddingBottom: 16,
+    marginBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.04)",
+  },
+  stepBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(0, 229, 160, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(0, 229, 160, 0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 2,
+  },
+  stepBadgeText: {
+    color: "#00e5a0",
     fontSize: 12,
-    color: "#666666",
+    fontWeight: "bold",
+  },
+  stepItemTitle: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  stepItemDesc: {
+    color: "#6e727a",
+    fontSize: 12,
+    lineHeight: 16,
     marginTop: 4,
   },
   profileSection: {
