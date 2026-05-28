@@ -21,7 +21,20 @@ const sampleQst = `@title: Biology Quiz
 
 ? The equation $E = mc^2$ was popularized by Einstein.
 + True
-- False`;
+- False
+
+? DNA stands for?
++ Deoxyribonucleic acid
+- Deoxyribose nucleic acid
+- Diribonucleic acid
+- Double nucleic acid
+
+? Which gas do plants absorb from the atmosphere for photosynthesis?
++ Carbon dioxide
+- Oxygen
+- Nitrogen
+- Hydrogen`;
+
 
 export default function Home() {
   return <AppShell initialQst={sampleQst} />;

@@ -40,7 +40,14 @@ const SAMPLE_QST = `@title: Biology Quiz
 + Deoxyribonucleic acid
 - Deoxyribose nucleic acid
 - Diribonucleic acid
-- Double nucleic acid`;
+- Double nucleic acid
+
+? Which gas do plants absorb from the atmosphere for photosynthesis?
++ Carbon dioxide
+- Oxygen
+- Nitrogen
+- Hydrogen`;
+
 
 export function UploadPanel({ currentFile, onLoaded, onStart }: UploadPanelProps) {
   const [isDragging, setIsDragging] = useState(false);
@@ -85,7 +92,7 @@ export function UploadPanel({ currentFile, onLoaded, onStart }: UploadPanelProps
   function loadSample() {
     const parsed = parseQst(SAMPLE_QST);
     onLoaded(parsed, "sample-biology-quiz.qst");
-    toast.success("Sample quiz loaded — 4 questions");
+    toast.success("Sample quiz loaded — 5 questions");
   }
 
   const q = currentFile?.parsed.data.questions.length ?? 0;

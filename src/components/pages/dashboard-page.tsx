@@ -7,7 +7,6 @@ import {
   Trophy,
   Target,
   ChevronRight,
-  Plus,
   Zap,
 } from "lucide-react";
 import type { SavedQuiz } from "@/components/quiz-types";
