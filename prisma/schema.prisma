@@ -1,0 +1,344 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  TEACHER
+  ADMIN
+  MODERATOR
+}
+
+enum QuizVisibility {
+  PUBLIC
+  PRIVATE
+  UNLISTED
+}
+
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  FILL_BLANK
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+  EXPERT
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  GRADED
+}
+
+enum RoomStatus {
+  LOBBY
+  LIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum ReportStatus {
+  OPEN
+  REVIEWING
+  RESOLVED
+  DISMISSED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?
+  role          Role      @default(USER)
+  bannedAt      DateTime?
+  banReason     String?
+  xp            Int       @default(0)
+  level         Int       @default(1)
+  streak        Int       @default(0)
+  lastActiveAt  DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  quizzes       Quiz[]
+  attempts      Attempt[]
+  roomsHosted   Room[]    @relation("RoomHost")
+  reports       Report[]  @relation("Reporter")
+  savedQuizzes  SavedQuiz[]
+  achievements  UserAchievement[]
+  analytics     AnalyticsEvent[]
+
+  @@index([role, bannedAt])
+  @@index([xp])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Quiz {
+  id              String         @id @default(cuid())
+  slug            String         @unique
+  title           String
+  description     String?
+  category        String?
+  visibility      QuizVisibility @default(PRIVATE)
+  tags            String[]       @default([])
+  timeLimitSec    Int?
+  negativeMarking Float          @default(0)
+  shuffleQuestions Boolean       @default(false)
+  shuffleAnswers   Boolean       @default(true)
+  adaptiveEnabled  Boolean       @default(false)
+  sourceFormat     String        @default("QST")
+  sourceText       String?       @db.Text
+  authorId         String
+  author           User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  questions        Question[]
+  attempts         Attempt[]
+  rooms            Room[]
+  reports          Report[]
+  savedBy          SavedQuiz[]
+  analytics        AnalyticsEvent[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  publishedAt      DateTime?
+
+  @@index([visibility, publishedAt])
+  @@index([category])
+  @@index([tags], type: Gin)
+}
+
+model Question {
+  id              String       @id @default(cuid())
+  quizId          String
+  quiz            Quiz         @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  order           Int
+  type            QuestionType
+  prompt          String       @db.Text
+  markdown        Boolean      @default(true)
+  imageUrl        String?
+  audioUrl        String?
+  videoUrl        String?
+  explanation     String?      @db.Text
+  difficulty      Difficulty   @default(MEDIUM)
+  tags            String[]     @default([])
+  timeLimitSec    Int?
+  points          Float        @default(1)
+  negativePoints  Float        @default(0)
+  poolKey         String?
+  answers         Answer[]
+  responses       Response[]
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@unique([quizId, order])
+  @@index([quizId, poolKey])
+  @@index([difficulty])
+}
+
+model Answer {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  order      Int
+  text       String   @db.Text
+  isCorrect  Boolean  @default(false)
+  mediaUrl   String?
+  createdAt  DateTime @default(now())
+
+  @@unique([questionId, order])
+}
+
+model Attempt {
+  id          String        @id @default(cuid())
+  quizId      String
+  quiz        Quiz          @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  userId      String?
+  user        User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  guestName   String?
+  status      AttemptStatus @default(IN_PROGRESS)
+  score       Float         @default(0)
+  maxScore    Float         @default(0)
+  accuracy    Float         @default(0)
+  durationSec Int?
+  review      Json          @default("{}")
+  responses   Response[]
+  roomPlayer  RoomPlayer?
+  createdAt   DateTime      @default(now())
+  submittedAt DateTime?
+
+  @@index([quizId, score])
+  @@index([userId, createdAt])
+}
+
+model Response {
+  id          String   @id @default(cuid())
+  attemptId   String
+  attempt     Attempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId  String
+  question    Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answerIds   String[] @default([])
+  freeText    String?  @db.Text
+  isCorrect   Boolean  @default(false)
+  points      Float    @default(0)
+  answeredAt  DateTime @default(now())
+  durationMs  Int?
+
+  @@unique([attemptId, questionId])
+}
+
+model Room {
+  id               String       @id @default(cuid())
+  code             String       @unique
+  quizId           String
+  quiz             Quiz         @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  hostId           String
+  host             User         @relation("RoomHost", fields: [hostId], references: [id], onDelete: Cascade)
+  status           RoomStatus   @default(LOBBY)
+  currentQuestion  Int          @default(0)
+  spectatorEnabled Boolean      @default(true)
+  antiCheatEnabled Boolean      @default(true)
+  startedAt        DateTime?
+  endedAt          DateTime?
+  createdAt        DateTime     @default(now())
+  players          RoomPlayer[]
+
+  @@index([status, createdAt])
+}
+
+model RoomPlayer {
+  id            String    @id @default(cuid())
+  roomId        String
+  room          Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  userId        String?
+  displayName   String
+  socketId      String?
+  isSpectator   Boolean   @default(false)
+  score         Float     @default(0)
+  streak        Int       @default(0)
+  attemptId     String?   @unique
+  attempt       Attempt?  @relation(fields: [attemptId], references: [id], onDelete: SetNull)
+  lastSeenAt    DateTime  @default(now())
+  joinedAt      DateTime  @default(now())
+
+  @@index([roomId, score])
+  @@index([userId])
+}
+
+model Achievement {
+  id          String            @id @default(cuid())
+  key         String            @unique
+  name        String
+  description String
+  icon        String
+  xpReward    Int               @default(0)
+  users       UserAchievement[]
+}
+
+model UserAchievement {
+  userId        String
+  achievementId String
+  earnedAt      DateTime    @default(now())
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@id([userId, achievementId])
+}
+
+model SavedQuiz {
+  userId  String
+  quizId  String
+  savedAt DateTime @default(now())
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quiz    Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@id([userId, quizId])
+}
+
+model LeaderboardEntry {
+  id          String   @id @default(cuid())
+  quizId      String
+  userId      String?
+  displayName String
+  score       Float
+  accuracy    Float
+  durationSec Int?
+  createdAt   DateTime @default(now())
+
+  @@index([quizId, score])
+  @@index([userId])
+}
+
+model Report {
+  id          String       @id @default(cuid())
+  quizId      String?
+  quiz        Quiz?        @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  reporterId  String?
+  reporter    User?        @relation("Reporter", fields: [reporterId], references: [id], onDelete: SetNull)
+  reason      String
+  details     String?      @db.Text
+  status      ReportStatus @default(OPEN)
+  createdAt   DateTime     @default(now())
+  resolvedAt  DateTime?
+
+  @@index([status, createdAt])
+}
+
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  type      String
+  quizId    String?
+  quiz      Quiz?    @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  roomCode  String?
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([type, createdAt])
+  @@index([quizId, createdAt])
+}
