@@ -1,14 +1,15 @@
 {
   "expo": {
     "name": "mobile",
-    "slug": "mobile",
+    "slug": "quizforge",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "mobile",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.radium230sorganization.quizforge"
     },
     "android": {
       "adaptiveIcon": {
@@ -17,7 +18,9 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.radium230sorganization.quizforge",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "output": "static",
@@ -34,11 +37,21 @@
             "imageWidth": 76
           }
         }
-      ]
+      ],
+      "expo-video",
+      "expo-audio",
+      "@react-native-google-signin/google-signin"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "fd1566ba-a713-448e-8fe6-71e8c5a23677"
+      }
+    },
+    "owner": "radium230s-organization"
   }
 }

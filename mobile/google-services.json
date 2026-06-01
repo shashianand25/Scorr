@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "767058687564",
+    "project_id": "sample-firebase-ai-app-228f1",
+    "storage_bucket": "sample-firebase-ai-app-228f1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:767058687564:android:5546bf83bba280b8e826e9",
+        "android_client_info": {
+          "package_name": "com.radium230sorganization.quizforge"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "767058687564-7rud7eb19lq9trimiknbu9tit8i4pho8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.radium230sorganization.quizforge",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "767058687564-un5r6dhtske1dk07ao7v25tns21v9087.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCxsSF2pL0uA7NkVPZcNwtjric6LVUGrK8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "767058687564-un5r6dhtske1dk07ao7v25tns21v9087.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

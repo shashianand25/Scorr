@@ -1,0 +1,133 @@
+import { initializeApp, getApps } from "firebase/app";
+import {
+  initializeAuth,
+  // @ts-ignore
+  getReactNativePersistence,
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  onAuthStateChanged,
+  updateProfile,
+  signInWithCredential,
+  type User,
+} from "firebase/auth";
+import ReactNativeAsyncStorage from "@react-native-async-storage/async-storage";
+
+import { Platform, Alert } from "react-native";
+import { GoogleSignin } from "@react-native-google-signin/google-signin";
+
+if (Platform.OS !== "web") {
+  GoogleSignin.configure({
+    webClientId: "767058687564-un5r6dhtske1dk07ao7v25tns21v9087.apps.googleusercontent.com",
+  });
+}
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCxsSF2pL0uA7NkVPZcNwtjric6LVUGrK8",
+  authDomain: "sample-firebase-ai-app-228f1.firebaseapp.com",
+  projectId: "sample-firebase-ai-app-228f1",
+  storageBucket: "sample-firebase-ai-app-228f1.firebasestorage.app",
+  messagingSenderId: "767058687564",
+  appId: "1:767058687564:android:5546bf83bba280b8e826e9",
+};
+
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+
+let authInstance;
+if (Platform.OS === "web") {
+  authInstance = getAuth(app);
+} else {
+  try {
+    authInstance = initializeAuth(app, {
+      persistence: getReactNativePersistence(ReactNativeAsyncStorage),
+    });
+  } catch (error: any) {
+    if (error.code === "auth/already-initialized") {
+      authInstance = getAuth(app);
+    } else {
+      console.warn("Firebase Auth Error:", error);
+      authInstance = getAuth(app);
+    }
+  }
+}
+
+export const auth = authInstance;
+
+// ── Google Sign-In ────────────────────────────────────────────────
+export async function signInWithGoogle(): Promise<User | null> {
+  try {
+    if (Platform.OS === "web") {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      const result = await signInWithPopup(auth, provider);
+      return result.user;
+    } else {
+      await GoogleSignin.hasPlayServices();
+      const userInfo = await GoogleSignin.signIn();
+      const idToken = userInfo?.data?.idToken || userInfo?.idToken;
+      if (!idToken) throw new Error("No ID token found");
+      const credential = GoogleAuthProvider.credential(idToken);
+      const result = await signInWithCredential(auth, credential);
+      return result.user;
+    }
+  } catch (err: any) {
+    if (err.code !== "auth/popup-closed-by-user") console.error("Google sign-in:", err);
+    return null;
+  }
+}
+
+// ── Email Sign Up ─────────────────────────────────────────────────
+export async function signUpWithEmail(
+  email: string,
+  password: string,
+  displayName: string
+): Promise<{ user: User | null; error: string | null }> {
+  try {
+    const result = await createUserWithEmailAndPassword(auth, email, password);
+    if (displayName.trim()) {
+      await updateProfile(result.user, { displayName: displayName.trim() });
+    }
+    return { user: result.user, error: null };
+  } catch (err: any) {
+    const msg =
+      err.code === "auth/email-already-in-use" ? "This email is already registered." :
+      err.code === "auth/weak-password" ? "Password must be at least 6 characters." :
+      err.code === "auth/invalid-email" ? "Please enter a valid email." :
+      "Sign up failed. Please try again.";
+    return { user: null, error: msg };
+  }
+}
+
+// ── Email Sign In ─────────────────────────────────────────────────
+export async function signInWithEmail(
+  email: string,
+  password: string
+): Promise<{ user: User | null; error: string | null }> {
+  try {
+    const result = await signInWithEmailAndPassword(auth, email, password);
+    return { user: result.user, error: null };
+  } catch (err: any) {
+    const msg =
+      err.code === "auth/user-not-found" || err.code === "auth/wrong-password" || err.code === "auth/invalid-credential"
+        ? "Incorrect email or password." :
+      err.code === "auth/invalid-email" ? "Please enter a valid email." :
+      err.code === "auth/too-many-requests" ? "Too many attempts. Try again later." :
+      "Sign in failed. Please try again.";
+    return { user: null, error: msg };
+  }
+}
+
+// ── Sign Out ──────────────────────────────────────────────────────
+export async function signOutUser(): Promise<void> {
+  await firebaseSignOut(auth);
+}
+
+// ── Auth state listener ───────────────────────────────────────────
+export function onAuth(callback: (user: User | null) => void) {
+  return onAuthStateChanged(auth, callback);
+}
+
+export type { User };

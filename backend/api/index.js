@@ -1,0 +1,239 @@
+const express = require('express');
+const cors = require('cors');
+const { Pool } = require('pg');
+require('dotenv').config();
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// Initialize Postgres connection pool
+// Neon provides a postgres connection string like postgresql://user:password@host/dbname
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
+});
+
+// Helper for generating simple UUIDs if not provided by client
+const generateId = () => Math.random().toString(36).substring(2) + Date.now().toString(36);
+
+// ── Users ────────────────────────────────────────────────────────────────
+app.post('/api/sync-user', async (req, res) => {
+  const { uid, email, displayName, photoURL } = req.body;
+  if (!uid) return res.status(400).json({ error: 'uid required' });
+  
+  try {
+    const query = `
+      INSERT INTO users (id, email, display_name, photo_url)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (id) DO UPDATE SET 
+        email = EXCLUDED.email, 
+        display_name = EXCLUDED.display_name, 
+        photo_url = EXCLUDED.photo_url,
+        updated_at = CURRENT_TIMESTAMP
+      RETURNING *;
+    `;
+    const result = await pool.query(query, [uid, email, displayName, photoURL]);
+    res.json({ user: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Quiz History ─────────────────────────────────────────────────────────
+app.post('/api/quiz-history', async (req, res) => {
+  const { userId, quizTitle, totalQuestions, correct, wrong, score, durationSec, wrongQuestions } = req.body;
+  const eventId = generateId();
+  
+  try {
+    const metadata = JSON.stringify({
+      quizTitle, totalQuestions, correct, wrong, score, durationSec, wrongQuestions
+    });
+    
+    // Insert history
+    await pool.query(
+      `INSERT INTO quiz_history (id, user_id, metadata) VALUES ($1, $2, $3)`,
+      [eventId, userId, metadata]
+    );
+    
+    // Update user XP
+    const xpGain = score; // simplified xp logic
+    const userUpdate = await pool.query(
+      `UPDATE users SET xp = xp + $1 WHERE id = $2 RETURNING xp, level`,
+      [xpGain, userId]
+    );
+    
+    res.json({ eventId, xpGain });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/quiz-history', async (req, res) => {
+  const { userId, limit = 20 } = req.query;
+  try {
+    const result = await pool.query(
+      `SELECT * FROM quiz_history WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`,
+      [userId, parseInt(limit)]
+    );
+    res.json({ history: result.rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Flashcard Decks ──────────────────────────────────────────────────────
+app.get('/api/flashcard-decks', async (req, res) => {
+  const { userId } = req.query;
+  try {
+    const result = await pool.query(`SELECT * FROM flashcard_decks WHERE user_id = $1`, [userId]);
+    // Format JSON correctly for JS
+    const decks = result.rows.map(r => ({
+      ...r,
+      cardType: r.card_type,
+      cards: typeof r.cards === 'string' ? JSON.parse(r.cards) : r.cards
+    }));
+    res.json({ decks });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/flashcard-decks', async (req, res) => {
+  const { userId, title, cardType, cards } = req.body;
+  const deckId = generateId();
+  try {
+    const result = await pool.query(
+      `INSERT INTO flashcard_decks (id, user_id, title, card_type, cards) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [deckId, userId, title, cardType, JSON.stringify(cards || [])]
+    );
+    const r = result.rows[0];
+    res.json({ deck: { ...r, cardType: r.card_type, cards: typeof r.cards === 'string' ? JSON.parse(r.cards) : r.cards } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/flashcard-decks', async (req, res) => {
+  const { userId, deckId, title, cardType, cards } = req.body;
+  try {
+    // Dynamic update
+    const updates = [];
+    const values = [];
+    let i = 1;
+    if (title !== undefined) { updates.push(`title = $${i++}`); values.push(title); }
+    if (cardType !== undefined) { updates.push(`card_type = $${i++}`); values.push(cardType); }
+    if (cards !== undefined) { updates.push(`cards = $${i++}`); values.push(JSON.stringify(cards)); }
+    
+    if (updates.length === 0) return res.json({ deck: null });
+    
+    updates.push(`updated_at = CURRENT_TIMESTAMP`);
+    values.push(deckId, userId);
+    
+    const query = `UPDATE flashcard_decks SET ${updates.join(', ')} WHERE id = $${i++} AND user_id = $${i++} RETURNING *`;
+    
+    const result = await pool.query(query, values);
+    const r = result.rows[0];
+    res.json({ deck: r ? { ...r, cardType: r.card_type, cards: typeof r.cards === 'string' ? JSON.parse(r.cards) : r.cards } : null });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/flashcard-decks', async (req, res) => {
+  const { userId, deckId } = req.query;
+  try {
+    await pool.query(`DELETE FROM flashcard_decks WHERE id = $1 AND user_id = $2`, [deckId, userId]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Mobile Quizzes ───────────────────────────────────────────────────────
+app.get('/api/mobile-quizzes', async (req, res) => {
+  const { userId } = req.query;
+  try {
+    const result = await pool.query(`SELECT * FROM mobile_quizzes WHERE user_id = $1`, [userId]);
+    const quizzes = result.rows.map(r => ({
+      ...r,
+      questionCount: r.question_count,
+      sourceText: r.source_text,
+      wrongQuestions: typeof r.wrong_questions === 'string' ? JSON.parse(r.wrong_questions) : r.wrong_questions,
+      uniqueCorrectIds: typeof r.unique_correct_ids === 'string' ? JSON.parse(r.unique_correct_ids) : r.unique_correct_ids,
+      attempts: typeof r.attempts === 'string' ? JSON.parse(r.attempts) : r.attempts
+    }));
+    res.json({ quizzes });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/mobile-quizzes', async (req, res) => {
+  const { userId, title, category, questionCount, sourceText, attempts, wrongQuestions, uniqueCorrectIds } = req.body;
+  const quizId = generateId();
+  try {
+    const result = await pool.query(
+      `INSERT INTO mobile_quizzes (id, user_id, title, category, question_count, source_text, attempts, wrong_questions, unique_correct_ids) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      [quizId, userId, title, category, questionCount || 0, sourceText || '', JSON.stringify(attempts || []), JSON.stringify(wrongQuestions || []), JSON.stringify(uniqueCorrectIds || [])]
+    );
+    const r = result.rows[0];
+    res.json({ quiz: { ...r, questionCount: r.question_count, sourceText: r.source_text } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/mobile-quizzes', async (req, res) => {
+  const { userId, quizId, title, category, questionCount, sourceText, attempts, wrongQuestions, uniqueCorrectIds } = req.body;
+  try {
+    const updates = [];
+    const values = [];
+    let i = 1;
+    if (title !== undefined) { updates.push(`title = $${i++}`); values.push(title); }
+    if (category !== undefined) { updates.push(`category = $${i++}`); values.push(category); }
+    if (questionCount !== undefined) { updates.push(`question_count = $${i++}`); values.push(questionCount); }
+    if (sourceText !== undefined) { updates.push(`source_text = $${i++}`); values.push(sourceText); }
+    if (attempts !== undefined) { updates.push(`attempts = $${i++}`); values.push(JSON.stringify(attempts)); }
+    if (wrongQuestions !== undefined) { updates.push(`wrong_questions = $${i++}`); values.push(JSON.stringify(wrongQuestions)); }
+    if (uniqueCorrectIds !== undefined) { updates.push(`unique_correct_ids = $${i++}`); values.push(JSON.stringify(uniqueCorrectIds)); }
+    
+    if (updates.length === 0) return res.json({ quiz: null });
+    
+    updates.push(`updated_at = CURRENT_TIMESTAMP`);
+    values.push(quizId, userId);
+    
+    const query = `UPDATE mobile_quizzes SET ${updates.join(', ')} WHERE id = $${i++} AND user_id = $${i++} RETURNING *`;
+    
+    const result = await pool.query(query, values);
+    const r = result.rows[0];
+    res.json({ quiz: r ? { ...r, questionCount: r.question_count, sourceText: r.source_text } : null });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/mobile-quizzes', async (req, res) => {
+  const { userId, quizId } = req.query;
+  try {
+    await pool.query(`DELETE FROM mobile_quizzes WHERE id = $1 AND user_id = $2`, [quizId, userId]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Start server locally
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Backend running on port ${PORT}`);
+});
+
+// Export for Vercel
+module.exports = app;

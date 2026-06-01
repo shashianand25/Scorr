@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "Recall",
+    "slug": "recall",
+
+    "extra": {
+      "eas": {
+        "projectId": "f9047bbf-c9db-46ee-91fd-7c05348336eb"
+      }
+    },
+
+    "android": {
+      "package": "com.radium230sorganization.quizforge"
+    }
+  }
+}
