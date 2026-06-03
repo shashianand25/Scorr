@@ -1,9 +1,11 @@
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
+const { Resend } = require('resend');
 require('dotenv').config();
 
 const app = express();
+const resend = new Resend('re_Kt6jhDqQ_FPcQUafA3aH3TkursCPxBcnW');
 app.use(cors());
 app.use(express.json());
 
@@ -37,6 +39,48 @@ app.post('/api/sync-user', async (req, res) => {
     `;
     const result = await pool.query(query, [uid, email, displayName, photoURL]);
     res.json({ user: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/sync-user', async (req, res) => {
+  const { userId } = req.query;
+  if (!userId) return res.status(400).json({ error: 'userId required' });
+  
+  try {
+    await pool.query(`DELETE FROM quiz_history WHERE user_id = $1`, [userId]);
+    await pool.query(`DELETE FROM flashcard_decks WHERE user_id = $1`, [userId]);
+    await pool.query(`DELETE FROM mobile_quizzes WHERE user_id = $1`, [userId]);
+    await pool.query(`DELETE FROM users WHERE id = $1`, [userId]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Feedback ─────────────────────────────────────────────────────────────
+app.post('/api/feedback', async (req, res) => {
+  const { userId, userEmail, message } = req.body;
+  const feedbackId = generateId();
+  try {
+    // Store in DB
+    await pool.query(
+      `INSERT INTO user_feedback (id, user_id, user_email, message) VALUES ($1, $2, $3, $4)`,
+      [feedbackId, userId || null, userEmail || null, message]
+    );
+
+    // Send Email via Resend
+    await resend.emails.send({
+      from: 'onboarding@resend.dev',
+      to: 'shashianand2005@gmail.com',
+      subject: `New Recall Feedback from ${userEmail || 'Anonymous'}`,
+      text: `User ID: ${userId || 'N/A'}\nUser Email: ${userEmail || 'N/A'}\n\nFeedback:\n${message}`
+    });
+
+    res.json({ ok: true });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });

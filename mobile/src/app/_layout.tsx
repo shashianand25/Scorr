@@ -3,8 +3,6 @@ import { useColorScheme, Platform } from 'react-native';
 import { Stack } from 'expo-router';
 import { useEffect } from 'react';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-
 export default function RootLayout() {
   const colorScheme = useColorScheme();
 
@@ -19,7 +17,6 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
       <Stack screenOptions={{ headerShown: false }} />
     </ThemeProvider>
   );

@@ -21,17 +21,28 @@ async function apiFetch<T>(
   path: string,
   options?: RequestInit
 ): Promise<{ data: T | null; error: string | null }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000); // 8-second timeout
+
   try {
     const res = await fetch(`${BASE_URL}${path}`, {
       headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
       ...options,
     });
+    clearTimeout(timeoutId);
+    
     const json = await res.json();
     if (!res.ok) {
       return { data: null, error: json?.error ?? `HTTP ${res.status}` };
     }
     return { data: json as T, error: null };
   } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      console.warn("[API Timeout]", path);
+      return { data: null, error: "Network timeout: Server took too long to respond." };
+    }
     console.warn("[API]", path, err?.message);
     return { data: null, error: err?.message ?? "Network error" };
   }
@@ -83,6 +94,35 @@ export async function syncUserToNeon(params: {
     }
   );
   return { user: data?.user ?? null, error };
+}
+
+/**
+ * Permanently deletes a user and all their data from Neon.
+ */
+export async function deleteUserFromNeon(userId: string): Promise<{ error: string | null }> {
+  const { error } = await apiFetch<{ ok: boolean }>(
+    `/api/sync-user?userId=${encodeURIComponent(userId)}`,
+    { method: "DELETE" }
+  );
+  return { error };
+}
+
+/**
+ * Sends user feedback to the backend, which stores it in the DB and emails it via Resend.
+ */
+export async function sendFeedback(params: {
+  userId?: string;
+  userEmail?: string;
+  message: string;
+}): Promise<{ ok: boolean; error: string | null }> {
+  const { error } = await apiFetch<{ ok: boolean }>(
+    "/api/feedback",
+    {
+      method: "POST",
+      body: JSON.stringify(params),
+    }
+  );
+  return { ok: !error, error };
 }
 
 /**

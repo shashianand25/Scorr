@@ -5,7 +5,10 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://recall-backend-wheat.vercel.app"
+      }
     },
     "preview": {
       "distribution": "internal",
@@ -13,10 +16,14 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://10.0.2.2:3000"
+        "EXPO_PUBLIC_API_URL": "https://recall-backend-wheat.vercel.app"
       }
     },
-    "production": {}
+    "production": {
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://recall-backend-wheat.vercel.app"
+      }
+    }
   },
   "submit": {
     "production": {}

@@ -18,19 +18,63 @@ import {
   PanResponder,
   KeyboardAvoidingView,
   BackHandler,
+  FlatList,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons, FontAwesome6 } from "@expo/vector-icons";
 import { useVideoPlayer, VideoView } from "expo-video";
+import { useEvent } from "expo";
 import { useAudioPlayer, setAudioModeAsync } from "expo-audio";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
-import { signInWithGoogle, signInWithEmail, signUpWithEmail, signOutUser, onAuth, type User } from "../lib/firebase";
-import { syncUserToNeon, createFlashcardDeck, updateFlashcardDeck, deleteFlashcardDeck, fetchFlashcardDecks, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz } from "../lib/api";
+import { LinearGradient } from "expo-linear-gradient";
+import { signInWithGoogle, signInWithEmail, signUpWithEmail, signOutUser, onAuth, deleteAccount, type User } from "../lib/firebase";
+import { syncUserToNeon, createFlashcardDeck, updateFlashcardDeck, deleteFlashcardDeck, fetchFlashcardDecks, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz, deleteUserFromNeon, sendFeedback } from "../lib/api";
+// expo-speech requires a native rebuild — guarded so app doesn't crash before rebuild
+const Speech = (() => {
+  try {
+    return require("expo-speech");
+  } catch {
+    return { speak: () => {}, stop: () => {} };
+  }
+})();
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useTranslation } from "react-i18next";
+import "../lib/i18n";
 
 // Get screen width/height for layout sizing
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+
+const renderFormattedText = (text: string, baseStyle?: any) => {
+  if (!text) return null;
+  const regex = /(\*\*.*?\*\*|\*.*?\*|<u>.*?<\/u>|<span style="color:#ef4444">.*?<\/span>|<span style="font-size:20px">.*?<\/span>|\$\$.*?\$\$|---)/g;
+  const parts = text.split(regex);
+  return (
+    <Text style={baseStyle}>
+      {parts.map((part, i) => {
+        if (!part) return null;
+        if (part === "---") return <Text key={i} style={{ opacity: 0.2 }}>{"\n──────────\n"}</Text>;
+        if (part.startsWith("**") && part.endsWith("**")) return <Text key={i} style={{ fontWeight: "bold" }}>{part.slice(2, -2)}</Text>;
+        if (part.startsWith("$$") && part.endsWith("$$")) return <Text key={i} style={{ fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontStyle: "italic", color: "#a855f7" }}>{part.slice(2, -2)}</Text>;
+        if (part.startsWith("*") && part.endsWith("*")) return <Text key={i} style={{ fontStyle: "italic" }}>{part.slice(1, -1)}</Text>;
+        if (part.startsWith("<u>") && part.endsWith("</u>")) return <Text key={i} style={{ textDecorationLine: "underline" }}>{part.slice(3, -4)}</Text>;
+        if (part.startsWith('<span style="color:#ef4444">') && part.endsWith('</span>')) return <Text key={i} style={{ color: "#ef4444" }}>{part.slice(28, -7)}</Text>;
+        if (part.startsWith('<span style="font-size:20px">') && part.endsWith('</span>')) return <Text key={i} style={{ fontSize: (baseStyle?.fontSize || 16) + 6 }}>{part.slice(29, -7)}</Text>;
+        return <Text key={i}>{part}</Text>;
+      })}
+    </Text>
+  );
+};
+
+const APP_LANGUAGES = [
+  { id: "system", name: "System language", code: "en", nativeName: "", flag: "A文" },
+  { id: "en", name: "English", code: "en", nativeName: "English", flag: "🇺🇸" },
+  { id: "es", name: "Spanish", code: "es", nativeName: "Español", flag: "🇪🇸" },
+  { id: "fr", name: "French", code: "fr", nativeName: "Français", flag: "🇫🇷" },
+  { id: "hi", name: "Hindi", code: "hi", nativeName: "हिन्दी", flag: "🇮🇳" },
+  { id: "ru", name: "Russian", code: "ru", nativeName: "Русский", flag: "🇷🇺" },
+  { id: "kk", name: "Kazakh", code: "kk", nativeName: "Қазақ тілі", flag: "🇰🇿" },
+];
 
 /**
  * AnimatedPressable — a drop-in Pressable replacement with a smooth spring
@@ -131,6 +175,7 @@ function Stepper({
   onChange,
   suffix = "",
   darkMode = true,
+  disabled = false,
 }: {
   value: number;
   min: number;
@@ -139,7 +184,14 @@ function Stepper({
   onChange: (v: number) => void;
   suffix?: string;
   darkMode?: boolean;
+  disabled?: boolean;
 }) {
+  const [localText, setLocalText] = useState(value.toString());
+
+  useEffect(() => {
+    setLocalText(value.toString());
+  }, [value]);
+
   return (
     <View style={[styles.stepperContainer, !darkMode && styles.lightCard]}>
       <Pressable
@@ -151,26 +203,55 @@ function Stepper({
           pressed && styles.opacityPress,
         ]}
       >
-        <Feather name="minus" size={14} color={value <= min ? (darkMode ? "#444" : "#ccc") : "#00e5a0"} />
+        <Feather name="minus" size={14} color={value <= min ? (darkMode ? "#444" : "#ccc") : "#8B5CF6"} />
       </Pressable>
       
       <View style={[styles.stepperValueContainer, !darkMode && styles.lightBorder]}>
-        <Text style={styles.stepperValueText}>
-          {value}
-          {suffix}
-        </Text>
+        {disabled ? (
+          <Text style={[styles.stepperValueText, { color: darkMode ? "#FFFFFF" : "#000000" }]}>
+            {value}
+            {suffix}
+          </Text>
+        ) : (
+          <TextInput
+            style={[styles.stepperValueText, { color: darkMode ? "#FFFFFF" : "#000000", minWidth: 40, textAlign: "center", padding: 0 }]}
+            value={localText}
+            keyboardType="number-pad"
+            onChangeText={(text) => {
+              setLocalText(text);
+              const num = parseInt(text, 10);
+              if (!isNaN(num)) {
+                onChange(Math.max(min, Math.min(max, num)));
+              }
+            }}
+            onEndEditing={(e) => {
+              const text = e.nativeEvent.text;
+              if (text === "") {
+                onChange(min);
+                setLocalText(min.toString());
+              }
+            }}
+            onBlur={() => {
+              if (localText === "" || isNaN(parseInt(localText, 10))) {
+                setLocalText(value.toString());
+              }
+            }}
+          />
+        )}
       </View>
 
       <Pressable
         onPress={() => onChange(Math.min(max, value + step))}
-        disabled={value >= max}
+        onLongPress={() => onChange(Math.min(max, value + (step * 10)))}
+        delayLongPress={300}
+        disabled={value >= max || disabled}
         style={({ pressed }) => [
           styles.stepperBtn,
-          value >= max && styles.stepperBtnDisabled,
+          (value >= max || disabled) && styles.stepperBtnDisabled,
           pressed && styles.opacityPress,
         ]}
       >
-        <Feather name="plus" size={14} color={value >= max ? (darkMode ? "#444" : "#ccc") : "#00e5a0"} />
+        <Feather name="plus" size={14} color={value >= max ? (darkMode ? "#444" : "#ccc") : "#8B5CF6"} />
       </Pressable>
     </View>
   );
@@ -312,14 +393,24 @@ function renderCategoryAvatar(category: string, settingsDarkMode: boolean) {
 }
 
 export default function HomeScreen() {
+  const { t, i18n } = useTranslation();
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
+  const [languageSearch, setLanguageSearch] = useState("");
+  const [savedAppLanguage, setSavedAppLanguage] = useState<string | null>(null);
+
+  useEffect(() => {
+    AsyncStorage.getItem("user-language").then(setSavedAppLanguage);
+  }, []);
   const insets = useSafeAreaInsets();
   const localVideoPlayer = useVideoPlayer(require("../../assets/videos/tutorial.mp4"), (player) => {
     player.loop = false;
   });
+  const { isPlaying: isVideoPlaying } = useEvent(localVideoPlayer, 'playingChange', { isPlaying: localVideoPlayer.playing });
 
   const correctPlayer = useAudioPlayer(require("../../assets/sounds/correct.mp3"));
   const wrongPlayer = useAudioPlayer(require("../../assets/sounds/wrong.mp3"));
   const successPlayer = useAudioPlayer(require("../../assets/sounds/success.mp3"));
+  const tickingPlayer = useAudioPlayer(require("../../assets/sounds/ticking.mp3"));
 
   const playCorrectSound = () => {
     try {
@@ -359,16 +450,7 @@ export default function HomeScreen() {
       console.warn("Failed to play success sound effect:", error);
     }
   };
-  const [showLanding, setShowLanding] = useState(true);
-
-  // ── Splash animation values ──────────────────────────────────────
-  const splashLogoScale   = useRef(new Animated.Value(0)).current;
-  const splashLogoOpacity = useRef(new Animated.Value(0)).current;
-  const splashNameY       = useRef(new Animated.Value(32)).current;
-  const splashNameOpacity = useRef(new Animated.Value(0)).current;
-  const splashTagOpacity  = useRef(new Animated.Value(0)).current;
-  const splashDotScale    = useRef(new Animated.Value(0)).current;
-  const splashFadeOut     = useRef(new Animated.Value(1)).current;
+  const [showLanding, setShowLanding] = useState(false);
 
   // ── Suppress browser native blue focus ring globally on web ──
   if (Platform.OS === "web" && typeof document !== "undefined") {
@@ -380,39 +462,6 @@ export default function HomeScreen() {
       document.head.appendChild(s);
     }
   }
-
-  useEffect(() => {
-    // Phase 1 — logo bounces in
-    Animated.parallel([
-      Animated.spring(splashLogoScale, { toValue: 1, tension: 60, friction: 6, useNativeDriver: true }),
-      Animated.timing(splashLogoOpacity, { toValue: 1, duration: 400, easing: Easing.out(Easing.ease), useNativeDriver: true }),
-    ]).start();
-
-    // Phase 2 — app name slides up
-    const t1 = setTimeout(() => {
-      Animated.parallel([
-        Animated.timing(splashNameY, { toValue: 0, duration: 500, easing: Easing.out(Easing.back(1.4)), useNativeDriver: true }),
-        Animated.timing(splashNameOpacity, { toValue: 1, duration: 400, easing: Easing.out(Easing.ease), useNativeDriver: true }),
-      ]).start();
-    }, 350);
-
-    // Phase 3 — tagline fades in
-    const t2 = setTimeout(() => {
-      Animated.timing(splashTagOpacity, { toValue: 1, duration: 500, easing: Easing.out(Easing.ease), useNativeDriver: true }).start();
-    }, 750);
-
-    // Phase 4 — dot pulse
-    const t3 = setTimeout(() => {
-      Animated.spring(splashDotScale, { toValue: 1, tension: 80, friction: 5, useNativeDriver: true }).start();
-    }, 1000);
-
-    // Phase 5 — fade out and dismiss
-    const t4 = setTimeout(() => {
-      Animated.timing(splashFadeOut, { toValue: 0, duration: 650, easing: Easing.in(Easing.ease), useNativeDriver: true }).start(() => setShowLanding(false));
-    }, 2500);
-
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
-  }, []);
 
   // ── Firebase auth state listener — handles login, logout, account switch ──
   useEffect(() => {
@@ -440,80 +489,159 @@ export default function HomeScreen() {
 
       if (user) {
         // ── Switching to a logged-in account ─────────────────────────────
-        // 1. Load this user's local device slot
+        let localQuizzesToSync: any[] = [];
         try {
-          const [qRaw, dRaw] = await Promise.all([
+          const [qRaw, dRaw, sRaw] = await Promise.all([
             AsyncStorage.getItem(storageKey("quizzes", newUid)),
             AsyncStorage.getItem(storageKey("decks", newUid)),
+            AsyncStorage.getItem(`quizforge_starred_${newUid}`),
           ]);
-          setQuizzes(qRaw ? JSON.parse(qRaw) : []);
+          localQuizzesToSync = qRaw ? JSON.parse(qRaw) : [];
+          setQuizzes(localQuizzesToSync);
           setFlashcardDecks(dRaw ? JSON.parse(dRaw) : []);
+          if (sRaw) setStarredQuestions(new Set(JSON.parse(sRaw)));
         } catch (e) { console.warn("[Persist] user load failed:", e); }
         loadedUidRef.current = newUid;
+        setDataLoaded(true);
 
-        // 2. Sync user profile to Neon
-        syncUserToNeon({
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName,
-          photoURL: user.photoURL,
-        }).catch((err) => console.warn("[NeonSync] user sync failed:", err));
-
-        // 3. Fetch flashcard decks from Neon and merge on top of local
-        const { decks: cloudDecks, error: deckErr } = await fetchFlashcardDecks(user.uid);
-        if (!deckErr && cloudDecks.length > 0) {
-          const normalized = cloudDecks.map((d) => ({
-            id: d.id,
-            neonId: d.id,
-            title: d.title,
-            category: "General",
-            cardType: d.cardType,
-            type: "flashcard",
-            cards: d.cards.map((c) => ({ front: c.front, back: c.back })),
-          }));
-          setFlashcardDecks((local: any[]) => {
-            // Cloud wins over local for decks with the same id
-            const localOnly = local.filter((l) => !normalized.find((n) => n.id === l.id));
-            return [...normalized, ...localOnly];
-          });
+        // 2. Start Sync Loading State (only if explicitly logging in/switching, not on startup)
+        if (prevUid !== undefined) {
+          setIsSyncingData(true);
         }
 
-        // 4. Fetch quizzes from Neon and merge on top of local
-        const { quizzes: cloudQuizzes, error: quizErr } = await fetchMobileQuizzes(user.uid);
-        if (!quizErr && cloudQuizzes.length > 0) {
-          const normalized = cloudQuizzes.map((q) => ({
-            id: q.id,
-            neonId: q.id,
-            title: q.title,
-            questions: q.questionCount,
-            category: q.category,
-            time: "Synced",
-            sourceText: q.sourceText,
-            questionsList: (() => {
-              try {
-                return parseQstText(q.sourceText).questions;
-              } catch { return []; }
-            })(),
-            attempts: q.attempts ?? [],
-            wrongQuestions: q.wrongQuestions ?? [],
-            uniqueCorrectIds: q.uniqueCorrectIds ?? [],
-          }));
-          setQuizzes((local: any[]) => {
-            const localOnly = local.filter((l) => !normalized.find((n) => n.id === l.id));
-            return [...normalized, ...localOnly];
+        try {
+          // 3. Sync user profile to Neon FIRST to guarantee user exists
+          const { error: syncErr } = await syncUserToNeon({
+            uid: user.uid,
+            email: user.email,
+            displayName: user.displayName,
+            photoURL: user.photoURL,
           });
+
+          if (syncErr) {
+            console.warn("[NeonSync] user sync failed:", syncErr);
+            neonUserReadyRef.current = false;
+          } else {
+            neonUserReadyRef.current = true;
+            // 4. Fetch flashcard decks and quizzes concurrently
+            const [decksRes, quizzesRes] = await Promise.all([
+              fetchFlashcardDecks(user.uid),
+              fetchMobileQuizzes(user.uid)
+            ]);
+
+            if (decksRes.error || quizzesRes.error) {
+              console.warn("[NeonSync] fetch failed:", decksRes.error || quizzesRes.error);
+              // Alert.alert("Sync Error", "Some cloud data took too long to load. Using local data.");
+            }
+
+            if (!decksRes.error && decksRes.decks.length > 0) {
+              const normalizedDecks = decksRes.decks.map((d) => ({
+                id: d.id,
+                neonId: d.id,
+                title: d.title,
+                category: "General",
+                cardType: d.cardType,
+                type: "flashcard",
+                cards: d.cards.map((c: any) => ({ front: c.front, back: c.back })),
+              }));
+              setFlashcardDecks((local: any[]) => {
+                const localOnly = local.filter((l) => !normalizedDecks.find((n) => n.id === l.id));
+                return [...normalizedDecks, ...localOnly];
+              });
+            }
+
+            if (!quizzesRes.error && quizzesRes.quizzes.length > 0) {
+              const normalizedQuizzes = quizzesRes.quizzes.map((q) => ({
+                id: q.id,
+                neonId: q.id,
+                title: q.title,
+                questions: q.questionCount,
+                category: q.category,
+                time: "Synced",
+                sourceText: q.sourceText,
+                questionsList: (() => {
+                  try {
+                    return parseQstText(q.sourceText).questions;
+                  } catch { return []; }
+                })(),
+                attempts: q.attempts ?? [],
+                wrongQuestions: q.wrongQuestions ?? [],
+                uniqueCorrectIds: q.uniqueCorrectIds ?? [],
+              }));
+              setQuizzes((local: any[]) => {
+                const localOnly = local.filter((l) => !normalizedQuizzes.find((n) => n.id === l.id));
+                return [...normalizedQuizzes, ...localOnly];
+              });
+
+              // Backfill local-only quizzes that aren't in Neon yet
+              const neonIds = new Set(normalizedQuizzes.map((q) => q.id));
+              const unsynced = localQuizzesToSync.filter((q) => !neonIds.has(q.id) && !q.neonId);
+              console.log(`[NeonSync] Neon has ${normalizedQuizzes.length} quizzes, ${unsynced.length} local unsynced`);
+              for (const q of unsynced) {
+                createMobileQuiz({
+                  userId: user.uid,
+                  title: q.title,
+                  category: q.category || "General",
+                  questionCount: q.questions || 0,
+                  sourceText: q.sourceText || "",
+                  attempts: q.attempts || [],
+                  wrongQuestions: q.wrongQuestions || [],
+                  uniqueCorrectIds: q.uniqueCorrectIds || [],
+                }).then(({ quiz: saved }) => {
+                  if (saved) {
+                    setQuizzes((prev: any[]) =>
+                      prev.map((pq) => pq.id === q.id ? { ...pq, id: saved.id, neonId: saved.id } : pq)
+                    );
+                    console.log(`[NeonSync] Backfilled quiz: ${saved.id}`);
+                  }
+                }).catch((err) => console.warn("[NeonSync] backfill failed:", err));
+              }
+            } else if (!quizzesRes.error) {
+              // Neon is empty — upload all local quizzes
+              console.log(`[NeonSync] Neon empty, uploading ${localQuizzesToSync.length} local quizzes`);
+              for (const q of localQuizzesToSync) {
+                if (q.neonId) continue; // already synced somehow
+                createMobileQuiz({
+                  userId: user.uid,
+                  title: q.title,
+                  category: q.category || "General",
+                  questionCount: q.questions || 0,
+                  sourceText: q.sourceText || "",
+                  attempts: q.attempts || [],
+                  wrongQuestions: q.wrongQuestions || [],
+                  uniqueCorrectIds: q.uniqueCorrectIds || [],
+                }).then(({ quiz: saved, error: saveErr }) => {
+                  if (saveErr) { console.warn("[NeonSync] upload failed:", saveErr); return; }
+                  if (saved) {
+                    setQuizzes((prev: any[]) =>
+                      prev.map((pq) => pq.id === q.id ? { ...pq, id: saved.id, neonId: saved.id } : pq)
+                    );
+                    console.log(`[NeonSync] Uploaded quiz to Neon: ${saved.id}`);
+                  }
+                }).catch((err) => console.warn("[NeonSync] upload error:", err));
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("[NeonSync] sync pipeline failed:", e);
+        } finally {
+          setIsSyncingData(false);
         }
       } else {
         // ── Signed out — switch back to the guest slot ───────────────────
+        neonUserReadyRef.current = false;
         try {
-          const [qRaw, dRaw] = await Promise.all([
+          const [qRaw, dRaw, sRaw] = await Promise.all([
             AsyncStorage.getItem(storageKey("quizzes", null)),
             AsyncStorage.getItem(storageKey("decks", null)),
+            AsyncStorage.getItem(`quizforge_starred_guest`),
           ]);
           setQuizzes(qRaw ? JSON.parse(qRaw) : []);
           setFlashcardDecks(dRaw ? JSON.parse(dRaw) : []);
+          if (sRaw) setStarredQuestions(new Set(JSON.parse(sRaw)));
         } catch (e) { console.warn("[Persist] guest load failed:", e); }
         loadedUidRef.current = null;
+        setDataLoaded(true);
       }
     });
     return unsub;
@@ -529,10 +657,18 @@ export default function HomeScreen() {
         AsyncStorage.setItem("quizforge_has_seen_auth", "1");
       }
     });
+    // Load saved toggle preferences
+    AsyncStorage.multiGet(["pref_shuffleQuestions", "pref_shuffleAnswers", "pref_showAnswerOnSubmit"]).then((pairs) => {
+      pairs.forEach(([key, val]) => {
+        if (key === "pref_shuffleQuestions" && val !== null) setShuffleQuestionsRaw(val === "1");
+        if (key === "pref_shuffleAnswers" && val !== null) setShuffleAnswersRaw(val === "1");
+        if (key === "pref_showAnswerOnSubmit" && val !== null) setShowAnswerOnSubmitRaw(val === "1");
+      });
+    });
   }, [showLanding]);
   // ─────────────────────────────────────────────────────────────────
 
-  const [activeTab, setActiveTab] = useState<"home" | "dashboard" | "add" | "flashcards" | "guide" | "menu" | "insights">("home");
+  const [activeTab, setActiveTab] = useState<"home" | "dashboard" | "add" | "flashcards" | "guide" | "menu" | "insights" | "deck-insights">("home");
   const [showAddMenu, setShowAddMenu] = useState<boolean>(false);
   const [showWrongReview, setShowWrongReview] = useState<boolean>(false);
   const [showQuizActions, setShowQuizActions] = useState<any | null>(null);
@@ -542,18 +678,27 @@ export default function HomeScreen() {
   const [renameTitle, setRenameTitle] = useState("");
   // In-app modals (replaces Alert.alert)
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showDeleteAccountConfirm, setShowDeleteAccountConfirm] = useState(false);
+  const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
   const [showQuitConfirm, setShowQuitConfirm] = useState(false);
+  const [showRestartConfirm, setShowRestartConfirm] = useState(false);
+  const [selectedAttemptForModal, setSelectedAttemptForModal] = useState<any | null>(null);
   const [starredQuestions, setStarredQuestions] = useState<Set<string>>(new Set());
   const [homeFilter, setHomeFilter] = useState<"all"|"progress"|"notstarted"|"done">("all");
+  const [flashcardFilter, setFlashcardFilter] = useState<"all"|"due"|"progress"|"mastered">("all");
   const [homeSearch, setHomeSearch] = useState("");
-  const [showAboutPage, setShowAboutPage] = useState(false);
   const [showFeedbackPage, setShowFeedbackPage] = useState(false);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
+  const [showTermsOfService, setShowTermsOfService] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [showQuizCreatedModal, setShowQuizCreatedModal] = useState<{ title: string; count: number } | null>(null);
   const [feedbackText, setFeedbackText] = useState("");
   // ── Firebase Auth ──
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
+  const neonUserReadyRef = React.useRef<boolean>(false); // true once syncUserToNeon succeeds
+  const [isSyncingData, setIsSyncingData] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [hasSeenLogin, setHasSeenLogin] = useState(false);
@@ -567,29 +712,53 @@ export default function HomeScreen() {
   const [signOutLoading, setSignOutLoading] = useState(false);
   const [settingsDarkMode, setSettingsDarkMode] = useState<boolean>(true);
   const [selectedQuiz, setSelectedQuiz] = useState<any | null>(null);
+  const [pdfViewQuiz, setPdfViewQuiz] = useState<any | null>(null);
   const [selectionMode, setSelectionMode] = useState<"all" | "random" | "range" | "unanswered" | "wrong">("all");
   const [randomCount, setRandomCount] = useState<number>(5);
   const [rangeStart, setRangeStart] = useState<number>(1);
   const [rangeEnd, setRangeEnd] = useState<number>(5);
-  const [shuffleQuestions, setShuffleQuestions] = useState<boolean>(false);
-  const [shuffleAnswers, setShuffleAnswers] = useState<boolean>(false);
-  const [showAnswerOnSubmit, setShowAnswerOnSubmit] = useState<boolean>(true);
-  const [timePerQuestion, setTimePerQuestion] = useState<number | null>(null);
+  const [shuffleQuestions, setShuffleQuestionsRaw] = useState<boolean>(false);
+  const [shuffleAnswers, setShuffleAnswersRaw] = useState<boolean>(false);
+  const [showAnswerOnSubmit, setShowAnswerOnSubmitRaw] = useState<boolean>(true);
+  const [quizTimeLimit, setQuizTimeLimit] = useState<number | null>(null);
+  const [showTimeLimitDropdown, setShowTimeLimitDropdown] = useState(false);
+
+  const setShuffleQuestions = (val: boolean) => {
+    setShuffleQuestionsRaw(val);
+    AsyncStorage.setItem("pref_shuffleQuestions", val ? "1" : "0");
+  };
+  const setShuffleAnswers = (val: boolean) => {
+    setShuffleAnswersRaw(val);
+    AsyncStorage.setItem("pref_shuffleAnswers", val ? "1" : "0");
+  };
+  const setShowAnswerOnSubmit = (val: boolean) => {
+    setShowAnswerOnSubmitRaw(val);
+    AsyncStorage.setItem("pref_showAnswerOnSubmit", val ? "1" : "0");
+  };
 
   const [activeSession, setActiveSession] = useState<any | null>(null);
   const [sessionTimeLeft, setSessionTimeLeft] = useState<number>(0);
   const [viewingInsightsQuiz, setViewingInsightsQuiz] = useState<any | null>(null);
+  const [viewingInsightsDeck, setViewingInsightsDeck] = useState<any | null>(null);
   const [viewingInsightsQuizFromTab, setViewingInsightsQuizFromTab] = useState<string>("dashboard");
   const [qQuery, setQQuery] = useState("");
   const [expandedQId, setExpandedQId] = useState<string | null>(null);
   const fileInputRef = React.useRef<any>(null);
+  const quizFlatListRef = React.useRef<any>(null);
+  const quizNumbersScrollRef = React.useRef<ScrollView>(null);
   const [confettiParticles, setConfettiParticles] = useState<any[]>([]);
+  const [studyingDeck, setStudyingDeck] = useState<any | null>(null);
 
   // ── Hardware Back Button Handling ──
   useEffect(() => {
     const onBackPress = () => {
       if (activeSession) {
-        setShowQuitConfirm(true);
+        if (activeSession.isFinished) {
+          // Results page — back goes straight to home, no confirmation needed
+          setActiveSession(null);
+        } else {
+          setShowQuitConfirm(true);
+        }
         return true;
       }
       if (studyingDeck) {
@@ -598,6 +767,10 @@ export default function HomeScreen() {
       }
       if (activeTab === "insights") {
         setActiveTab("dashboard");
+        return true;
+      }
+      if (activeTab === "deck-insights") {
+        setActiveTab("flashcards");
         return true;
       }
       if (activeTab === "home") {
@@ -701,53 +874,148 @@ export default function HomeScreen() {
     configureAudio();
   }, []);
 
+  // Always-fresh ref so the interval closure never goes stale
+  const handleTimerExpiredRef = React.useRef<() => void>(() => {});
+
   // Timer effect for Quiz Attempts
   React.useEffect(() => {
     let intervalId: any = null;
 
-    if (activeSession && activeSession.timePerQuestion !== null && !activeSession.isFinished) {
-      setSessionTimeLeft(activeSession.timePerQuestion);
+    if (activeSession && activeSession.quizTimeLimit !== null && activeSession.quizTimeLimit !== undefined && !activeSession.isFinished) {
+      if (sessionTimeLeft <= 0) {
+        setSessionTimeLeft(activeSession.quizTimeLimit * 60);
+      }
 
       intervalId = setInterval(() => {
         setSessionTimeLeft((prev) => {
+          if (prev <= 6 && prev > 1) {
+            try {
+              if (!tickingPlayer.playing) {
+                tickingPlayer.seekTo(0);
+                tickingPlayer.play();
+              }
+            } catch (e) {}
+          }
           if (prev <= 1) {
             clearInterval(intervalId);
-            handleTimerExpired();
+            try {
+              tickingPlayer.pause();
+              tickingPlayer.seekTo(0);
+            } catch (e) {}
+            // Call via ref so we always get the latest handler with fresh state
+            handleTimerExpiredRef.current();
             return 0;
           }
           return prev - 1;
         });
       }, 1000);
+    } else {
+      try {
+        tickingPlayer.pause();
+        tickingPlayer.seekTo(0);
+      } catch (e) {}
     }
 
     return () => {
       if (intervalId) clearInterval(intervalId);
+      try {
+        tickingPlayer.pause();
+        tickingPlayer.seekTo(0);
+      } catch (e) {}
     };
-  }, [activeSession?.quizId, activeSession?.currentIndex, activeSession?.timePerQuestion]);
+  }, [activeSession?.quizId, activeSession?.quizTimeLimit, activeSession?.isFinished]);
 
-  const handleTimerExpired = () => {
-    if (!activeSession) return;
-    const currentQ = activeSession.questions[activeSession.currentIndex];
-    const answers = { ...activeSession.answers };
-    if (!answers[currentQ.id]) {
-      answers[currentQ.id] = []; 
-    }
-    
-    const nextIdx = activeSession.currentIndex + 1;
-    if (nextIdx < activeSession.questions.length) {
-      setActiveSession({
-        ...activeSession,
-        answers,
-        currentIndex: nextIdx
+  // Keep ref always pointing to the freshest closure (re-runs every render)
+  React.useEffect(() => {
+    handleTimerExpiredRef.current = () => {
+      // Use functional updaters so we always read the latest state,
+      // even though this runs inside a stale setInterval closure.
+      setActiveSession((currentSession: any) => {
+        if (!currentSession) return currentSession;
+        playSuccessSound();
+
+        const questions = currentSession.questions;
+        let correctCount = 0;
+        let wrongCount = 0;
+        let skippedCount = 0;
+        const wrongQsForQuiz: any[] = [];
+
+        questions.forEach((q: any) => {
+          const selected = currentSession.answers[q.id] || [];
+          if (selected.length === 0) {
+            skippedCount++;
+            const correctText = q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.text).join(", ");
+            wrongQsForQuiz.push({ id: q.id, prompt: q.prompt, selected: "Skipped", correct: correctText });
+          } else {
+            const correctIds = q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.id);
+            const isAllCorrect = selected.every((id: string) => correctIds.includes(id)) && selected.length === correctIds.length;
+            if (isAllCorrect) {
+              correctCount++;
+            } else {
+              wrongCount++;
+              const correctText = q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.text).join(", ");
+              const selectedText = q.answers.filter((a: any) => selected.includes(a.id)).map((a: any) => a.text).join(", ");
+              wrongQsForQuiz.push({ id: q.id, prompt: q.prompt, selected: selectedText, correct: correctText });
+            }
+          }
+        });
+
+        const answeredCount = correctCount + wrongCount;
+        const scorePct = answeredCount > 0 ? Math.round((correctCount / answeredCount) * 100) : 0;
+        const correctIdsInSession = questions
+          .filter((q: any) => !wrongQsForQuiz.find((wq: any) => wq.id === q.id))
+          .map((q: any) => q.id);
+
+        const baseAttemptData = {
+          id: String(Date.now()),
+          score: scorePct,
+          correct: correctCount,
+          wrong: wrongCount,
+          skipped: skippedCount,
+          timestamp: Date.now(),
+          wrongQuestionIds: wrongQsForQuiz.map((q: any) => q.id),
+          questionIds: questions.map((q: any) => q.id),
+          timedOut: true,
+        };
+
+        // Save into quizzes using functional updater too
+        setQuizzes((currentQuizzes) => {
+          const updatedQuizzes = currentQuizzes.map((q: any) => {
+            if (q.id === currentSession.quizId) {
+              const currentUnique = q.uniqueCorrectIds || [];
+              const updatedUniqueCorrectIds = Array.from(new Set([...currentUnique, ...correctIdsInSession]));
+              const updatedAttempts = [baseAttemptData, ...(q.attempts || [])];
+              return {
+                ...q,
+                attempts: updatedAttempts,
+                wrongQuestions: wrongQsForQuiz,
+                uniqueCorrectIds: updatedUniqueCorrectIds,
+              };
+            }
+            return q;
+          });
+
+          // Sync to Neon
+          const updatedQ = updatedQuizzes.find((q: any) => q.id === currentSession.quizId);
+          const neonId = updatedQ?.neonId ?? updatedQ?.id;
+          if (firebaseUser && neonId && !String(neonId).startsWith("local_")) {
+            updateMobileQuiz({
+              userId: firebaseUser.uid,
+              quizId: neonId,
+              attempts: updatedQ.attempts,
+              wrongQuestions: updatedQ.wrongQuestions,
+              uniqueCorrectIds: updatedQ.uniqueCorrectIds,
+            }).catch((err: any) => console.warn("[NeonSync] timed-out quiz save failed:", err));
+          }
+
+          return updatedQuizzes;
+        });
+
+        // Mark session finished
+        return { ...currentSession, isFinished: true, timedOut: true };
       });
-    } else {
-      setActiveSession({
-        ...activeSession,
-        answers,
-        isFinished: true
-      });
-    }
-  };
+    };
+  });
 
   const handleStartQuiz = () => {
     if (!selectedQuiz) return;
@@ -786,7 +1054,8 @@ export default function HomeScreen() {
       shuffleQuestions,
       shuffleAnswers,
       showAnswerOnSubmit,
-      timePerQuestion,
+      timePerQuestion: null,
+      quizTimeLimit,
       currentIndex: 0,
       answers: {},
       submitted: [] as string[],
@@ -811,8 +1080,14 @@ export default function HomeScreen() {
       filteredQuestions = filteredQuestions.sort(() => Math.random() - 0.5).slice(0, rndCount);
     } else if (mode === "wrong") {
       const wrongList = quiz.wrongQuestions || [];
-      if (wrongList.length > 0) {
-        filteredQuestions = filteredQuestions.filter((q: any) => wrongList.some((w: any) => w.id === q.id));
+      const allWrongIds = new Set<string>();
+      (quiz.attempts || []).forEach((a: any) => {
+        (a.wrongQuestionIds || []).forEach((id: string) => allWrongIds.add(id));
+      });
+      wrongList.forEach((w: any) => allWrongIds.add(w.id));
+      
+      if (allWrongIds.size > 0) {
+        filteredQuestions = filteredQuestions.filter((q: any) => allWrongIds.has(q.id));
       }
     }
 
@@ -881,7 +1156,7 @@ export default function HomeScreen() {
     const reversed = [...attempts].reverse();
     return (
       <View style={[styles.panelCard, !settingsDarkMode && styles.lightCard, { marginBottom: 14 }]}>
-        <Text style={[styles.optionsSectionTitle, !settingsDarkMode && styles.lightTextSub, { marginBottom: 10, fontSize: 12 }]}>Score Trends</Text>
+        <Text style={[styles.optionsSectionTitle, !settingsDarkMode && styles.lightTextSub, { marginBottom: 10, fontSize: 12 }]}>{t('insight.score_trends') || "SCORE TRENDS"}</Text>
         <View style={{ flexDirection: "row", height: 110, alignItems: "flex-end", justifyContent: "space-between", paddingHorizontal: 10 }}>
           {reversed.map((att: any, i: number) => (
             <View key={i} style={{ flex: 1, alignItems: "center" }}>
@@ -927,55 +1202,57 @@ export default function HomeScreen() {
           />
         </View>
         
-        <View style={{ gap: 8 }}>
-          {filtered.slice(0, 15).map((q: any, i: number) => {
-            const isExpanded = expandedQId === q.id;
-            return (
-              <View key={q.id} style={{ borderRadius: 12, borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", overflow: "hidden" }}>
-                <Pressable
-                  onPress={() => setExpandedQId(isExpanded ? null : q.id)}
-                  style={{ flexDirection: "row", alignItems: "flex-start", padding: 10, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.01)" : "rgba(0,0,0,0.01)" }}
-                >
-                  <Text style={{ fontSize: 10, fontWeight: "bold", color: "#888888", marginRight: 8, marginTop: 1 }}>Q{i+1}</Text>
-                  <Text style={{ flex: 1, fontSize: 12, color: settingsDarkMode ? "#dddddd" : "#333333", lineHeight: 16 }} numberOfLines={isExpanded ? undefined : 2}>
-                    {q.prompt}
-                  </Text>
-                  <Feather name={isExpanded ? "chevron-up" : "chevron-down"} size={14} color="#666" style={{ marginLeft: 6 }} />
-                </Pressable>
-                
-                {isExpanded && (
-                  <View style={{ padding: 10, borderTopWidth: 1, borderTopColor: settingsDarkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", gap: 6 }}>
-                    {q.answers.map((answer: any, aIdx: number) => (
-                      <View 
-                        key={aIdx} 
-                        style={{ 
-                          flexDirection: "row", 
-                          alignItems: "center", 
-                          padding: 8, 
-                          borderRadius: 8, 
-                          backgroundColor: answer.isCorrect ? "rgba(0, 229, 160, 0.05)" : "rgba(255,255,255,0.01)",
-                          borderWidth: 1,
-                          borderColor: answer.isCorrect ? "rgba(0, 229, 160, 0.12)" : "transparent"
-                        }}
-                      >
-                        <View style={{ width: 14, height: 14, borderRadius: 3, backgroundColor: answer.isCorrect ? "rgba(0, 229, 160, 0.15)" : "rgba(255,255,255,0.05)", alignItems: "center", justifyContent: "center", marginRight: 8 }}>
-                          <Text style={{ fontSize: 9, fontWeight: "bold", color: answer.isCorrect ? "#00e5a0" : "#888888" }}>
-                            {answer.isCorrect ? "✓" : "-"}
+        <View style={{ height: 320, borderRadius: 12, overflow: "hidden" }}>
+          <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={true} contentContainerStyle={{ gap: 8, paddingBottom: 12 }}>
+            {filtered.map((q: any, i: number) => {
+              const isExpanded = expandedQId === q.id;
+              return (
+                <View key={q.id} style={{ borderRadius: 12, borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", overflow: "hidden" }}>
+                  <Pressable
+                    onPress={() => setExpandedQId(isExpanded ? "directory" : q.id)}
+                    style={{ flexDirection: "row", alignItems: "flex-start", padding: 10, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.01)" : "rgba(0,0,0,0.01)" }}
+                  >
+                    <Text style={{ fontSize: 10, fontWeight: "bold", color: "#888888", marginRight: 8, marginTop: 1 }}>Q{i+1}</Text>
+                    <Text style={{ flex: 1, fontSize: 12, color: settingsDarkMode ? "#dddddd" : "#333333", lineHeight: 16 }} numberOfLines={isExpanded ? undefined : 2}>
+                      {q.prompt}
+                    </Text>
+                    <Feather name={isExpanded ? "chevron-up" : "chevron-down"} size={14} color="#666" style={{ marginLeft: 6 }} />
+                  </Pressable>
+                  
+                  {isExpanded && (
+                    <View style={{ padding: 10, borderTopWidth: 1, borderTopColor: settingsDarkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", gap: 6 }}>
+                      {q.answers.map((answer: any, aIdx: number) => (
+                        <View 
+                          key={aIdx} 
+                          style={{ 
+                            flexDirection: "row", 
+                            alignItems: "center", 
+                            padding: 8, 
+                            borderRadius: 8, 
+                            backgroundColor: answer.isCorrect ? "rgba(0, 229, 160, 0.05)" : "rgba(255,255,255,0.01)",
+                            borderWidth: 1,
+                            borderColor: answer.isCorrect ? "rgba(0, 229, 160, 0.12)" : "transparent"
+                          }}
+                        >
+                          <View style={{ width: 14, height: 14, borderRadius: 3, backgroundColor: answer.isCorrect ? "rgba(0, 229, 160, 0.15)" : "rgba(255,255,255,0.05)", alignItems: "center", justifyContent: "center", marginRight: 8 }}>
+                            <Text style={{ fontSize: 9, fontWeight: "bold", color: answer.isCorrect ? "#00e5a0" : "#888888" }}>
+                              {answer.isCorrect ? "✓" : "-"}
+                            </Text>
+                          </View>
+                          <Text style={{ flex: 1, fontSize: 11, color: answer.isCorrect ? "#00e5a0" : (settingsDarkMode ? "#bbbbbb" : "#444444") }}>
+                            {answer.text}
                           </Text>
                         </View>
-                        <Text style={{ flex: 1, fontSize: 11, color: answer.isCorrect ? "#00e5a0" : (settingsDarkMode ? "#bbbbbb" : "#444444") }}>
-                          {answer.text}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-              </View>
-            );
-          })}
-          {filtered.length === 0 && (
-            <Text style={{ fontSize: 11, color: "#666", textAlign: "center", paddingVertical: 10 }}>No matching questions found.</Text>
-          )}
+                      ))}
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+            {filtered.length === 0 && (
+              <Text style={{ fontSize: 11, color: "#666", textAlign: "center", paddingVertical: 10 }}>No matching questions found.</Text>
+            )}
+          </ScrollView>
         </View>
       </View>
     );
@@ -987,7 +1264,12 @@ export default function HomeScreen() {
     const attempts = quiz.attempts || [];
     const highScore = attempts.length > 0 ? Math.max(...attempts.map((a: any) => a.score)) : 0;
     const avgScore = attempts.length > 0 ? Math.round(attempts.reduce((s: number, a: any) => s + a.score, 0) / attempts.length) : 0;
-    const wrongCount = (quiz.wrongQuestions || []).length;
+    const allWrongQuestionIds = new Set<string>();
+    attempts.forEach((a: any) => {
+      (a.wrongQuestionIds || []).forEach((id: string) => allWrongQuestionIds.add(id));
+    });
+    (quiz.wrongQuestions || []).forEach((w: any) => allWrongQuestionIds.add(w.id));
+    const wrongCount = allWrongQuestionIds.size;
     
     return (
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -1006,7 +1288,7 @@ export default function HomeScreen() {
             <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, backgroundColor: "rgba(0, 229, 160, 0.12)" }}>
               <Text style={{ fontSize: 10, fontWeight: "bold", color: "#00e5a0" }}>{quiz.category}</Text>
             </View>
-            <Text style={{ fontSize: 11, color: "#888888" }}>{quiz.questions} Questions</Text>
+            <Text style={{ fontSize: 11, color: "#888888" }}>{quiz.questions} {t('actions.questions') || "Questions"}</Text>
           </View>
           <Text style={[styles.tabTitle, !settingsDarkMode && styles.lightText, { fontSize: 20, marginTop: 4 }]} numberOfLines={2}>
             {quiz.title}
@@ -1019,7 +1301,7 @@ export default function HomeScreen() {
             style={[
               styles.statCard, 
               settingsDarkMode 
-                ? { backgroundColor: "rgba(245, 158, 11, 0.03)", borderColor: "rgba(245, 158, 11, 0.15)", shadowColor: "#000000", shadowOpacity: 0.18, shadowRadius: 16 } 
+                ? { backgroundColor: "rgba(245, 158, 11, 0.03)", borderColor: "rgba(245, 158, 11, 0.15)", shadowOpacity: 0, elevation: 0 } 
                 : { backgroundColor: "rgba(245, 158, 11, 0.04)", borderColor: "rgba(245, 158, 11, 0.22)", shadowColor: "#f59e0b", shadowOpacity: 0.14, shadowRadius: 12 }
             ]}
           >
@@ -1027,14 +1309,14 @@ export default function HomeScreen() {
               <Ionicons name="trophy-outline" size={20} color="#f59e0b" />
             </View>
             <Text style={[styles.statValue, !settingsDarkMode && styles.lightText]}>{attempts.length > 0 ? `${highScore}%` : "—"}</Text>
-            <Text style={[styles.statLabel, !settingsDarkMode && styles.lightTextSub]}>Peak Score</Text>
+            <Text style={[styles.statLabel, !settingsDarkMode && styles.lightTextSub]}>{t('insight.peak_score') || "Peak Score"}</Text>
           </View>
 
           <View 
             style={[
               styles.statCard, 
               settingsDarkMode 
-                ? { backgroundColor: "rgba(59, 130, 246, 0.03)", borderColor: "rgba(59, 130, 246, 0.15)", shadowColor: "#000000", shadowOpacity: 0.18, shadowRadius: 16 } 
+                ? { backgroundColor: "rgba(59, 130, 246, 0.03)", borderColor: "rgba(59, 130, 246, 0.15)", shadowOpacity: 0, elevation: 0 } 
                 : { backgroundColor: "rgba(59, 130, 246, 0.04)", borderColor: "rgba(59, 130, 246, 0.22)", shadowColor: "#3b82f6", shadowOpacity: 0.14, shadowRadius: 12 }
             ]}
           >
@@ -1042,14 +1324,14 @@ export default function HomeScreen() {
               <Ionicons name="analytics-outline" size={20} color="#3b82f6" />
             </View>
             <Text style={[styles.statValue, !settingsDarkMode && styles.lightText]}>{attempts.length > 0 ? `${avgScore}%` : "—"}</Text>
-            <Text style={[styles.statLabel, !settingsDarkMode && styles.lightTextSub]}>Avg Score</Text>
+            <Text style={[styles.statLabel, !settingsDarkMode && styles.lightTextSub]}>{t('insight.avg_score') || "Avg Score"}</Text>
           </View>
 
           <View 
             style={[
               styles.statCard, 
               settingsDarkMode 
-                ? { backgroundColor: "rgba(168, 85, 247, 0.03)", borderColor: "rgba(168, 85, 247, 0.15)", shadowColor: "#000000", shadowOpacity: 0.18, shadowRadius: 16 } 
+                ? { backgroundColor: "rgba(168, 85, 247, 0.03)", borderColor: "rgba(168, 85, 247, 0.15)", shadowOpacity: 0, elevation: 0 } 
                 : { backgroundColor: "rgba(168, 85, 247, 0.04)", borderColor: "rgba(168, 85, 247, 0.22)", shadowColor: "#a855f7", shadowOpacity: 0.14, shadowRadius: 12 }
             ]}
           >
@@ -1057,7 +1339,7 @@ export default function HomeScreen() {
               <Ionicons name="checkmark-circle-outline" size={20} color="#a855f7" />
             </View>
             <Text style={[styles.statValue, !settingsDarkMode && styles.lightText]}>{attempts.length}</Text>
-            <Text style={[styles.statLabel, !settingsDarkMode && styles.lightTextSub]}>Sessions</Text>
+            <Text style={[styles.statLabel, !settingsDarkMode && styles.lightTextSub]}>{t('insight.sessions') || "Sessions"}</Text>
           </View>
         </View>
 
@@ -1072,13 +1354,13 @@ export default function HomeScreen() {
             style={({ pressed }) => [{
               flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
               height: 52, borderRadius: 16,
-              backgroundColor: "#6366f1",
-              shadowColor: "#6366f1", shadowOffset: { width: 0, height: 6 },
-              shadowOpacity: 0.4, shadowRadius: 14, elevation: 8,
+              backgroundColor: "#4f46e5",
+              shadowColor: "#4f46e5", shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.2, shadowRadius: 8, elevation: 4,
             }, pressed && styles.pressedScale]}
           >
             <Ionicons name="play" size={18} color="#ffffff" />
-            <Text style={{ fontSize: 15, fontWeight: "700", color: "#ffffff" }}>Start Test</Text>
+            <Text style={{ fontSize: 15, fontWeight: "700", color: "#ffffff" }}>{t('insight.start_test') || "Start Test"}</Text>
           </Pressable>
 
           {/* Practice Incorrect — only when there are wrong answers */}
@@ -1094,7 +1376,7 @@ export default function HomeScreen() {
             >
               <Ionicons name="refresh" size={17} color={settingsDarkMode ? "#ccccdd" : "#44445a"} />
               <Text style={{ fontSize: 13, fontWeight: "700", color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>
-                Incorrect ({wrongCount})
+                {t('insight.incorrect') || "Incorrect"} ({wrongCount})
               </Text>
             </Pressable>
           )}
@@ -1103,7 +1385,7 @@ export default function HomeScreen() {
         {/* Searchable Questions list — collapsible */}
         {(quiz.questionsList || []).length > 0 && (
           <Pressable
-            onPress={() => setExpandedQId(expandedQId === "directory" ? null : "directory")}
+            onPress={() => setExpandedQId(expandedQId !== null ? null : "directory")}
             style={({ pressed }) => [{
               flexDirection: "row", alignItems: "center", justifyContent: "space-between",
               paddingHorizontal: 16, paddingVertical: 14, borderRadius: 14, marginBottom: 12,
@@ -1114,7 +1396,7 @@ export default function HomeScreen() {
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
               <Ionicons name="book-outline" size={18} color={settingsDarkMode ? "#aaaacc" : "#666688"} />
               <Text style={{ fontSize: 14, fontWeight: "600", color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>
-                Quiz Directory
+                {t('insight.quiz_directory') || "Quiz Directory"}
               </Text>
               <View style={{ paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8,
                 backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)" }}>
@@ -1123,28 +1405,32 @@ export default function HomeScreen() {
                 </Text>
               </View>
             </View>
-            <Ionicons name={expandedQId === "directory" ? "chevron-up" : "chevron-down"} size={16}
+            <Ionicons name={expandedQId !== null ? "chevron-up" : "chevron-down"} size={16}
               color={settingsDarkMode ? "#6e727a" : "#999"} />
           </Pressable>
         )}
-        {expandedQId === "directory" && renderStudyDirectory(quiz)}
+        {expandedQId !== null && renderStudyDirectory(quiz)}
 
         {/* Attempt Log History */}
         <View style={[styles.panelCard, !settingsDarkMode && styles.lightCard]}>
-          <Text style={[styles.optionsSectionTitle, !settingsDarkMode && styles.lightTextSub, { marginBottom: 10, fontSize: 12 }]}>Attempt History</Text>
+          <Text style={[styles.optionsSectionTitle, !settingsDarkMode && styles.lightTextSub, { marginBottom: 10, fontSize: 12 }]}>{t('insight.attempt_history') || "Attempt History"}</Text>
           {attempts.length > 0 ? (
             <View style={{ gap: 8 }}>
-              {attempts.map((attempt: any, index: number) => (
-                <View
+              {attempts.map((attempt: any, index: number) => {
+                const attemptNum = attempts.length - index;
+                return (
+                <Pressable
                   key={attempt.id || String(index)}
-                  style={[
+                  onPress={() => setSelectedAttemptForModal({ quizId: quiz.id, attempt, attemptNum })}
+                  style={({ pressed }) => [
                     { padding: 12, borderRadius: 12, backgroundColor: "rgba(255, 255, 255, 0.02)", borderWidth: 1, borderColor: "rgba(255, 255, 255, 0.05)", flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-                    !settingsDarkMode && styles.lightCard
+                    !settingsDarkMode && styles.lightCard,
+                    pressed && styles.opacityPress
                   ]}
                 >
                   <View style={{ flex: 1, paddingRight: 8 }}>
                     <Text style={[{ fontSize: 12, fontWeight: "bold", color: "#ffffff" }, !settingsDarkMode && styles.lightText]}>
-                      Attempt #{attempts.length - index}
+                      {t('insight.attempt') || "Attempt"} #{attemptNum}
                     </Text>
                     <Text style={[{ fontSize: 10, color: "#888888", marginTop: 2 }, !settingsDarkMode && styles.lightTextSub]}>
                       {attempt.correct} correct · {attempt.wrong} wrong · {attempt.skipped} skipped
@@ -1157,15 +1443,11 @@ export default function HomeScreen() {
                         {attempt.score}%
                       </Text>
                     </View>
-                    <Pressable 
-                      onPress={() => handleDeleteAttemptOnMobile(quiz.id, attempt.id)}
-                      style={{ padding: 4 }}
-                    >
-                      <Feather name="trash-2" size={14} color="#888888" />
-                    </Pressable>
+                    <Ionicons name="chevron-forward" size={16} color={settingsDarkMode ? "#6e727a" : "#999999"} />
                   </View>
-                </View>
-              ))}
+                </Pressable>
+                );
+              })}
             </View>
           ) : (
             <Text style={{ fontSize: 11, color: "#666", textAlign: "center", paddingVertical: 10 }}>No attempts logged yet.</Text>
@@ -1217,6 +1499,169 @@ export default function HomeScreen() {
               ]}
             >
               <Text style={{ fontSize: 11, fontWeight: "bold", color: "#ef4444" }}>Delete Quiz</Text>
+            </Pressable>
+          </View>
+        </View>
+      </ScrollView>
+    );
+  };
+
+  const renderDeckInsightsTab = () => {
+    const deck = viewingInsightsDeck;
+    if (!deck) return null;
+    const attempts = deck.attempts || [];
+    const latestAttempt = attempts[attempts.length - 1];
+    const cardCount = (deck.cards || []).length;
+    
+    return (
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Back Link */}
+        <Pressable 
+          onPress={() => setActiveTab("flashcards")}
+          style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 15 }}
+        >
+          <Feather name="arrow-left" size={16} color="#00e5a0" />
+          <Text style={{ fontSize: 13, fontWeight: "bold", color: "#00e5a0" }}>Back to Flashcards</Text>
+        </Pressable>
+
+        {/* Page Header */}
+        <View style={[styles.panelCard, !settingsDarkMode && styles.lightCard]}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, backgroundColor: "rgba(168, 85, 247, 0.12)" }}>
+              <Text style={{ fontSize: 10, fontWeight: "bold", color: "#a855f7" }}>FLASHCARDS</Text>
+            </View>
+          </View>
+          <Text style={[styles.tabTitle, !settingsDarkMode && styles.lightText, { fontSize: 20, marginTop: 4 }]} numberOfLines={2}>
+            {deck.title}
+          </Text>
+        </View>
+
+        {/* Core Stats Row */}
+        <View style={[styles.statsGrid, { marginBottom: 15 }]}>
+          <View 
+            style={[
+              styles.statCard, 
+              settingsDarkMode 
+                ? { backgroundColor: "rgba(245, 158, 11, 0.03)", borderColor: "rgba(245, 158, 11, 0.15)", shadowColor: "#000000", shadowOpacity: 0.18, shadowRadius: 16 } 
+                : { backgroundColor: "rgba(245, 158, 11, 0.04)", borderColor: "rgba(245, 158, 11, 0.22)", shadowColor: "#f59e0b", shadowOpacity: 0.14, shadowRadius: 12 }
+            ]}
+          >
+            <View style={[styles.statIconContainer, { backgroundColor: "rgba(245, 158, 11, 0.12)" }]}>
+              <Ionicons name="albums-outline" size={20} color="#f59e0b" />
+            </View>
+            <Text style={[styles.statValue, !settingsDarkMode && styles.lightText]}>{cardCount}</Text>
+            <Text style={[styles.statLabel, !settingsDarkMode && styles.lightTextSub]}>Total Cards</Text>
+          </View>
+
+          <View 
+            style={[
+              styles.statCard, 
+              settingsDarkMode 
+                ? { backgroundColor: "rgba(34, 197, 94, 0.03)", borderColor: "rgba(34, 197, 94, 0.15)", shadowColor: "#000000", shadowOpacity: 0.18, shadowRadius: 16 } 
+                : { backgroundColor: "rgba(34, 197, 94, 0.04)", borderColor: "rgba(34, 197, 94, 0.22)", shadowColor: "#22c55e", shadowOpacity: 0.14, shadowRadius: 12 }
+            ]}
+          >
+            <View style={[styles.statIconContainer, { backgroundColor: "rgba(34, 197, 94, 0.12)" }]}>
+              <Ionicons name="checkmark-circle-outline" size={20} color="#22c55e" />
+            </View>
+            <Text style={[styles.statValue, !settingsDarkMode && styles.lightText]}>{latestAttempt ? latestAttempt.known : 0}</Text>
+            <Text style={[styles.statLabel, !settingsDarkMode && styles.lightTextSub]}>Mastered</Text>
+          </View>
+
+          <View 
+            style={[
+              styles.statCard, 
+              settingsDarkMode 
+                ? { backgroundColor: "rgba(168, 85, 247, 0.03)", borderColor: "rgba(168, 85, 247, 0.15)", shadowColor: "#000000", shadowOpacity: 0.18, shadowRadius: 16 } 
+                : { backgroundColor: "rgba(168, 85, 247, 0.04)", borderColor: "rgba(168, 85, 247, 0.22)", shadowColor: "#a855f7", shadowOpacity: 0.14, shadowRadius: 12 }
+            ]}
+          >
+            <View style={[styles.statIconContainer, { backgroundColor: "rgba(168, 85, 247, 0.12)" }]}>
+              <Ionicons name="time-outline" size={20} color="#a855f7" />
+            </View>
+            <Text style={[styles.statValue, !settingsDarkMode && styles.lightText]}>{attempts.length}</Text>
+            <Text style={[styles.statLabel, !settingsDarkMode && styles.lightTextSub]}>Sessions</Text>
+          </View>
+        </View>
+
+        {/* ── Primary actions ── */}
+        <View style={{ flexDirection: "row", gap: 10, marginBottom: 14 }}>
+          {/* Start Test — always shown */}
+          <Pressable
+            onPress={() => { startStudy(deck); }}
+            style={({ pressed }) => [{
+              flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+              height: 52, borderRadius: 16,
+              backgroundColor: "#6366f1",
+              shadowColor: "#6366f1", shadowOffset: { width: 0, height: 6 },
+              shadowOpacity: 0.4, shadowRadius: 14, elevation: 8,
+            }, pressed && styles.pressedScale]}
+          >
+            <Ionicons name="play" size={18} color="#ffffff" />
+            <Text style={{ fontSize: 15, fontWeight: "700", color: "#ffffff" }}>Study Now</Text>
+          </Pressable>
+        </View>
+
+        {/* Attempt Log History */}
+        <View style={[styles.panelCard, !settingsDarkMode && styles.lightCard]}>
+          <Text style={[styles.optionsSectionTitle, !settingsDarkMode && styles.lightTextSub, { marginBottom: 10, fontSize: 12 }]}>Session History</Text>
+          {attempts.length > 0 ? (
+            <View style={{ gap: 8 }}>
+              {attempts.slice().reverse().map((attempt: any, index: number) => (
+                <View
+                  key={attempt.id || String(index)}
+                  style={[
+                    { padding: 12, borderRadius: 12, backgroundColor: "rgba(255, 255, 255, 0.02)", borderWidth: 1, borderColor: "rgba(255, 255, 255, 0.05)", flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+                    !settingsDarkMode && styles.lightCard
+                  ]}
+                >
+                  <View style={{ flex: 1, paddingRight: 8 }}>
+                    <Text style={[{ fontSize: 12, fontWeight: "bold", color: "#ffffff" }, !settingsDarkMode && styles.lightText]}>
+                      Session #{attempts.length - index}
+                    </Text>
+                    <Text style={[{ fontSize: 10, color: "#888888", marginTop: 2 }, !settingsDarkMode && styles.lightTextSub]}>
+                      {new Date(attempt.date).toLocaleDateString()}
+                    </Text>
+                  </View>
+                  
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                    <Text style={{ fontSize: 13, color: "#22c55e", fontWeight: "700" }}>{attempt.known} ✓</Text>
+                    <Text style={{ fontSize: 13, color: "#ef4444", fontWeight: "700" }}>{attempt.unknown} ✗</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={{ fontSize: 11, color: "#666", textAlign: "center", paddingVertical: 10 }}>No sessions logged yet.</Text>
+          )}
+        </View>
+
+        {/* Reset controls */}
+        <View style={[
+          styles.panelCard, 
+          { 
+            marginBottom: 30,
+          },
+          !settingsDarkMode && styles.lightCard
+        ]}>
+          <Text style={{ fontSize: 12, fontWeight: "600", color: settingsDarkMode ? "#6e727a" : "#999999", marginBottom: 12 }}>Manage</Text>
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <Pressable
+              onPress={() => {
+                const deckId = deck.id;
+                const neonId = deck.neonId;
+                setFlashcardDecks(flashcardDecks.filter(d => d.id !== deckId));
+                if (firebaseUser && neonId && !String(neonId).startsWith("local_")) {
+                  deleteFlashcardDeck(firebaseUser.uid, neonId).catch(err => console.warn("[NeonSync] deck delete failed:", err));
+                }
+                setActiveTab("flashcards");
+              }}
+              style={({ pressed }) => [
+                { flex: 1, padding: 10, borderRadius: 10, backgroundColor: "rgba(239, 68, 68, 0.15)", alignItems: "center", justifyContent: "center" },
+                pressed && styles.opacityPress
+              ]}
+            >
+              <Text style={{ fontSize: 11, fontWeight: "bold", color: "#ef4444" }}>Delete Deck</Text>
             </Pressable>
           </View>
         </View>
@@ -1302,6 +1747,7 @@ export default function HomeScreen() {
       ...activeSession,
       currentIndex: idx
     });
+    quizNumbersScrollRef.current?.scrollTo({ x: Math.max(0, idx * 48 - SCREEN_WIDTH / 2 + 24), animated: true });
   };
 
   const handleFinishSession = () => {
@@ -1362,8 +1808,8 @@ export default function HomeScreen() {
       setCreationMode("pick");
       handleOpenQuizOptions(newQuiz);
 
-      // Push to Neon if logged in
-      if (firebaseUser) {
+      // Push to Neon if user row exists in DB
+      if (firebaseUser && neonUserReadyRef.current) {
         createMobileQuiz({
           userId: firebaseUser.uid,
           title: newQuiz.title,
@@ -1424,24 +1870,6 @@ export default function HomeScreen() {
   const quizzesRef = React.useRef<any[]>([]);
   const decksRef   = React.useRef<any[]>([]);
 
-  // ── Initial load on mount (guest slot) ───────────────────────────────────
-  useEffect(() => {
-    (async () => {
-      try {
-        const [qRaw, dRaw] = await Promise.all([
-          AsyncStorage.getItem(storageKey("quizzes", null)),
-          AsyncStorage.getItem(storageKey("decks", null)),
-        ]);
-        setQuizzes(qRaw ? JSON.parse(qRaw) : []);
-        setFlashcardDecks(dRaw ? JSON.parse(dRaw) : []);
-        const sRaw = await AsyncStorage.getItem(`quizforge_starred_guest`);
-        if (sRaw) setStarredQuestions(new Set(JSON.parse(sRaw)));
-      } catch (e) { console.warn("[Persist] initial load failed:", e); }
-      loadedUidRef.current = null;
-      setDataLoaded(true);
-    })();
-  }, []);
-
   // ── Keep refs in sync + auto-save on every change ───────────────────────
   useEffect(() => {
     quizzesRef.current = quizzes;
@@ -1481,14 +1909,16 @@ export default function HomeScreen() {
   const [newTitle, setNewTitle] = useState("");
   const [newCategory, setNewCategory] = useState("");
   const [newQuestionsCount, setNewQuestionsCount] = useState("");
+  const [newQuizLanguage, setNewQuizLanguage] = useState("English");
   const [creationStep, setCreationStep] = useState<"setup" | "drafting">("setup");
   const [creationMode, setCreationMode] = useState<"pick" | "quiz" | "flashcard">("pick");
   const [fcTitle, setFcTitle] = useState("");
   const [fcCategory, setFcCategory] = useState("");
   const [fcCards, setFcCards] = useState<{ front: string; back: string }[]>([{ front: "", back: "" }]);
   const [fcCurrentIdx, setFcCurrentIdx] = useState(0);
-  const [studyingDeck, setStudyingDeck] = useState<any | null>(null);
   const [studyCardIdx, setStudyCardIdx] = useState(0);
+  const [studyQueue, setStudyQueue] = useState<string[]>([]);
+  const [customStudyMode, setCustomStudyMode] = useState(false);
   const [studyFlipped, setStudyFlipped] = useState(false);
   const [studyKnownCount, setStudyKnownCount] = useState(0);
   const [studyUnknownCount, setStudyUnknownCount] = useState(0);
@@ -1515,6 +1945,7 @@ export default function HomeScreen() {
   const [deckNameInput, setDeckNameInput] = useState("");
   const [nameDeckAction, setNameDeckAction] = useState<"create" | "rename">("create");
   const [showEllipsisMenu, setShowEllipsisMenu] = useState(false);
+  const [showFlashcardOptions, setShowFlashcardOptions] = useState<any>(null);
 
   const handleOpenQuizOptions = (quiz: any) => {
     setSelectedQuiz(quiz);
@@ -1522,10 +1953,8 @@ export default function HomeScreen() {
     setRandomCount(Math.min(5, quiz.questions));
     setRangeStart(1);
     setRangeEnd(quiz.questions);
-    setShuffleQuestions(false);
-    setShuffleAnswers(false);
-    setShowAnswerOnSubmit(true);
-    setTimePerQuestion(null);
+    setQuizTimeLimit(null);
+    setShowTimeLimitDropdown(false);
   };
 
   const handleProceedToDrafting = () => {
@@ -1616,12 +2045,17 @@ export default function HomeScreen() {
       };
     });
 
+    const generatedSourceText = `@title: ${newTitle.trim()}\n@category: ${newCategory.trim() || "General"}\n@language: ${newQuizLanguage}\n\n` + 
+      finalQuestions.map(q => `? ${q.prompt}\n` + q.answers.map((a: any) => `${a.isCorrect ? '+' : '-'} ${a.text}`).join('\n')).join('\n\n');
+
+    const localId = String(Date.now());
     const newQuiz = {
-      id: String(Date.now()),
+      id: localId,
       title: newTitle.trim(),
       category: newCategory.trim() || "General",
       questions: finalQuestions.length,
       time: "Just now",
+      sourceText: generatedSourceText,
       questionsList: finalQuestions,
       attempts: [],
       wrongQuestions: [],
@@ -1636,6 +2070,24 @@ export default function HomeScreen() {
     
     setShowQuizCreatedModal({ title: newQuiz.title, count: newQuiz.questions });
     setActiveTab("dashboard");
+
+    if (firebaseUser && neonUserReadyRef.current) {
+      createMobileQuiz({
+        userId: firebaseUser.uid,
+        title: newQuiz.title,
+        category: newQuiz.category,
+        questionCount: newQuiz.questions,
+        sourceText: generatedSourceText,
+      }).then(({ quiz: saved, error }) => {
+        if (saved && !error) {
+          setQuizzes((prev: any[]) =>
+            prev.map((q) => q.id === localId ? { ...q, id: saved.id, neonId: saved.id } : q)
+          );
+        } else {
+          console.warn("[NeonSync] quiz create failed:", error);
+        }
+      });
+    }
   };
 
   const updateDraftPrompt = (text: string) => {
@@ -1731,31 +2183,37 @@ export default function HomeScreen() {
     const showResult = activeSession.showAnswerOnSubmit && (activeSession.submitted || []).includes(currentQuestion.id);
 
     return (
-      <View style={[styles.sessionContainer, !settingsDarkMode && styles.lightSessionContainer]}>
+      <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#0a1020" : "#f4f4f8" }}>
         {/* Session Header */}
-        <View style={styles.sessionHeader}>
-          <Pressable
-            onPress={() => setShowQuitConfirm(true)}
-            style={[styles.sessionCloseBtn, !settingsDarkMode && { backgroundColor: "rgba(0, 0, 0, 0.05)" }]}
-          >
-            <Ionicons name="close" size={24} color={settingsDarkMode ? "#ffffff" : "#0d0f14"} />
-          </Pressable>
-          <View style={{ flex: 1, alignItems: "center" }}>
-            <Text style={[styles.sessionQuizTitle, !settingsDarkMode && styles.lightText]} numberOfLines={1}>
-              {activeSession.quizTitle}
-            </Text>
-            <Text style={[styles.sessionProgressText, !settingsDarkMode && styles.lightTextSub]}>
-              Question {currentIndex + 1} of {totalQs}
-            </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 52, paddingBottom: 16 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+            <Pressable onPress={() => setShowQuitConfirm(true)} style={({ pressed }) => [{ padding: 8, marginLeft: -8, marginRight: 8 }, pressed && { opacity: 0.7 }]}>
+              <Ionicons name="chevron-back" size={24} color={settingsDarkMode ? "#e2e8f0" : "#0d0f14"} />
+            </Pressable>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 16, fontWeight: "700", color: settingsDarkMode ? "#f8fafc" : "#0d0f14" }} numberOfLines={1}>
+                {activeSession.quizTitle}
+              </Text>
+              <Text style={{ fontSize: 12, color: settingsDarkMode ? "#64748b" : "#666677", marginTop: 2 }}>
+                {activeSession.category || "Internal Medicine Mix"}
+              </Text>
+            </View>
           </View>
-          {/* Timer + Star */}
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-            {activeSession.timePerQuestion !== null && (
-              <View style={styles.sessionTimerBox}>
-                <Ionicons name="time-outline" size={16} color="#6366f1" style={{ marginRight: 4 }} />
-                <Text style={styles.sessionTimerText}>{sessionTimeLeft}s</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+            {activeSession.quizTimeLimit != null && (
+              <View style={[styles.sessionTimerBox, sessionTimeLeft <= 30 && { backgroundColor: "rgba(239,68,68,0.12)", borderColor: "rgba(239,68,68,0.35)" }]}>
+                <Ionicons name="time-outline" size={13} color={sessionTimeLeft <= 30 ? "#ef4444" : "#00e5a0"} style={{ marginRight: 4 }} />
+                <Text style={[styles.sessionTimerText, sessionTimeLeft <= 30 && { color: "#ef4444" }]}>
+                  {`${String(Math.floor(sessionTimeLeft / 60)).padStart(2, "0")}:${String(sessionTimeLeft % 60).padStart(2, "0")}`}
+                </Text>
               </View>
             )}
+            <Pressable
+              onPress={() => setShowRestartConfirm(true)}
+              style={({ pressed }) => [{ width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: settingsDarkMode ? "#334155" : "#e1e4e8", alignItems: "center", justifyContent: "center" }, pressed && { opacity: 0.7 }]}
+            >
+              <Ionicons name="refresh" size={18} color={settingsDarkMode ? "#94a3b8" : "#24292f"} />
+            </Pressable>
             <Pressable
               onPress={() => {
                 const qId = currentQuestion.id;
@@ -1765,151 +2223,212 @@ export default function HomeScreen() {
                   return next;
                 });
               }}
-              style={({ pressed }) => [{ padding: 8, borderRadius: 10,
-                backgroundColor: starredQuestions.has(currentQuestion.id)
-                  ? "rgba(245,158,11,0.15)" : "transparent"
-              }, pressed && styles.pressedScale]}
+              style={({ pressed }) => [{ width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: settingsDarkMode ? "#334155" : "#e1e4e8", alignItems: "center", justifyContent: "center" }, pressed && { opacity: 0.7 }]}
             >
-              <Ionicons
-                name={starredQuestions.has(currentQuestion.id) ? "star" : "star-outline"}
-                size={20}
-                color={starredQuestions.has(currentQuestion.id) ? "#f59e0b" : (settingsDarkMode ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.25)")}
-              />
+              <Ionicons name={starredQuestions.has(currentQuestion.id) ? "bookmark" : "bookmark-outline"} size={16} color={starredQuestions.has(currentQuestion.id) ? "#3b82f6" : (settingsDarkMode ? "#94a3b8" : "#24292f")} />
             </Pressable>
           </View>
         </View>
 
-        {/* Progress bar */}
-        <View style={[styles.progressBarBg, !settingsDarkMode && styles.lightProgressBg]}>
-          <View style={[styles.progressBarFill, { width: `${((currentIndex + 1) / totalQs) * 100}%` }]} />
-        </View>
+        {/* Horizontal Number Progress */}
+        <View style={{ marginBottom: 20 }}>
+          <ScrollView 
+            ref={quizNumbersScrollRef}
+            horizontal 
+            showsHorizontalScrollIndicator={false} 
+            contentContainerStyle={{ paddingHorizontal: 20, gap: 16 }}
+          >
+            {activeSession.questions.map((q: any, i: number) => {
+              const isActive = i === currentIndex;
+              const isSubmitted = (activeSession.submitted || []).includes(q.id);
+              const selected = activeSession.answers[q.id] || [];
+              const isAnswered = selected.length > 0;
+              
+              let isCorrect = false;
+              if (isAnswered) {
+                const correctIds = q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.id);
+                isCorrect = selected.length === correctIds.length && selected.every((id: string) => correctIds.includes(id));
+              }
 
-        <ScrollView 
-          style={styles.sessionScroll} 
-          contentContainerStyle={styles.sessionScrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Question Prompt */}
-          <View style={[styles.sessionQuestionCard, !settingsDarkMode && styles.lightCard]}>
-            <View style={questionIndexRowStyle(showResult, selectedAnswers, currentQuestion)}>
-              <View style={styles.questionIndexCircle}>
-                <Text style={styles.questionIndexCircleText}>{currentIndex + 1}</Text>
-              </View>
-              <Text style={[styles.questionTypeHelpText, !settingsDarkMode && styles.lightTextSub]}>
-                {currentQuestion.type === "multiple_choice" ? "Select all correct options" : "Choose the correct option"}
-              </Text>
-            </View>
-            <Text style={[styles.questionPromptText, !settingsDarkMode && styles.lightText]}>{currentQuestion.prompt}</Text>
-          </View>
+              let bgColor = "transparent";
+              let textColor = settingsDarkMode ? "#94a3b8" : "#666677";
+              
+              if (activeSession.showAnswerOnSubmit && isSubmitted) {
+                bgColor = isCorrect ? (settingsDarkMode ? "rgba(16, 185, 129, 0.2)" : "#d1fae5") : (settingsDarkMode ? "rgba(239, 68, 68, 0.2)" : "#fee2e2");
+                textColor = isCorrect ? (settingsDarkMode ? "#34d399" : "#10b981") : (settingsDarkMode ? "#f87171" : "#ef4444");
+              } else if (!activeSession.showAnswerOnSubmit && isAnswered) {
+                 // if answered but not submitted yet (like in a mock test)
+                 bgColor = settingsDarkMode ? "rgba(255, 255, 255, 0.1)" : "#e2e8f0";
+                 textColor = settingsDarkMode ? "#f1f5f9" : "#0f172a";
+              }
 
-          {/* Option Buttons */}
-          <Text style={[styles.optionsSectionTitle, !settingsDarkMode && styles.lightTextSub]}>Options</Text>
-          <View style={styles.sessionOptionsContainer}>
-            {currentQuestion.answers.map((answer: any, idx: number) => {
-              const isSelected = selectedAnswers.includes(answer.id);
-              const correctHighlight = showResult && answer.isCorrect;
-              const wrongHighlight = showResult && isSelected && !answer.isCorrect;
+
 
               return (
                 <Pressable
-                  key={answer.id}
-                  disabled={showResult}
-                  onPress={() => handleAnswerSelect(currentQuestion, answer.id)}
-                  style={({ pressed }) => [
-                    styles.sessionOptionBtn,
-                    !settingsDarkMode && styles.lightCard,
-                    isSelected && styles.sessionOptionBtnSelected,
-                    correctHighlight && styles.sessionOptionBtnCorrect,
-                    wrongHighlight && styles.sessionOptionBtnWrong,
-                    pressed && !showResult && styles.pressedScale,
-                  ]}
+                  key={q.id}
+                  onPress={() => {
+                    handleNavigateSession(i);
+                    quizFlatListRef.current?.scrollToIndex({ index: i, animated: true });
+                  }}
+                  style={{ alignItems: "center" }}
                 >
-                  <View style={[
-                    styles.optionLetterBox,
-                    !settingsDarkMode && { backgroundColor: "rgba(0, 0, 0, 0.05)" },
-                    isSelected && styles.optionLetterBoxSelected,
-                    correctHighlight && styles.optionLetterBoxCorrect,
-                    wrongHighlight && styles.optionLetterBoxWrong,
-                  ]}>
-                    {correctHighlight ? (
-                      <Ionicons name="checkmark" size={14} color="#00e5a0" />
-                    ) : wrongHighlight ? (
-                      <Ionicons name="close" size={14} color="#ef4444" />
-                    ) : (
-                      <Text style={[
-                        styles.optionLetterText,
-                        !settingsDarkMode && styles.lightText,
-                        isSelected && { color: "#000000" }
-                      ]}>
-                        {String.fromCharCode(65 + idx)}
-                      </Text>
-                    )}
+                  <View style={{
+                    width: 32, height: 32, borderRadius: 16, overflow: "hidden",
+                    backgroundColor: bgColor,
+                    borderWidth: 1, borderColor: bgColor === "transparent" ? "transparent" : bgColor,
+                    alignItems: "center", justifyContent: "center"
+                  }}>
+                    <Text style={{ fontSize: 14, fontWeight: "600", color: textColor }}>{i + 1}</Text>
                   </View>
-                  <Text style={[styles.optionContentText, !settingsDarkMode && styles.lightText]}>{answer.text}</Text>
+                  {isActive && (
+                    <View style={{ marginTop: 4, width: 24, height: 2, backgroundColor: settingsDarkMode ? "#34d399" : "#059669", borderRadius: 1 }} />
+                  )}
                 </Pressable>
               );
             })}
-          </View>
-        </ScrollView>
+          </ScrollView>
+        </View>
 
-        {/* Footer Navigation Bar */}
-        <View style={[styles.sessionFooter, !settingsDarkMode && styles.lightBorderTop]}>
-          <Pressable
-            disabled={currentIndex === 0}
-            onPress={() => handleNavigateSession(currentIndex - 1)}
-            style={({ pressed }) => [
-              styles.sessionNavBtn,
-              !settingsDarkMode && styles.lightCard,
-              currentIndex === 0 && styles.sessionNavBtnDisabled,
-              pressed && currentIndex !== 0 && styles.pressedScale,
-            ]}
-          >
-            <Ionicons name="chevron-back" size={18} color={currentIndex === 0 ? (settingsDarkMode ? "#444" : "#ccc") : (settingsDarkMode ? "#ffffff" : "#0d0f14")} />
-            <Text style={[styles.sessionNavBtnText, !settingsDarkMode && styles.lightText, currentIndex === 0 && { color: settingsDarkMode ? "#444" : "#ccc" }]}>Prev</Text>
-          </Pressable>
+        <FlatList
+          ref={quizFlatListRef}
+          data={activeSession.questions}
+          keyExtractor={(item: any) => item.id}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          initialScrollIndex={currentIndex}
+          getItemLayout={(data, index) => ({ length: SCREEN_WIDTH, offset: SCREEN_WIDTH * index, index })}
+          onMomentumScrollEnd={(e) => {
+            const newIndex = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+            if (newIndex !== currentIndex) {
+              handleNavigateSession(newIndex);
+            }
+          }}
+          renderItem={({ item: qst, index: qIdx }) => {
+            const itemSelectedAnswers = activeSession.answers[qst.id] || [];
+            const itemShowResult = activeSession.showAnswerOnSubmit && (activeSession.submitted || []).includes(qst.id);
 
+            return (
+              <View style={{ width: SCREEN_WIDTH, flex: 1 }}>
+                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
+                  
+                  {/* Category / Subtitle */}
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+                    <Text style={{ fontSize: 11, fontWeight: "700", color: "#2dd4bf", letterSpacing: 1 }}>
+                      {activeSession.category?.toUpperCase() || "GASTROENTEROLOGY"} <Text style={{ color: settingsDarkMode ? "#64748b" : "#666677" }}>/ {qst.topic?.toUpperCase() || "PEPTIC ULCER DISEASE"}</Text>
+                    </Text>
+                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#fbbf24" }} />
+                  </View>
+
+                  {/* Question Text */}
+                  <Text style={{ fontSize: 17, color: settingsDarkMode ? "#f1f5f9" : "#24292f", lineHeight: 28, marginBottom: 32, textAlign: "left", fontWeight: "400" }}>
+                    {qst.prompt}
+                  </Text>
+
+                  {/* Options */}
+                  <View style={{ gap: 12 }}>
+                    {qst.answers.map((answer: any, idx: number) => {
+                      const isSelected = itemSelectedAnswers.includes(answer.id);
+                      const correctHighlight = itemShowResult && answer.isCorrect;
+                      const wrongHighlight = itemShowResult && isSelected && !answer.isCorrect;
+
+                      // Determine border and background colors
+                      let containerBg = settingsDarkMode ? "transparent" : "#ffffff";
+                      let containerBorder = settingsDarkMode ? "rgba(255,255,255,0.15)" : "#e1e4e8";
+                      let circleBg = settingsDarkMode ? "transparent" : "#f3f4f6";
+                      let circleBorder = settingsDarkMode ? "rgba(255,255,255,0.3)" : "#ccc";
+                      let textColor = settingsDarkMode ? "#e2e8f0" : "#24292f";
+
+                      if (correctHighlight) {
+                        containerBg = settingsDarkMode ? "rgba(16, 185, 129, 0.1)" : "#d1fae5";
+                        containerBorder = "#10b981";
+                        circleBg = "#10b981";
+                        circleBorder = "#10b981";
+                      } else if (wrongHighlight) {
+                        containerBg = settingsDarkMode ? "rgba(239, 68, 68, 0.1)" : "#fee2e2";
+                        containerBorder = "#ef4444";
+                        circleBg = "#ef4444";
+                        circleBorder = "#ef4444";
+                      } else if (isSelected) {
+                        // Just selected, not checked yet
+                        containerBg = settingsDarkMode ? "rgba(255, 255, 255, 0.05)" : "#f1f5f9";
+                        containerBorder = settingsDarkMode ? "#ffffff" : "#0d0f14";
+                        circleBg = settingsDarkMode ? "#ffffff" : "#0d0f14";
+                        circleBorder = settingsDarkMode ? "#ffffff" : "#0d0f14";
+                      }
+
+                      return (
+                        <Pressable
+                          key={answer.id}
+                          disabled={itemShowResult}
+                          onPress={() => handleAnswerSelect(qst, answer.id)}
+                          style={({ pressed }) => [{
+                            flexDirection: "row", alignItems: "center",
+                            padding: 16, borderRadius: 16,
+                            backgroundColor: containerBg,
+                            borderWidth: 1, 
+                            borderColor: containerBorder,
+                          }, pressed && !itemShowResult && { opacity: 0.7 }]}
+                        >
+                          <View style={{
+                            width: 34, height: 34, borderRadius: 17, overflow: "hidden",
+                            backgroundColor: circleBg, borderWidth: 1, borderColor: circleBorder,
+                            alignItems: "center", justifyContent: "center", marginRight: 16,
+                          }}>
+                            <Text style={{ fontSize: 14, fontWeight: "700", color: (isSelected || correctHighlight || wrongHighlight) ? (settingsDarkMode && isSelected && !correctHighlight && !wrongHighlight ? "#000000" : "#ffffff") : (settingsDarkMode ? "#94a3b8" : "#666677") }}>
+                              {String.fromCharCode(65 + idx)}
+                            </Text>
+                          </View>
+                          <Text style={{ flex: 1, fontSize: 15, color: textColor, lineHeight: 22, fontWeight: "400" }}>
+                            {answer.text}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+              </View>
+            );
+          }}
+        />
+
+        {/* Floating Action Button */}
+        <View style={{ position: "absolute", bottom: Math.max(insets.bottom, 20) + 20, right: 24, zIndex: 10 }}>
           {activeSession.showAnswerOnSubmit && currentQuestion.type === "multiple_choice" && !(activeSession.submitted || []).includes(currentQuestion.id) ? (
             <Pressable
               disabled={selectedAnswers.length === 0}
               onPress={() => handleCheckAnswer(currentQuestion.id)}
-              style={({ pressed }) => [
-                styles.sessionNavBtn,
-                styles.finishSessionBtn,
-                selectedAnswers.length === 0 && styles.sessionNavBtnDisabled,
-                pressed && selectedAnswers.length > 0 && styles.pressedScale,
-              ]}
+              style={({ pressed }) => [{
+                width: 56, height: 56, borderRadius: 28,
+                backgroundColor: settingsDarkMode ? "#6366f1" : "#4f46e5",
+                alignItems: "center", justifyContent: "center",
+                opacity: selectedAnswers.length === 0 ? 0.4 : (pressed ? 0.7 : 1),
+                shadowColor: "#6366f1", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 10, elevation: 6
+              }]}
             >
-              <Ionicons name="checkmark-circle" size={18} color="#000000" />
-              <Text style={[styles.sessionNavBtnText, { color: "#000000", fontWeight: "bold" }]}>Submit</Text>
+              <Ionicons name="checkmark" size={28} color="#ffffff" />
             </Pressable>
           ) : (
             <Pressable
               onPress={() => {
                 if (currentIndex < totalQs - 1) {
-                  handleNavigateSession(currentIndex + 1);
+                  const newIdx = currentIndex + 1;
+                  handleNavigateSession(newIdx);
+                  quizFlatListRef.current?.scrollToIndex({ index: newIdx, animated: true });
                 } else {
                   handleFinishSession();
                 }
               }}
-              style={({ pressed }) => [
-                styles.sessionNavBtn,
-                !settingsDarkMode && currentIndex !== totalQs - 1 && styles.lightCard,
-                currentIndex === totalQs - 1 ? styles.finishSessionBtn : null,
-                pressed && styles.pressedScale,
-              ]}
+              style={({ pressed }) => [{
+                width: 56, height: 56, borderRadius: 28,
+                backgroundColor: settingsDarkMode ? "#6366f1" : "#4f46e5",
+                alignItems: "center", justifyContent: "center",
+                opacity: pressed ? 0.7 : 1,
+                shadowColor: "#6366f1", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 10, elevation: 6
+              }]}
             >
-              <Text style={[
-                styles.sessionNavBtnText,
-                !settingsDarkMode && currentIndex !== totalQs - 1 && styles.lightText,
-                currentIndex === totalQs - 1 ? { color: "#000000", fontWeight: "bold" } : null
-              ]}>
-                {currentIndex === totalQs - 1 ? "Finish" : "Next"}
-              </Text>
-              {currentIndex < totalQs - 1 ? (
-                <Ionicons name="chevron-forward" size={18} color={settingsDarkMode ? "#ffffff" : "#0d0f14"} />
-              ) : (
-                <Ionicons name="flag-outline" size={16} color="#000000" />
-              )}
+              <Ionicons name={currentIndex === totalQs - 1 ? "checkmark" : "arrow-forward"} size={28} color="#ffffff" />
             </Pressable>
           )}
         </View>
@@ -1931,6 +2450,13 @@ export default function HomeScreen() {
       const selected = activeSession.answers[q.id] || [];
       if (selected.length === 0) {
         skippedCount++;
+        const correctText = q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.text).join(", ");
+        wrongQsForQuiz.push({
+          id: q.id,
+          prompt: q.prompt,
+          selected: "Skipped",
+          correct: correctText,
+        });
       } else {
         const correctIds = q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.id);
         const isAllCorrect = selected.every((id: string) => correctIds.includes(id)) && selected.length === correctIds.length;
@@ -2002,7 +2528,8 @@ export default function HomeScreen() {
         shuffleQuestions: activeSession.shuffleQuestions || false,
         shuffleAnswers: activeSession.shuffleAnswers || false,
         showAnswerOnSubmit: activeSession.showAnswerOnSubmit !== false,
-        timePerQuestion: activeSession.timePerQuestion || null,
+        timePerQuestion: null,
+        quizTimeLimit: activeSession.quizTimeLimit || null,
         currentIndex: 0,
         answers: {},
         submitted: [] as string[],
@@ -2097,12 +2624,12 @@ export default function HomeScreen() {
               onPress={handleReattemptWrong}
               style={({ pressed }) => [
                 styles.startQuizBtn,
-                { backgroundColor: "#3b82f6", shadowColor: "#3b82f6" },
+                { backgroundColor: settingsDarkMode ? "rgba(59, 130, 246, 0.15)" : "rgba(59, 130, 246, 0.1)", shadowOpacity: 0 },
                 pressed && styles.opacityPress
               ]}
             >
-              <Ionicons name="refresh" size={18} color="#ffffff" />
-              <Text style={[styles.startQuizBtnText, { color: "#ffffff" }]}>Re-attempt Wrong Questions</Text>
+              <Ionicons name="refresh" size={18} color={settingsDarkMode ? "#60a5fa" : "#2563eb"} />
+              <Text style={[styles.startQuizBtnText, { color: settingsDarkMode ? "#60a5fa" : "#2563eb" }]}>Re-attempt Wrong Questions</Text>
             </Pressable>
           )}
 
@@ -2110,22 +2637,26 @@ export default function HomeScreen() {
             onPress={handleRetakeEntire}
             style={({ pressed }) => [
               styles.startQuizBtn,
+              { backgroundColor: settingsDarkMode ? "rgba(99, 102, 241, 0.15)" : "rgba(99, 102, 241, 0.1)", shadowOpacity: 0 },
               pressed && styles.opacityPress
             ]}
           >
-            <Ionicons name="play" size={18} color="#000000" />
-            <Text style={styles.startQuizBtnText}>Retake Entire Quiz</Text>
+            <Ionicons name="play" size={18} color={settingsDarkMode ? "#818cf8" : "#4f46e5"} />
+            <Text style={[styles.startQuizBtnText, { color: settingsDarkMode ? "#818cf8" : "#4f46e5" }]}>Retake Entire Quiz</Text>
           </Pressable>
 
           <Pressable
             onPress={() => {
-              const attempt = {
-                id: String(Date.now()),
+              const targetAttemptId = activeSession.targetAttemptId;
+              const baseAttemptData = {
+                id: targetAttemptId || String(Date.now()),
                 score: scorePct,
                 correct: correctCount,
                 wrong: wrongCount,
                 skipped: skippedCount,
-                timestamp: Date.now()
+                timestamp: Date.now(),
+                wrongQuestionIds: wrongQsForQuiz.map(q => q.id),
+                questionIds: activeSession.questions.map((q: any) => q.id)
               };
               
               const correctIdsInSession = activeSession.questions
@@ -2136,9 +2667,35 @@ export default function HomeScreen() {
                 if (q.id === activeSession.quizId) {
                   const currentUnique = q.uniqueCorrectIds || [];
                   const updatedUniqueCorrectIds = Array.from(new Set([...currentUnique, ...correctIdsInSession]));
+                  
+                  let updatedAttempts = q.attempts || [];
+                  if (targetAttemptId) {
+                    updatedAttempts = updatedAttempts.map((a: any) => {
+                      if (a.id === targetAttemptId) {
+                        const mergedCorrect = (a.correct || 0) + correctCount;
+                        const mergedSkipped = (a.skipped || 0) + skippedCount;
+                        const mergedWrong = Math.max(0, (a.wrong || 0) - correctCount - skippedCount);
+                        const totalQs = mergedCorrect + mergedSkipped + mergedWrong;
+                        const mergedScore = Math.round((mergedCorrect / (totalQs || 1)) * 100);
+                        
+                        return {
+                          ...a,
+                          ...baseAttemptData,
+                          score: mergedScore,
+                          correct: mergedCorrect,
+                          wrong: mergedWrong,
+                          skipped: mergedSkipped
+                        };
+                      }
+                      return a;
+                    });
+                  } else {
+                    updatedAttempts = [baseAttemptData, ...updatedAttempts];
+                  }
+
                   return {
                     ...q,
-                    attempts: [attempt, ...(q.attempts || [])],
+                    attempts: updatedAttempts,
                     wrongQuestions: wrongQsForQuiz,
                     uniqueCorrectIds: updatedUniqueCorrectIds
                   };
@@ -2202,25 +2759,144 @@ export default function HomeScreen() {
     return name.charAt(0).toUpperCase();
   };
 
+  // ── SM-2 Spaced Repetition Logic ──
+  const startStudy = (deck: any, custom: boolean = false) => {
+    setCustomStudyMode(custom);
+    const updatedDeck = {
+      ...deck,
+      cards: (deck.cards || []).map((c: any) => ({
+        ...c,
+        id: c.id || Date.now().toString() + Math.random().toString(),
+        sm2_interval: c.sm2_interval ?? 0,
+        sm2_repetition: c.sm2_repetition ?? 0,
+        sm2_easeFactor: c.sm2_easeFactor ?? 2.5
+      }))
+    };
+    
+    setFlashcardDecks((prev: any[]) => prev.map(d => d.id === deck.id ? updatedDeck : d));
+    
+    const due = custom 
+      ? updatedDeck.cards 
+      : updatedDeck.cards.filter((c: any) => !c.sm2_nextReviewDate || c.sm2_nextReviewDate <= Date.now());
+    
+    setStudyQueue(due.map((c: any) => c.id));
+    setStudyingDeck(updatedDeck);
+    setStudyFlipped(false);
+    flipAnim.setValue(0);
+    swipeX.setValue(0);
+    setStudyTypedAnswer("");
+    setStudyChecked(false);
+  };
+
+  const calculateSM2 = (card: any, rating: "again" | "hard" | "good" | "easy") => {
+    let { sm2_interval: interval, sm2_repetition: repetition, sm2_easeFactor: easeFactor } = card;
+    let nextReviewDate = Date.now();
+
+    if (rating === "again") {
+      repetition = 0;
+      interval = 1;
+      easeFactor = Math.max(1.3, easeFactor - 0.2);
+      nextReviewDate += 60 * 1000; // due in 1 minute
+    } else if (rating === "hard") {
+      interval = Math.max(1, interval * 1.2);
+      easeFactor = Math.max(1.3, easeFactor - 0.15);
+      nextReviewDate = repetition === 0 ? Date.now() + 10 * 60 * 1000 : Date.now() + interval * 24 * 60 * 60 * 1000;
+    } else if (rating === "good") {
+      if (repetition === 0) interval = 1;
+      else if (repetition === 1) interval = 6;
+      else interval = interval * easeFactor;
+      repetition += 1;
+      nextReviewDate = Date.now() + interval * 24 * 60 * 60 * 1000;
+    } else if (rating === "easy") {
+      if (repetition === 0) interval = 4;
+      else interval = interval * easeFactor * 1.3;
+      easeFactor += 0.15;
+      repetition += 1;
+      nextReviewDate = Date.now() + interval * 24 * 60 * 60 * 1000;
+    }
+    return { ...card, sm2_interval: interval, sm2_repetition: repetition, sm2_easeFactor: easeFactor, sm2_nextReviewDate: nextReviewDate };
+  };
+
+  const handleSM2Rating = (rating: "again" | "hard" | "good" | "easy") => {
+    if (!studyingDeck || studyQueue.length === 0) return;
+    
+    Animated.timing(swipeX, {
+      toValue: -Dimensions.get("window").width,
+      duration: 150,
+      useNativeDriver: true
+    }).start(() => {
+      const cardId = studyQueue[0];
+      const currentCard = studyingDeck.cards.find((c: any) => c.id === cardId);
+      if (!currentCard) {
+        swipeX.setValue(0);
+        return;
+      }
+
+      let newQueue = [...studyQueue.slice(1)];
+      
+      if (!customStudyMode) {
+        const updatedCard = calculateSM2(currentCard, rating);
+        if (rating === "again") {
+          newQueue.push(cardId);
+        }
+        
+        const updatedDeck = {
+          ...studyingDeck,
+          cards: studyingDeck.cards.map((c: any) => c.id === cardId ? updatedCard : c)
+        };
+        setStudyingDeck(updatedDeck);
+        setFlashcardDecks((prev: any[]) => prev.map(d => d.id === studyingDeck.id ? updatedDeck : d));
+        
+        if (firebaseUser && updatedDeck.neonId) {
+          updateFlashcardDeck({ userId: firebaseUser.uid, deckId: updatedDeck.neonId, cards: updatedDeck.cards })
+            .catch(err => console.error("Failed to sync SM-2 progress", err));
+        }
+      }
+
+      setStudyQueue(newQueue);
+      setStudyFlipped(false);
+      flipAnim.setValue(0);
+      setStudyTypedAnswer("");
+      setStudyChecked(false);
+
+      swipeX.setValue(Dimensions.get("window").width);
+      Animated.timing(swipeX, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true
+      }).start();
+    });
+  };
+
   // Render Sub-Views based on activeTab
   const renderContent = () => {
     switch (activeTab) {
       case "insights":
         return renderInsightsView();
+      case "deck-insights":
+        return renderDeckInsightsTab();
 
       case "dashboard": {
         const isDark = settingsDarkMode;
-        const bg     = isDark ? "#0a0a0f" : "#f4f4f8";
-        const card   = isDark ? "#111118" : "#ffffff";
+        const bg     = isDark ? "#0f172a" : "#f4f4f8";
+        const card   = isDark ? "#1e293b" : "#ffffff";
         const border = isDark ? "#1e1e2e" : "rgba(0,0,0,0.07)";
         const border2 = isDark ? "#2a2a4a" : "rgba(99,102,241,0.15)";
-        const txt    = isDark ? "#f1f0ff" : "#0d0f14";
-        const muted  = isDark ? "#8e8e9e" : "#666677";
+        const txt    = isDark ? "#ffffff" : "#0d0f14";
+        const muted  = isDark ? "#ffffff" : "#666677";
 
         const totalAttempts  = quizzes.reduce((s, q) => s + (q.attempts || []).length, 0);
         const totalQuestions = quizzes.reduce((s, q) => s + (q.questions || 0), 0);
-        const avgScore = totalAttempts > 0
-          ? Math.round(quizzes.flatMap(q => q.attempts || []).reduce((s: number, a: any) => s + a.score, 0) / totalAttempts)
+        const allAttempts = quizzes.flatMap(q => q.attempts || []);
+        const totalCorrectAnswers = allAttempts.reduce((s: number, a: any) => s + (a.correct || 0), 0);
+        const totalAttemptedQuestions = allAttempts.reduce((s: number, a: any) => s + ((a.correct || 0) + (a.wrong || 0) + (a.skipped || 0)), 0);
+        const avgScore = totalAttemptedQuestions > 0
+          ? Math.round((totalCorrectAnswers / totalAttemptedQuestions) * 100)
+          : 0;
+          
+        const totalUniqueCorrect = quizzes.reduce((acc: number, q: any) => acc + (q.uniqueCorrectIds || []).length, 0);
+        const overallProgressPct = totalQuestions > 0 
+          ? Math.min(Math.round((totalUniqueCorrect / totalQuestions) * 100), 100) 
           : 0;
 
         // For starred block
@@ -2267,7 +2943,7 @@ export default function HomeScreen() {
 
               <Text style={{ fontSize: 10, fontWeight: "700", letterSpacing: 1.5,
                 color: "#6366f1", textTransform: "uppercase", marginBottom: 12 }}>
-                Overview
+                {t('dashboard.accuracy') || "ACCURACY OVER ALL ATTEMPTS"}
               </Text>
 
               <View style={{ flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" }}>
@@ -2278,9 +2954,9 @@ export default function HomeScreen() {
                   <Text style={{ fontSize: 20, color: muted, marginBottom: 8, fontWeight: "300" }}>%</Text>
                 </View>
                 <View style={{ alignItems: "flex-end" }}>
-                  <Text style={{ fontSize: 11, color: muted }}>{totalAttempts} attempt{totalAttempts !== 1 ? "s" : ""}</Text>
+                  <Text style={{ fontSize: 11, color: muted }}>{totalAttempts} {totalAttempts !== 1 ? (t('dashboard.attempts') || "attempts") : (t('dashboard.attempt') || "attempt")}</Text>
                   <Text style={{ fontSize: 11, color: muted, marginTop: 2 }}>
-                    across {quizzes.length} quiz{quizzes.length !== 1 ? "zes" : ""}
+                    {t('dashboard.across') || "across"} {quizzes.length} {quizzes.length !== 1 ? (t('dashboard.quizzes') || "quizzes") : (t('dashboard.quiz') || "quiz")}
                   </Text>
                 </View>
               </View>
@@ -2288,13 +2964,13 @@ export default function HomeScreen() {
               {/* Progress bar */}
               <View style={{ marginTop: 14 }}>
                 <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 6 }}>
-                  <Text style={{ fontSize: 10, color: muted, letterSpacing: 0.5 }}>Progress</Text>
+                  <Text style={{ fontSize: 10, color: muted, letterSpacing: 0.5 }}>{t('dashboard.completion') || "Completion (Mastered)"}</Text>
                   <Text style={{ fontSize: 10, color: muted, letterSpacing: 0.5 }}>
-                    {totalAttempts > 0 ? `${avgScore} / 100` : "0 / 0"}
+                    {totalUniqueCorrect} / {totalQuestions} ({overallProgressPct}%)
                   </Text>
                 </View>
                 <View style={{ height: 3, backgroundColor: isDark ? "#1e1e3a" : "rgba(0,0,0,0.06)", borderRadius: 2 }}>
-                  <View style={{ height: 3, borderRadius: 2, width: `${avgScore}%` as any,
+                  <View style={{ height: 3, borderRadius: 2, width: `${overallProgressPct}%` as any,
                     backgroundColor: "#6366f1" }} />
                 </View>
               </View>
@@ -2303,9 +2979,9 @@ export default function HomeScreen() {
             {/* ── Stats grid — 3 cells ── */}
             <View style={{ flexDirection: "row", gap: 8, marginHorizontal: 20, marginTop: 12 }}>
               {[
-                { label: "QUIZZES",   value: String(quizzes.length),        icon: "layers-outline"      as const },
-                { label: "QUESTIONS", value: String(totalQuestions),         icon: "help-circle-outline" as const },
-                { label: "DECKS",     value: String(flashcardDecks.length),  icon: "copy-outline"        as const },
+                { label: t('dashboard.stats_quizzes') || "QUIZZES",   value: String(quizzes.length),        icon: "layers-outline"      as const },
+                { label: t('dashboard.stats_questions') || "QUESTIONS", value: String(totalQuestions),         icon: "help-circle-outline" as const },
+                { label: t('dashboard.stats_decks') || "DECKS",     value: String(flashcardDecks.length),  icon: "copy-outline"        as const },
               ].map(s => (
                 <View key={s.label} style={{ flex: 1, backgroundColor: card,
                   borderWidth: 1, borderColor: border, borderRadius: 14,
@@ -2324,7 +3000,7 @@ export default function HomeScreen() {
                 <View style={{ flexDirection: "row", justifyContent: "space-between",
                   alignItems: "center", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 10 }}>
                   <Text style={{ fontSize: 10, fontWeight: "700", letterSpacing: 1.2, color: muted, textTransform: "uppercase" }}>
-                    Starred
+                    {t('dashboard.starred') || "Starred"}
                   </Text>
                 </View>
                 <Pressable
@@ -2344,9 +3020,9 @@ export default function HomeScreen() {
                       <Ionicons name="star" size={17} color="#eab308" />
                     </View>
                     <View>
-                      <Text style={{ fontSize: 13, fontWeight: "500", color: txt }}>Starred Questions</Text>
+                      <Text style={{ fontSize: 13, fontWeight: "500", color: txt }}>{t('dashboard.starred_title') || "Starred Questions"}</Text>
                       <Text style={{ fontSize: 11, color: muted, marginTop: 2, fontWeight: "300" }}>
-                        {starredQList.length} question{starredQList.length !== 1 ? "s" : ""} saved
+                        {starredQList.length} {t('dashboard.stats_questions')} {t('dashboard.saved') || "saved"}
                       </Text>
                     </View>
                   </View>
@@ -2428,10 +3104,10 @@ export default function HomeScreen() {
         // ── Type picker ──────────────────────────────────────────
         if (creationMode === "pick") {
           return (
-            <ScrollView contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+            <ScrollView contentContainerStyle={{ flexGrow: 1, paddingBottom: Math.max(40, insets.bottom + 40) }} showsVerticalScrollIndicator={false}>
               <View style={styles.tabHeader}>
-                <Text style={[styles.tabTitle, !settingsDarkMode && styles.lightText]}>Create</Text>
-                <Text style={[styles.tabSubtitle, !settingsDarkMode && styles.lightTextSub]}>What would you like to make?</Text>
+                <Text style={[styles.tabTitle, !settingsDarkMode && styles.lightText]}>{t('create_pick.pick_title') || "Create"}</Text>
+                <Text style={[styles.tabSubtitle, !settingsDarkMode && styles.lightTextSub]}>{t('create_pick.pick_subtitle') || "What would you like to make?"}</Text>
               </View>
 
               {/* Quiz card */}
@@ -2451,13 +3127,18 @@ export default function HomeScreen() {
                       <Ionicons name="checkbox-outline" size={24} color="#6366f1" />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[{ fontSize: 17, fontWeight: "800", letterSpacing: -0.2 }, !settingsDarkMode && styles.lightText]}>Quiz</Text>
-                      <Text style={{ fontSize: 12, color: "#6e727a", marginTop: 2 }}>Multiple-choice questions</Text>
+                      <Text style={[{ fontSize: 17, fontWeight: "800", letterSpacing: -0.2 }, !settingsDarkMode && styles.lightText]}>{t('create_pick.quiz_title') || "Quiz"}</Text>
+                      <Text style={{ fontSize: 12, color: "#6e727a", marginTop: 2 }}>{t('create_pick.quiz_sub') || "Multiple-choice questions"}</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={18} color="#6366f1" />
                   </View>
                   <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
-                    {["Timed mode", "Shuffle", "Wrong review", "Multi-select"].map(tag => (
+                    {[
+                      t('create_pick.tag_timed') || "Timed mode",
+                      t('create_pick.tag_shuffle') || "Shuffle",
+                      t('create_pick.tag_wrong') || "Wrong review",
+                      t('create_pick.tag_multi') || "Multi-select"
+                    ].map(tag => (
                       <View key={tag} style={{ backgroundColor: "rgba(99,102,241,0.1)", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 }}>
                         <Text style={{ fontSize: 11, color: "#6366f1", fontWeight: "600" }}>{tag}</Text>
                       </View>
@@ -2483,13 +3164,18 @@ export default function HomeScreen() {
                       <Ionicons name="copy-outline" size={24} color="#00e5a0" />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[{ fontSize: 17, fontWeight: "800", letterSpacing: -0.2 }, !settingsDarkMode && styles.lightText]}>Flashcards</Text>
-                      <Text style={{ fontSize: 12, color: "#6e727a", marginTop: 2 }}>Flip-card study decks</Text>
+                      <Text style={[{ fontSize: 17, fontWeight: "800", letterSpacing: -0.2 }, !settingsDarkMode && styles.lightText]}>{t('create_pick.fc_title') || "Flashcards"}</Text>
+                      <Text style={{ fontSize: 12, color: "#6e727a", marginTop: 2 }}>{t('create_pick.fc_sub') || "Flip-card study decks"}</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={18} color="#00e5a0" />
                   </View>
                   <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
-                    {["Front & back", "Flip to reveal", "Deck mode", "Quick recall"].map(tag => (
+                    {[
+                      t('create_pick.tag_frontback') || "Front & back",
+                      t('create_pick.tag_flip') || "Flip to reveal",
+                      t('create_pick.tag_deck') || "Deck mode",
+                      t('create_pick.tag_quick') || "Quick recall"
+                    ].map(tag => (
                       <View key={tag} style={{ backgroundColor: "rgba(0,229,160,0.08)", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 }}>
                         <Text style={{ fontSize: 11, color: "#00e5a0", fontWeight: "600" }}>{tag}</Text>
                       </View>
@@ -2608,12 +3294,12 @@ export default function HomeScreen() {
           };
 
           return (
-            <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#0a0a0f" : "#f4f4f8" }}>
+            <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#0f172a" : "#f4f4f8" }}>
               {/* Header Bar */}
               <View style={{
                 flexDirection: "row", alignItems: "center", justifyContent: "space-between",
                 paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12,
-                backgroundColor: settingsDarkMode ? "#0a0a0f" : "#f4f4f8",
+                backgroundColor: settingsDarkMode ? "#0f172a" : "#f4f4f8",
               }}>
                 <Pressable
                   onPress={() => { setEditingDeckId(null); setCreationMode("pick"); setActiveTab("flashcards"); }}
@@ -2627,7 +3313,7 @@ export default function HomeScreen() {
                   <Text style={{ fontSize: 17, fontWeight: "700", color: settingsDarkMode ? "#ffffff" : "#0d0f14" }} numberOfLines={1}>
                     {fcTitle.trim() || (editingDeckId ? (flashcardDecks.find(d => d.id === editingDeckId)?.title || "Edit Deck") : "New Deck")}
                   </Text>
-                  <Text style={{ fontSize: 12, color: "#6e727a", marginTop: 1 }}>
+                  <Text style={{ fontSize: 12, color: settingsDarkMode ? "#ffffff" : "#6e727a", marginTop: 1 }}>
                     {fcCards.length} {fcCards.length === 1 ? "card" : "cards"}
                   </Text>
                 </View>
@@ -2657,7 +3343,7 @@ export default function HomeScreen() {
                     alignSelf: "flex-start",
                   }, pressed && styles.pressedScale]}>
                   <Ionicons name="layers-outline" size={14} color={settingsDarkMode ? "#aaaacc" : "#666680"} />
-                  <Text style={{ fontSize: 13, fontWeight: "600", color: settingsDarkMode ? "#ccccdd" : "#44445a" }}>
+                  <Text style={{ fontSize: 13, fontWeight: "600", color: settingsDarkMode ? "#ffffff" : "#44445a" }}>
                     {editingDeckId ? (flashcardDecks.find(d => d.id === editingDeckId)?.title || "study") : (fcTitle.trim() || "Select Deck")}
                   </Text>
                   <Ionicons name="chevron-down" size={12} color={settingsDarkMode ? "#888899" : "#9999aa"} />
@@ -2671,7 +3357,7 @@ export default function HomeScreen() {
 
                 {/* Card nav header */}
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                  <Text style={{ fontSize: 13, fontWeight: "600", color: settingsDarkMode ? "#6e727a" : "#888899" }}>
+                  <Text style={{ fontSize: 13, fontWeight: "600", color: settingsDarkMode ? "#ffffff" : "#888899" }}>
                     Card {fcCurrentIdx + 1} of {fcCards.length}
                   </Text>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
@@ -2695,7 +3381,7 @@ export default function HomeScreen() {
                 {/* Front card */}
                 <View style={{
                   borderRadius: 16, marginBottom: 10,
-                  backgroundColor: settingsDarkMode ? "#22223a" : "#f8f8ff",
+                  backgroundColor: settingsDarkMode ? "#1e293b" : "#ffffff",
                   borderWidth: 1,
                   borderColor: isFrontFocused
                     ? "rgba(99,102,241,0.5)"
@@ -2705,7 +3391,7 @@ export default function HomeScreen() {
                   <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between",
                     paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8 }}>
                     <Text style={{ fontSize: 10, fontWeight: "700", letterSpacing: 1,
-                      color: settingsDarkMode ? "#5a5a6e" : "#a0a0b0" }}>FRONT</Text>
+                      color: settingsDarkMode ? "#ffffff" : "#a0a0b0" }}>FRONT</Text>
                     <Pressable onPress={() => setIsFrontCollapsed(!isFrontCollapsed)} hitSlop={8}>
                       <Ionicons name={isFrontCollapsed ? "chevron-down" : "chevron-up"} size={15}
                         color={settingsDarkMode ? "#4a4a5a" : "#b0b0c0"} />
@@ -2720,7 +3406,7 @@ export default function HomeScreen() {
                         minHeight: 80, textAlignVertical: "top",
                         paddingHorizontal: 14, paddingBottom: 14 }}
                       placeholder="Enter term or question..."
-                      placeholderTextColor={settingsDarkMode ? "#32323e" : "#c8c8d4"}
+                      placeholderTextColor={settingsDarkMode ? "#6e727a" : "#c8c8d4"}
                       value={currentCard.front} onChangeText={updateFront} />
                   )}
                 </View>
@@ -2728,7 +3414,7 @@ export default function HomeScreen() {
                 {/* Back card */}
                 <View style={{
                   borderRadius: 16, marginBottom: 16,
-                  backgroundColor: settingsDarkMode ? "#22223a" : "#f8f8ff",
+                  backgroundColor: settingsDarkMode ? "#1e293b" : "#ffffff",
                   borderWidth: 1,
                   borderColor: isBackFocused
                     ? "rgba(99,102,241,0.5)"
@@ -2738,7 +3424,7 @@ export default function HomeScreen() {
                   <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between",
                     paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8 }}>
                     <Text style={{ fontSize: 10, fontWeight: "700", letterSpacing: 1,
-                      color: settingsDarkMode ? "#5a5a6e" : "#a0a0b0" }}>BACK</Text>
+                      color: settingsDarkMode ? "#ffffff" : "#a0a0b0" }}>BACK</Text>
                     <Pressable onPress={() => setIsBackCollapsed(!isBackCollapsed)} hitSlop={8}>
                       <Ionicons name={isBackCollapsed ? "chevron-down" : "chevron-up"} size={15}
                         color={settingsDarkMode ? "#4a4a5a" : "#b0b0c0"} />
@@ -2753,7 +3439,7 @@ export default function HomeScreen() {
                         minHeight: 80, textAlignVertical: "top",
                         paddingHorizontal: 14, paddingBottom: 14 }}
                       placeholder="Enter definition or answer..."
-                      placeholderTextColor={settingsDarkMode ? "#32323e" : "#c8c8d4"}
+                      placeholderTextColor={settingsDarkMode ? "#6e727a" : "#c8c8d4"}
                       value={currentCard.back} onChangeText={updateBack} />
                   )}
                 </View>
@@ -2803,14 +3489,19 @@ export default function HomeScreen() {
                 </Pressable>
 
                 {/* Save button — below Add Card */}
-                <Pressable onPress={saveDeck}
-                  style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", justifyContent: "center",
-                    gap: 6, height: 50, borderRadius: 14, marginTop: 10,
-                    backgroundColor: "#818cf8",
-                  }, pressed && styles.pressedScale]}>
-                  <Ionicons name="checkmark" size={16} color="#ffffff" />
-                  <Text style={{ fontSize: 14, fontWeight: "700", color: "#ffffff" }}>Save Deck</Text>
-                </Pressable>
+                {(() => {
+                  const hasValidCards = fcCards.some((c: any) => c.front.trim() && c.back.trim());
+                  return (
+                    <Pressable onPress={saveDeck} disabled={!hasValidCards}
+                      style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", justifyContent: "center",
+                        gap: 6, height: 50, borderRadius: 14, marginTop: 10,
+                        backgroundColor: hasValidCards ? "#818cf8" : (settingsDarkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"),
+                      }, pressed && styles.pressedScale]}>
+                      <Ionicons name="checkmark" size={16} color={hasValidCards ? "#ffffff" : (settingsDarkMode ? "#6e727a" : "#888899")} />
+                      <Text style={{ fontSize: 14, fontWeight: "700", color: hasValidCards ? "#ffffff" : (settingsDarkMode ? "#6e727a" : "#888899") }}>Save Deck</Text>
+                    </Pressable>
+                  );
+                })()}
               </ScrollView>
 
               {/* Formatting Toolbar */}
@@ -2843,7 +3534,7 @@ export default function HomeScreen() {
               <Modal visible={showDeckPicker} transparent animationType="slide" onRequestClose={() => setShowDeckPicker(false)}>
                 <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }}
                   onPress={() => setShowDeckPicker(false)}>
-                  <View style={{ backgroundColor: settingsDarkMode ? "#1a1b2e" : "#ffffff",
+                  <View style={{ backgroundColor: settingsDarkMode ? "#1e293b" : "#ffffff",
                     borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 8, paddingBottom: 32, maxHeight: "75%",
                     shadowColor: "#000", shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 20 }}
                     onStartShouldSetResponder={() => true}>
@@ -2903,7 +3594,7 @@ export default function HomeScreen() {
               {/* Deck Naming Modal */}
               <Modal visible={showNameDeckModal} transparent animationType="fade" onRequestClose={() => setShowNameDeckModal(false)}>
                 <KeyboardAvoidingView
-                  behavior={Platform.OS === "ios" ? "padding" : "height"}
+                  behavior={Platform.OS === "ios" ? "padding" : undefined}
                   style={{ flex: 1 }}
                 >
                   <Pressable
@@ -2912,7 +3603,7 @@ export default function HomeScreen() {
                   >
                     <Pressable
                       onPress={() => {}}
-                      style={{ width: "88%", backgroundColor: settingsDarkMode ? "#1a1b2e" : "#ffffff",
+                      style={{ width: "88%", backgroundColor: settingsDarkMode ? "#1e293b" : "#ffffff",
                         borderRadius: 20, padding: 24,
                         borderWidth: 1, borderColor: settingsDarkMode ? "rgba(99,102,241,0.2)" : "rgba(99,102,241,0.12)",
                         shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 20, elevation: 12 }}
@@ -2923,7 +3614,7 @@ export default function HomeScreen() {
                       <TextInput
                         placeholder="e.g. Biology Chapter 3"
                         placeholderTextColor={settingsDarkMode ? "#3a3a5e" : "#bbb"}
-                        style={{ backgroundColor: settingsDarkMode ? "#0a0a0f" : "#f4f4f8",
+                        style={{ backgroundColor: settingsDarkMode ? "#0f172a" : "#f4f4f8",
                           borderWidth: 1.5, borderColor: "rgba(99,102,241,0.3)",
                           borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12,
                           color: settingsDarkMode ? "#ffffff" : "#0d0f14", fontSize: 16, marginBottom: 20 }}
@@ -2997,7 +3688,7 @@ export default function HomeScreen() {
               <Modal visible={showEllipsisMenu} transparent animationType="slide" onRequestClose={() => setShowEllipsisMenu(false)}>
                 <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }}
                   onPress={() => setShowEllipsisMenu(false)}>
-                  <View style={{ backgroundColor: settingsDarkMode ? "#1a1b2e" : "#ffffff",
+                  <View style={{ backgroundColor: settingsDarkMode ? "#1e293b" : "#ffffff",
                     borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 8, paddingBottom: 36,
                     shadowColor: "#000", shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 20 }}
                     onStartShouldSetResponder={() => true}>
@@ -3063,19 +3754,19 @@ export default function HomeScreen() {
                       <View style={{ borderRadius: 14, padding: 16,
                         backgroundColor: settingsDarkMode ? "#0d0f14" : "#f0f0ff",
                         borderWidth: 1.5, borderColor: "rgba(99,102,241,0.25)" }}>
-                        <Text style={{ fontSize: 11, color: "#6366f1", fontWeight: "700", letterSpacing: 0.5, marginBottom: 8 }}>FRONT</Text>
-                        <Text style={{ fontSize: 16, color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{currentCard.front || "(empty)"}</Text>
+                        <Text style={{ fontSize: 11, color: "#6366f1", fontWeight: "700", letterSpacing: 0.5, marginBottom: 8 }}>{t('flashcards.front_label') || "FRONT"}</Text>
+                        {renderFormattedText(currentCard.front || "(empty)", { fontSize: 16, color: settingsDarkMode ? "#ffffff" : "#0d0f14" })}
                       </View>
                       <View style={{ borderRadius: 14, padding: 16,
                         backgroundColor: settingsDarkMode ? "#0d0f14" : "#f0fff8",
                         borderWidth: 1.5, borderColor: "rgba(0,229,160,0.2)" }}>
                         <Text style={{ fontSize: 11, color: "#00e5a0", fontWeight: "700", letterSpacing: 0.5, marginBottom: 8 }}>BACK</Text>
-                        <Text style={{ fontSize: 16, color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{currentCard.back || "(empty)"}</Text>
+                        {renderFormattedText(currentCard.back || "(empty)", { fontSize: 16, color: settingsDarkMode ? "#ffffff" : "#0d0f14" })}
                       </View>
                     </View>
                     <Pressable onPress={() => setShowPreviewModal(false)}
                       style={({ pressed }) => [styles.dialogConfirm, { backgroundColor: "#6366f1", width: "100%", paddingVertical: 16 }, pressed && styles.pressedScale]}>
-                      <Text style={styles.dialogConfirmText}>Close</Text>
+                      <Text style={[styles.dialogConfirmText, { color: "#ffffff" }]}>Close</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -3090,15 +3781,15 @@ export default function HomeScreen() {
           return (
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
               <View style={styles.tabHeader}>
-                <Text style={[styles.tabTitle, !settingsDarkMode && styles.lightText]}>Create Quiz</Text>
-                <Text style={[styles.tabSubtitle, !settingsDarkMode && styles.lightTextSub]}>Setup a new custom MCQ quiz structure</Text>
+                <Text style={[styles.tabTitle, !settingsDarkMode && styles.lightText]}>{t('create.title') || "Create Quiz"}</Text>
+                <Text style={[styles.tabSubtitle, !settingsDarkMode && styles.lightTextSub]}>{t('create.subtitle') || "Setup a new custom MCQ quiz structure"}</Text>
               </View>
 
               <View style={styles.formContainer}>
-                <Text style={[styles.formLabel, !settingsDarkMode && styles.lightText]}>Quiz Title</Text>
+                <Text style={[styles.formLabel, !settingsDarkMode && styles.lightText]}>{t('create.quiz_title') || "Quiz Title"}</Text>
                 <Pressable style={[styles.webInputDummy, !settingsDarkMode && styles.lightInput]}>
                   <TextInput
-                    placeholder="e.g. Advanced Javascript"
+                    placeholder={t('create.quiz_title_placeholder') || "e.g. Advanced Javascript"}
                     placeholderTextColor="#666"
                     style={[styles.formInput, !settingsDarkMode && styles.lightText]}
                     value={newTitle}
@@ -3108,7 +3799,7 @@ export default function HomeScreen() {
 
 
 
-                <Text style={[styles.formLabel, !settingsDarkMode && styles.lightText]}>Questions Count</Text>
+                <Text style={[styles.formLabel, !settingsDarkMode && styles.lightText]}>{t('create.num_questions') || "Questions Count"}</Text>
                 <Pressable style={[styles.webInputDummy, !settingsDarkMode && styles.lightInput]}>
                   <TextInput
                     placeholder="e.g. 5"
@@ -3120,8 +3811,27 @@ export default function HomeScreen() {
                   />
                 </Pressable>
 
+                <Text style={[styles.formLabel, !settingsDarkMode && styles.lightText]}>{t('create.language')}</Text>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 24 }}>
+                  {["English", "Spanish", "French", "Hindi"].map((lang) => (
+                    <Pressable
+                      key={lang}
+                      onPress={() => setNewQuizLanguage(lang)}
+                      style={[
+                        { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "#f0f0f0" },
+                        newQuizLanguage === lang && { backgroundColor: "rgba(99, 102, 241, 0.15)", borderWidth: 1, borderColor: "#6366f1" }
+                      ]}
+                    >
+                      <Text style={[
+                        { fontSize: 14, color: settingsDarkMode ? "#ccc" : "#666" },
+                        newQuizLanguage === lang && { color: "#6366f1", fontWeight: "bold" }
+                      ]}>{lang}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+
                 <Pressable onPress={handleProceedToDrafting} style={styles.createButton}>
-                  <Text style={styles.createButtonText}>Next: Draft Questions</Text>
+                  <Text style={styles.createButtonText}>{t('create.next_btn') || "Next: Draft Questions"}</Text>
                 </Pressable>
               </View>
             </ScrollView>
@@ -3135,7 +3845,7 @@ export default function HomeScreen() {
         return (
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             <View style={styles.tabHeader}>
-              <Text style={[styles.tabTitle, !settingsDarkMode && styles.lightText]}>Draft Questions</Text>
+              <Text style={[styles.tabTitle, !settingsDarkMode && styles.lightText]}>{t('create.draft_title') || "Draft Questions"}</Text>
               <Text style={[styles.tabSubtitle, !settingsDarkMode && styles.lightTextSub]}>
                 Question {draftCurrentIndex + 1} of {totalDraftCount}
               </Text>
@@ -3149,10 +3859,10 @@ export default function HomeScreen() {
                 </View>
 
                 {/* Question Prompt */}
-                <Text style={[styles.formLabel, !settingsDarkMode && styles.lightText]}>Question Prompt</Text>
+                <Text style={[styles.formLabel, !settingsDarkMode && styles.lightText]}>{t('create.question_prompt') || "Question Prompt"}</Text>
                 <View style={[styles.webInputDummy, !settingsDarkMode && styles.lightInput, { height: 100, paddingVertical: 8 }]}>
                   <TextInput
-                    placeholder="Enter your question prompt here..."
+                    placeholder={t('create.question_placeholder') || "Enter your question prompt here..."}
                     placeholderTextColor="#666"
                     multiline
                     style={[styles.formInput, !settingsDarkMode && styles.lightText, { height: "100%", textAlignVertical: "top" }]}
@@ -3163,10 +3873,10 @@ export default function HomeScreen() {
 
                 {/* Question Options/Answers */}
                 <Text style={[styles.formLabel, !settingsDarkMode && styles.lightText, { marginTop: 15, marginBottom: 4 }]}>
-                  Options / Choices
+                  {t('create.options') || "Options / Choices"}
                 </Text>
                 <Text style={{ fontSize: 10, color: "#888888", marginBottom: 12 }}>
-                  Type answer texts below and select the correct answer amongst them.
+                  {t('create.options_desc') || "Type answer texts below and select the correct answer amongst them."}
                 </Text>
 
                 <View style={{ gap: 10, marginBottom: 15 }}>
@@ -3245,7 +3955,7 @@ export default function HomeScreen() {
                   ]}
                 >
                   <Feather name="plus" size={14} color="#00e5a0" />
-                  <Text style={[{ fontSize: 12, fontWeight: "bold", color: "#00e5a0" }]}>Add Option</Text>
+                  <Text style={[{ fontSize: 12, fontWeight: "bold", color: "#00e5a0" }]}>{t('create.add_option') || "Add Option"}</Text>
                 </Pressable>
 
                 {/* Navigation Footer Row */}
@@ -3337,8 +4047,32 @@ export default function HomeScreen() {
       case "flashcards": {
         // ── Flashcard study mode ─────────────────────────────────────
         if (studyingDeck) {
-          const card = studyingDeck.cards[studyCardIdx] || { front: "", back: "" };
-          const total = studyingDeck.cards.length;
+          const isDark  = settingsDarkMode;
+          const cardBg  = isDark ? "#334155" : "#475569";
+          const pageBg  = isDark ? "#0f172a" : "#f4f4f8";
+          
+          if (studyQueue.length === 0) {
+            return (
+              <View style={{ flex: 1, backgroundColor: pageBg, padding: 20 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: 30 }}>
+                  <Pressable onPress={() => setStudyingDeck(null)} style={({pressed}) => [pressed && {opacity: 0.7}]}>
+                    <Ionicons name="arrow-back" size={26} color={isDark ? "#ffffff" : "#0d0f14"} />
+                  </Pressable>
+                </View>
+                <View style={{ marginTop: 40, paddingHorizontal: 10 }}>
+                  <Text style={{ fontSize: 28, fontWeight: "bold", color: isDark ? "#ffffff" : "#0d0f14", marginBottom: 20, lineHeight: 36 }}>
+                    Congratulations! You have finished this deck for now.
+                  </Text>
+                  <Text style={{ fontSize: 16, color: isDark ? "#cbd5e1" : "#475569", lineHeight: 26 }}>
+                    If you wish to study outside of the regular schedule, you can <Text onPress={() => startStudy(studyingDeck, true)} style={{ color: "#60a5fa", fontWeight: "600", textDecorationLine: "underline" }}>Revise Deck</Text>.
+                  </Text>
+                </View>
+              </View>
+            );
+          }
+
+          const cardId = studyQueue[0];
+          const card = studyingDeck.cards.find((c: any) => c.id === cardId) || studyingDeck.cards[0];
           const isCloze = studyingDeck.cardType === "Cloze";
           const isTypeInAnswer = studyingDeck.cardType === "Basic (type in the answer)";
 
@@ -3349,7 +4083,6 @@ export default function HomeScreen() {
             backText  = card.front.replace(/\{\{c1::(.*?)\}\}/g, "$1");
           }
 
-          // ── Flip animation ────────────────────────────────────────────
           const frontInterpolate = flipAnim.interpolate({ inputRange: [0, 180], outputRange: ["0deg","180deg"] });
           const backInterpolate  = flipAnim.interpolate({ inputRange: [0, 180], outputRange: ["180deg","360deg"] });
           const frontOpacity     = flipAnim.interpolate({ inputRange: [89, 90], outputRange: [1, 0], extrapolate: "clamp" });
@@ -3365,283 +4098,179 @@ export default function HomeScreen() {
             }
           };
 
-          // ── Swipe ─────────────────────────────────────────────────────
-          const goNext = (known: boolean) => {
-            if (known) setStudyKnownCount(c => c + 1);
-            else       setStudyUnknownCount(c => c + 1);
-            const after = () => {
-              swipeX.setValue(0);
-              if (studyCardIdx < total - 1) {
-                setStudyCardIdx(studyCardIdx + 1);
-                setStudyFlipped(false);
-                flipAnim.setValue(0);
-                setStudyTypedAnswer("");
-                setStudyChecked(false);
-              } else {
-                const finalKnown = known ? studyKnownCount + 1 : studyKnownCount;
-                const finalUnknown = !known ? studyUnknownCount + 1 : studyUnknownCount;
-                const attempt = {
-                  id: Date.now().toString(),
-                  known: finalKnown,
-                  unknown: finalUnknown,
-                  total: total,
-                  date: new Date().toISOString()
-                };
-                setFlashcardDecks(prev => prev.map(d => 
-                  d.id === studyingDeck.id ? { ...d, attempts: [...(d.attempts || []), attempt] } : d
-                ));
-                setShowDeckReport({ deck: studyingDeck, attempt });
-                setStudyingDeck(null);
-                setStudyKnownCount(0);
-                setStudyUnknownCount(0);
-                setStudyTypedAnswer("");
-                setStudyChecked(false);
-              }
-            };
-            Animated.timing(swipeX, {
-              toValue: known ? 500 : -500, duration: 220, useNativeDriver: true,
-            }).start(after);
+          const newCount = studyQueue.filter(id => { const c = studyingDeck.cards.find((cd: any) => cd.id === id); return c && c.sm2_repetition === 0; }).length;
+          const learningCount = studyQueue.filter(id => { const c = studyingDeck.cards.find((cd: any) => cd.id === id); return c && c.sm2_repetition > 0 && c.sm2_interval < 2; }).length;
+          const reviewCount = studyQueue.filter(id => { const c = studyingDeck.cards.find((cd: any) => cd.id === id); return c && c.sm2_repetition > 0 && c.sm2_interval >= 2; }).length;
+
+          const againVal = calculateSM2(card, "again").sm2_interval;
+          const hardVal = calculateSM2(card, "hard").sm2_interval;
+          const goodVal = calculateSM2(card, "good").sm2_interval;
+          const easyVal = calculateSM2(card, "easy").sm2_interval;
+
+          const formatInt = (i: number, r: string) => {
+            if (r === "again") return "<1m";
+            if (r === "hard" && card.sm2_repetition === 0) return "<10m";
+            return i < 2 ? "1d" : `${Math.floor(i)}d`;
           };
 
-          const panResponder = PanResponder.create({
-            onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 10 && Math.abs(g.dy) < 60,
-            onPanResponderMove: (_, g) => swipeX.setValue(g.dx),
-            onPanResponderRelease: (_, g) => {
-              if (g.dx > 80)       goNext(true);
-              else if (g.dx < -80) goNext(false);
-              else Animated.spring(swipeX, { toValue: 0, useNativeDriver: true }).start();
-            },
-          });
-
-          const cardRotate  = swipeX.interpolate({ inputRange: [-220, 0, 220], outputRange: ["-14deg","0deg","14deg"], extrapolate: "clamp" });
-          const knownBadge  = swipeX.interpolate({ inputRange: [0, 60],  outputRange: [0, 1], extrapolate: "clamp" });
-          const skipBadge   = swipeX.interpolate({ inputRange: [-60, 0], outputRange: [1, 0], extrapolate: "clamp" });
-
-          const isDark  = settingsDarkMode;
-          const cardBg  = isDark ? "#12132a" : "#ffffff";
-          const pageBg  = isDark ? "#0a0a0f" : "#f4f4f8";
+          const currentIndex = Math.min(studyingDeck.cards.length, Math.max(0, studyingDeck.cards.length - studyQueue.length) + 1);
 
           return (
-            <View style={{ flex: 1, backgroundColor: pageBg }}>
-
+            <View style={{ flex: 1, backgroundColor: isDark ? "#0d1117" : "#f4f4f8" }}>
               {/* Header */}
-              <View style={{ flexDirection: "row", alignItems: "center",
-                paddingHorizontal: 20, paddingTop: 18, paddingBottom: 10, gap: 12 }}>
-                <Pressable
-                  onPress={() => { setStudyingDeck(null); setStudyKnownCount(0); setStudyUnknownCount(0); }}
-                  style={({ pressed }) => [{ padding: 8, borderRadius: 12,
-                    backgroundColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)" },
-                    pressed && styles.pressedScale]}
-                >
-                  <Ionicons name="close" size={20} color={isDark ? "#fff" : "#0d0f14"} />
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+                paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16 }}>
+                <Pressable onPress={() => setStudyingDeck(null)} style={({pressed}) => [pressed && {opacity: 0.7}]}>
+                  <Ionicons name="arrow-back" size={28} color={isDark ? "#ffffff" : "#0d0f14"} />
                 </Pressable>
+                
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  <Text style={{ color: "#60a5fa", fontSize: 16, fontWeight: "600" }}>{newCount}</Text>
+                  <Text style={{ color: "#ef4444", fontSize: 16, fontWeight: "600" }}>{learningCount}</Text>
+                  <Text style={{ color: "#22c55e", fontSize: 16, fontWeight: "600" }}>{reviewCount}</Text>
+                </View>
 
-                <Text style={{ flex: 1, textAlign: "center", fontSize: 15, fontWeight: "600",
-                  color: isDark ? "#ffffff" : "#0d0f14" }} numberOfLines={1}>
-                  {studyCardIdx + 1} / {total}
+                <View style={{ width: 28 }} />
+              </View>
+              
+              <View style={{ paddingHorizontal: 20, paddingBottom: 16, alignItems: "center" }}>
+                <Text style={{ color: isDark ? "#ffffff" : "#0d0f14", fontSize: 18, fontWeight: "500" }}>
+                  {studyingDeck.title}
                 </Text>
-
-                <Pressable
-                  onPress={() => {
-                    const d = studyingDeck;
-                    setStudyingDeck(null);
-                    setEditingDeckId(d.id);
-                    setFcTitle(d.title);
-                    setFcCards(d.cards?.length > 0 ? JSON.parse(JSON.stringify(d.cards)) : [{ front: "", back: "" }]);
-                    setFcCurrentIdx(0);
-                    setCardType(d.cardType || "Basic");
-                    setCreationMode("flashcard");
-                    setActiveTab("add");
-                  }}
-                  style={({ pressed }) => [{ padding: 8, borderRadius: 12,
-                    backgroundColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)" },
-                    pressed && styles.pressedScale]}
-                >
-                  <Ionicons name="pencil-outline" size={18} color={isDark ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.3)"} />
-                </Pressable>
               </View>
 
-              {/* Score counters */}
-              <View style={{ flexDirection: "row", justifyContent: "space-between",
-                paddingHorizontal: 20, marginBottom: 10 }}>
-                <View style={{ paddingHorizontal: 16, paddingVertical: 5, borderRadius: 20,
-                  borderWidth: 1.5, borderColor: "rgba(239,68,68,0.45)",
-                  backgroundColor: "rgba(239,68,68,0.07)" }}>
-                  <Text style={{ fontSize: 14, fontWeight: "700", color: "#ef4444" }}>{studyUnknownCount}</Text>
-                </View>
-                <View style={{ paddingHorizontal: 16, paddingVertical: 5, borderRadius: 20,
-                  borderWidth: 1.5, borderColor: "rgba(99,102,241,0.45)",
-                  backgroundColor: "rgba(99,102,241,0.07)" }}>
-                  <Text style={{ fontSize: 14, fontWeight: "700", color: "#6366f1" }}>{studyKnownCount}</Text>
-                </View>
-              </View>
+              <View style={{ borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.2)" }} />
 
-              {/* Progress bar */}
-              <View style={{ marginHorizontal: 20, marginBottom: 14, height: 2,
-                backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.07)", borderRadius: 2 }}>
-                <View style={{ height: 2, borderRadius: 2, backgroundColor: "#6366f1",
-                  width: `${((studyCardIdx + 1) / total) * 100}%` as any }} />
-              </View>
-
-              {/* Swipeable card */}
-              <Animated.View
-                {...panResponder.panHandlers}
-                style={{ flex: 1, marginHorizontal: 20, marginBottom: 14,
-                  transform: [{ translateX: swipeX }, { rotate: cardRotate }] }}
-              >
-                {/* KNOW badge — green, right swipe */}
-                <Animated.View style={{ position: "absolute", top: 28, left: 20, zIndex: 10, opacity: knownBadge }}>
-                  <View style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10,
-                    borderWidth: 2, borderColor: "#22c55e", backgroundColor: "rgba(34,197,94,0.12)",
-                    transform: [{ rotate: "-12deg" }] }}>
-                    <Text style={{ fontSize: 14, fontWeight: "800", color: "#22c55e", letterSpacing: 1 }}>KNOW</Text>
-                  </View>
-                </Animated.View>
-                {/* DON'T KNOW badge — red, left swipe */}
-                <Animated.View style={{ position: "absolute", top: 28, right: 20, zIndex: 10, opacity: skipBadge }}>
-                  <View style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10,
-                    borderWidth: 2, borderColor: "#ef4444", backgroundColor: "rgba(239,68,68,0.12)",
-                    transform: [{ rotate: "12deg" }] }}>
-                    <Text style={{ fontSize: 14, fontWeight: "800", color: "#ef4444", letterSpacing: 1 }}>DON'T KNOW</Text>
-                  </View>
-                </Animated.View>
-
-                <Pressable onPress={() => { if (!isTypeInAnswer) flipCard(); }} style={{ flex: 1 }}>
-
+              {/* Card */}
+              <View style={{ flex: 1, paddingHorizontal: 28, paddingBottom: 60, paddingTop: 20 }}>
+                <Pressable onPress={() => { if (!isTypeInAnswer) flipCard(); }} style={{ width: "100%", height: "100%" }}>
                   {/* FRONT face */}
                   <Animated.View style={[{
-                    position: "absolute", inset: 0,
-                    borderRadius: 24, alignItems: "center", justifyContent: "center",
-                    backgroundColor: cardBg, padding: 32,
-                    borderWidth: 1, borderColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)",
-                    shadowColor: "#000", shadowOffset: { width: 0, height: 16 },
-                    shadowOpacity: isDark ? 0.55 : 0.12, shadowRadius: 30, elevation: 18,
-                    backfaceVisibility: "hidden",
-                  }, { transform: [{ rotateY: frontInterpolate }], opacity: frontOpacity }]}>
-                    <Text style={{ position: "absolute", top: 20, left: 24,
-                      fontSize: 10, fontWeight: "700", letterSpacing: 1.2,
-                      color: isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.18)" }}>FRONT</Text>
-                    <Text style={{ fontSize: 22, fontWeight: "700", textAlign: "center",
-                      lineHeight: 32, color: isDark ? "#ffffff" : "#0d0f14", letterSpacing: -0.3 }}>
-                      {frontText}
-                    </Text>
-                    {isTypeInAnswer ? (
+                    position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+                    borderRadius: 20, alignItems: "center", justifyContent: "center",
+                    backgroundColor: isDark ? "#1e293b" : "#ffffff", padding: 24,
+                  }, { transform: [{ translateX: swipeX }, { rotateY: frontInterpolate }], opacity: frontOpacity }]}>
+                    {renderFormattedText(frontText, { fontSize: 22, fontWeight: "400", textAlign: "center",
+                      lineHeight: 32, color: isDark ? "#ffffff" : "#0d0f14" })}
+                    {isTypeInAnswer && (
                       <View style={{ width: "100%", marginTop: 28, gap: 12 }}>
                         <TextInput
                           placeholder="Type your answer…"
-                          placeholderTextColor={isDark ? "#3a3a5a" : "#c0c0d0"}
-                          style={{ backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+                          placeholderTextColor={"rgba(255,255,255,0.4)"}
+                          style={{ backgroundColor: "rgba(0,0,0,0.1)",
                             borderRadius: 14, paddingHorizontal: 16, paddingVertical: 13,
-                            color: isDark ? "#ffffff" : "#0d0f14", fontSize: 16, textAlign: "center",
-                            borderWidth: 1, borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)" }}
+                            color: "#ffffff", fontSize: 16, textAlign: "center",
+                            borderWidth: 1, borderColor: "rgba(255,255,255,0.1)" }}
                           value={studyTypedAnswer} onChangeText={setStudyTypedAnswer}
                         />
                         <Pressable onPress={() => { setStudyChecked(true); flipCard(); }}
-                          style={({ pressed }) => [{ backgroundColor: "#6366f1", borderRadius: 14, height: 48,
+                          style={({ pressed }) => [{ backgroundColor: "#ffffff", borderRadius: 14, height: 48,
                             alignItems: "center", justifyContent: "center" }, pressed && styles.pressedScale]}>
-                          <Text style={{ fontSize: 15, fontWeight: "700", color: "#fff" }}>Check Answer</Text>
+                          <Text style={{ fontSize: 15, fontWeight: "700", color: "#000000" }}>Check Answer</Text>
                         </Pressable>
                       </View>
-                    ) : (
-                      <View style={{ position: "absolute", bottom: 22, flexDirection: "row", alignItems: "center", gap: 6 }}>
-                        <Ionicons name="sync-outline" size={12} color={isDark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.18)"} />
-                        <Text style={{ fontSize: 11, fontWeight: "500", color: isDark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.18)" }}>
-                          Tap to flip
-                        </Text>
-                      </View>
                     )}
+                    
+                    <Pressable
+                      onPress={() => { Speech.stop(); Speech.speak(frontText, { rate: 0.9, pitch: 1.0 }); }}
+                      style={({ pressed }) => ({ position: "absolute", bottom: 16, right: 16, opacity: pressed ? 0.6 : 1 })}>
+                      <Ionicons name="volume-high-outline" size={22} color="#ffffff" />
+                    </Pressable>
                   </Animated.View>
 
                   {/* BACK face */}
                   <Animated.View style={[{
-                    position: "absolute", inset: 0,
-                    borderRadius: 24, alignItems: "center", justifyContent: "center",
-                    backgroundColor: cardBg, padding: 32,
-                    borderWidth: 1, borderColor: isDark ? "rgba(99,102,241,0.2)" : "rgba(99,102,241,0.15)",
-                    shadowColor: "#6366f1", shadowOffset: { width: 0, height: 12 },
-                    shadowOpacity: isDark ? 0.3 : 0.08, shadowRadius: 26, elevation: 18,
-                    backfaceVisibility: "hidden",
-                  }, { transform: [{ rotateY: backInterpolate }], opacity: backOpacity }]}>
-                    <View style={{ position: "absolute", top: 0, left: 32, right: 32, height: 3,
-                      backgroundColor: "#6366f1", borderBottomLeftRadius: 3, borderBottomRightRadius: 3 }} />
-                    <Text style={{ position: "absolute", top: 20, left: 24,
-                      fontSize: 10, fontWeight: "700", letterSpacing: 1.2, color: "#6366f1" }}>ANSWER</Text>
-                    <Text style={{ fontSize: 22, fontWeight: "700", textAlign: "center",
-                      lineHeight: 32, color: isDark ? "#ffffff" : "#0d0f14", letterSpacing: -0.3 }}>
-                      {backText}
-                    </Text>
+                    position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+                    borderRadius: 20, alignItems: "center", justifyContent: "center",
+                    backgroundColor: isDark ? "#1e293b" : "#ffffff", padding: 24,
+                  }, { transform: [{ translateX: swipeX }, { rotateY: backInterpolate }], opacity: backOpacity }]}>
+                    {renderFormattedText(backText, { fontSize: 22, fontWeight: "400", textAlign: "center",
+                      lineHeight: 32, color: isDark ? "#ffffff" : "#0d0f14" })}
                     {isCloze && card.back.trim() ? (
                       <View style={{ width: "100%", marginTop: 20, paddingTop: 16,
-                        borderTopWidth: 1, borderTopColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)" }}>
-                        <Text style={{ fontSize: 10, color: isDark ? "rgba(255,255,255,0.28)" : "rgba(0,0,0,0.28)",
+                        borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.1)" }}>
+                        <Text style={{ fontSize: 10, color: "rgba(255,255,255,0.4)",
                           fontWeight: "700", letterSpacing: 1, textAlign: "center", marginBottom: 6 }}>EXTRA NOTES</Text>
-                        <Text style={{ fontSize: 14, color: isDark ? "#aaaacc" : "#555577", textAlign: "center", lineHeight: 20 }}>
-                          {card.back}
-                        </Text>
+                        {renderFormattedText(card.back, { fontSize: 14, color: "#e2e8f0", textAlign: "center", lineHeight: 20 })}
                       </View>
                     ) : null}
                     {isTypeInAnswer && studyChecked && (
                       <View style={{ marginTop: 20, alignItems: "center", width: "100%" }}>
                         {studyTypedAnswer.trim().toLowerCase() === card.back.trim().toLowerCase() ? (
                           <View style={{ flexDirection: "row", alignItems: "center", gap: 8,
-                            backgroundColor: "rgba(99,102,241,0.1)", paddingHorizontal: 18,
-                            paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: "rgba(99,102,241,0.2)" }}>
-                            <Ionicons name="checkmark-circle" size={18} color="#6366f1" />
-                            <Text style={{ color: "#6366f1", fontWeight: "700", fontSize: 14 }}>Correct!</Text>
+                            backgroundColor: "rgba(34,197,94,0.2)", paddingHorizontal: 18,
+                            paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: "rgba(34,197,94,0.4)" }}>
+                            <Ionicons name="checkmark-circle" size={18} color="#4ade80" />
+                            <Text style={{ color: "#4ade80", fontWeight: "700", fontSize: 14 }}>Correct!</Text>
                           </View>
                         ) : (
-                          <View style={{ gap: 8, backgroundColor: "rgba(239,68,68,0.08)",
+                          <View style={{ gap: 8, backgroundColor: "rgba(239,68,68,0.2)",
                             paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12,
-                            alignItems: "center", width: "90%", borderWidth: 1, borderColor: "rgba(239,68,68,0.15)" }}>
+                            alignItems: "center", width: "90%", borderWidth: 1, borderColor: "rgba(239,68,68,0.4)" }}>
                             <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                              <Ionicons name="close-circle" size={18} color="#ef4444" />
-                              <Text style={{ color: "#ef4444", fontWeight: "700" }}>Incorrect</Text>
+                              <Ionicons name="close-circle" size={18} color="#f87171" />
+                              <Text style={{ color: "#f87171", fontWeight: "700" }}>Incorrect</Text>
                             </View>
-                            <Text style={{ fontSize: 13, color: isDark ? "#ccccdd" : "#444455", textAlign: "center" }}>
-                              Expected: <Text style={{ fontWeight: "700", color: "#6366f1" }}>{card.back}</Text>
+                            <Text style={{ fontSize: 13, color: "#f87171", textAlign: "center" }}>
+                              Expected: <Text style={{ fontWeight: "700", color: "#ffffff" }}>{card.back}</Text>
                             </Text>
                           </View>
                         )}
                       </View>
                     )}
-                    {!isTypeInAnswer && (
-                      <View style={{ position: "absolute", bottom: 22, flexDirection: "row", alignItems: "center", gap: 6 }}>
-                        <Ionicons name="sync-outline" size={12} color={isDark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.18)"} />
-                        <Text style={{ fontSize: 11, fontWeight: "500", color: isDark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.18)" }}>
-                          Tap to flip
-                        </Text>
-                      </View>
-                    )}
+
+                    <Pressable
+                      onPress={() => { Speech.stop(); Speech.speak(backText, { rate: 0.9, pitch: 1.0 }); }}
+                      style={({ pressed }) => ({ position: "absolute", bottom: 16, right: 16, opacity: pressed ? 0.6 : 1 })}>
+                      <Ionicons name="volume-high-outline" size={22} color="#ffffff" />
+                    </Pressable>
                   </Animated.View>
                 </Pressable>
-              </Animated.View>
+              </View>
 
-              {/* Bottom hint */}
-              <View style={{ flexDirection: "row", alignItems: "center",
-                paddingHorizontal: 24, paddingBottom: 28, gap: 14 }}>
-                <Pressable
-                  disabled={studyCardIdx === 0}
-                  onPress={() => {
-                    setStudyCardIdx(studyCardIdx - 1);
-                    setStudyFlipped(false);
-                    flipAnim.setValue(0);
-                    swipeX.setValue(0);
-                    setStudyTypedAnswer("");
-                    setStudyChecked(false);
-                  }}
-                  style={({ pressed }) => [{ opacity: studyCardIdx === 0 ? 0.18 : 0.5 }, pressed && styles.pressedScale]}
-                >
-                  <Ionicons name="arrow-undo-outline" size={22} color={isDark ? "#ffffff" : "#0d0f14"} />
-                </Pressable>
-
-                <Text style={{ flex: 1, textAlign: "center", fontSize: 12, fontWeight: "500",
-                  color: isDark ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.22)" }}>
-                  Swipe right — <Text style={{ fontWeight: "700", color: "#22c55e" }}>know</Text>
-                  {"   ·   "}
-                  Swipe left — <Text style={{ fontWeight: "700", color: "#ef4444" }}>don't know</Text>
-                </Text>
-
-                <View style={{ width: 22 }} />
+              {/* Bottom Actions */}
+              <View style={{ flexDirection: "row", height: 70 }}>
+                {!studyFlipped ? (
+                  <Pressable
+                    onPress={() => { if(!isTypeInAnswer) flipCard(); }}
+                    style={({ pressed }) => [{
+                      backgroundColor: "#ffffff",
+                      borderRadius: 12, height: 56,
+                      alignItems: "center", justifyContent: "center", flex: 1, marginHorizontal: 20,
+                      shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8
+                    }, pressed && { opacity: 0.8 }]}
+                  >
+                    <Text style={{ fontSize: 16, fontWeight: "600", color: "#000000" }}>Show Answer</Text>
+                  </Pressable>
+                ) : (
+                  customStudyMode ? (
+                    <Pressable 
+                      onPress={() => handleSM2Rating("good")} 
+                      style={({pressed}) => [{ flex: 1, backgroundColor: isDark ? "#ffffff" : "#0d0f14", alignItems: "center", justifyContent: "center", marginHorizontal: 20, borderRadius: 14, marginVertical: 8 }, pressed && { opacity: 0.8 }]}
+                    >
+                      <Text style={{ color: isDark ? "#000000" : "#ffffff", fontSize: 16, fontWeight: "600" }}>Next</Text>
+                    </Pressable>
+                  ) : (
+                    <>
+                      <Pressable onPress={() => handleSM2Rating("again")} style={({pressed}) => [{ flex: 1, backgroundColor: "#dc2626", alignItems: "center", justifyContent: "center" }, pressed && { opacity: 0.8 }]}>
+                        <Text style={{ color: "#fca5a5", fontSize: 12, marginBottom: 2 }}>{formatInt(againVal, "again")}</Text>
+                        <Text style={{ color: "#ffffff", fontSize: 15, fontWeight: "600" }}>Again</Text>
+                      </Pressable>
+                      <Pressable onPress={() => handleSM2Rating("hard")} style={({pressed}) => [{ flex: 1, backgroundColor: "#475569", alignItems: "center", justifyContent: "center" }, pressed && { opacity: 0.8 }]}>
+                        <Text style={{ color: "#cbd5e1", fontSize: 12, marginBottom: 2 }}>{formatInt(hardVal, "hard")}</Text>
+                        <Text style={{ color: "#ffffff", fontSize: 15, fontWeight: "600" }}>Hard</Text>
+                      </Pressable>
+                      <Pressable onPress={() => handleSM2Rating("good")} style={({pressed}) => [{ flex: 1, backgroundColor: "#16a34a", alignItems: "center", justifyContent: "center" }, pressed && { opacity: 0.8 }]}>
+                        <Text style={{ color: "#86efac", fontSize: 12, marginBottom: 2 }}>{formatInt(goodVal, "good")}</Text>
+                        <Text style={{ color: "#ffffff", fontSize: 15, fontWeight: "600" }}>Good</Text>
+                      </Pressable>
+                      <Pressable onPress={() => handleSM2Rating("easy")} style={({pressed}) => [{ flex: 1, backgroundColor: "#2563eb", alignItems: "center", justifyContent: "center" }, pressed && { opacity: 0.8 }]}>
+                        <Text style={{ color: "#93c5fd", fontSize: 12, marginBottom: 2 }}>{formatInt(easyVal, "easy")}</Text>
+                        <Text style={{ color: "#ffffff", fontSize: 15, fontWeight: "600" }}>Easy</Text>
+                      </Pressable>
+                    </>
+                  )
+                )}
               </View>
             </View>
           );
@@ -3665,20 +4294,20 @@ export default function HomeScreen() {
 
         return (() => {
           const isDark   = settingsDarkMode;
-          const bg       = isDark ? "#0a0a0f" : "#f4f4f8";
-          const cardBg   = isDark ? "#111118" : "#ffffff";
+          const bg       = isDark ? "#0f172a" : "#f4f4f8";
+          const cardBg   = isDark ? "#1e293b" : "#ffffff";
           const border   = isDark ? "#1e1e2e" : "rgba(0,0,0,0.07)";
           const border2  = isDark ? "#2a1e3a" : "rgba(168,85,247,0.2)";
-          const txt      = isDark ? "#f1f0ff" : "#0d0f14";
-          const muted    = isDark ? "#8e8e9e" : "#666677";
+          const txt      = isDark ? "#ffffff" : "#0d0f14";
+          const muted    = isDark ? "#ffffff" : "#666677";
 
           return (
             <ScrollView contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
             {/* Topbar */}
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingTop: 52 }}>
               <View>
-                <Text style={{ fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 4 }}>// your library</Text>
-                <Text style={{ fontSize: 18, fontWeight: "600", color: txt, letterSpacing: -0.3 }}>Flashcards</Text>
+                <Text style={{ fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: muted, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 4 }}>{t('flashcards.library') || "// your library"}</Text>
+                <Text style={{ fontSize: 18, fontWeight: "600", color: txt, letterSpacing: -0.3 }}>{t('flashcards.fc_title') || "Flashcards"}</Text>
               </View>
               <Pressable onPress={openNewDeck} style={({ pressed }) => [{ width: 36, height: 36, borderRadius: 12, backgroundColor: "rgba(168,85,247,0.15)", borderWidth: 1, borderColor: isDark ? "#3a2a4a" : "rgba(168,85,247,0.2)", alignItems: "center", justifyContent: "center" }, pressed && { opacity: 0.7 }]}>
                 <Ionicons name="add" size={18} color="#a855f7" />
@@ -3689,7 +4318,7 @@ export default function HomeScreen() {
             <View style={{ marginHorizontal: 20, marginTop: 20, backgroundColor: cardBg, borderWidth: 1, borderColor: border, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, flexDirection: "row", alignItems: "center", gap: 10 }}>
               <Ionicons name="search" size={16} color={muted} />
               <TextInput 
-                placeholder="Search decks..." 
+                placeholder={t('flashcards.search') || "Search decks..."} 
                 placeholderTextColor={muted} 
                 style={{ flex: 1, fontSize: 13, color: txt, fontWeight: "300", padding: 0 }} 
                 value={homeSearch} 
@@ -3697,104 +4326,126 @@ export default function HomeScreen() {
               />
             </View>
 
-            {/* List Head */}
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 12 }}>
-              <Text style={{ fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: muted, letterSpacing: 1.2, textTransform: "uppercase" }}>Your decks</Text>
-              <Text style={{ fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: "#a855f7" }}>{allDecks.length} {allDecks.length === 1 ? 'deck' : 'decks'}</Text>
+            {/* Filters */}
+            <View style={{ marginTop: 16 }}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 20 }}>
+                {[
+                  { key: "all", label: t('flashcards.all_decks') || "All Decks" },
+                  { key: "due", label: t('flashcards.due') || "Due to Review" },
+                  { key: "progress", label: t('flashcards.progress') || "In Progress" },
+                  { key: "mastered", label: t('flashcards.mastered') || "Mastered" }
+                ].map(c => (
+                  <Pressable key={c.key} onPress={() => setFlashcardFilter(c.key as any)}
+                    style={({ pressed }) => [{
+                      paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20,
+                      backgroundColor: flashcardFilter === c.key ? "#8B5CF6" : "transparent",
+                      borderWidth: 1, borderColor: flashcardFilter === c.key ? "#8B5CF6" : border,
+                      alignSelf: "flex-start",
+                    }, pressed && styles.pressedScale]}>
+                    <Text style={{ fontSize: 11, letterSpacing: 0.5, color: flashcardFilter === c.key ? "#fff" : muted }}>
+                      {c.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
             </View>
 
-            {/* Deck List */}
-            {allDecks.length === 0 ? (
-              <View style={{ alignItems: "center", paddingTop: 60, gap: 12 }}>
-                <Ionicons name="copy-outline" size={36} color={muted} />
-                <Text style={{ fontSize: 14, color: muted, textAlign: "center" }}>
-                  No flashcard decks yet
-                </Text>
-              </View>
-            ) : (
-              <View style={{ paddingHorizontal: 20, gap: 8 }}>
-                {allDecks.filter((d: any) => d.title.toLowerCase().includes(homeSearch.toLowerCase())).map((deck: any, idx: number) => {
-                  const cardCount = (deck.cards || []).length;
+
+            {/* List Head */}
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 12 }}>
+              <Text style={{ fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: muted, letterSpacing: 1.2, textTransform: "uppercase" }}>{t('flashcards.your_decks') || "Your decks"}</Text>
+              <Text style={{ fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: "#a855f7" }}>{allDecks.length} {allDecks.length === 1 ? (t('flashcards.deck_singular') || 'deck') : (t('flashcards.deck_plural') || 'decks')}</Text>
+            </View>
+
+            {/* Deck List Grid */}
+            <View style={{ paddingHorizontal: 20, paddingBottom: 40, marginTop: 10 }}>
+              {(() => {
+                if (allDecks.length === 0) {
                   return (
-                    <AnimatedPressable 
-                      key={deck.id}
-                      onPress={() => { setStudyingDeck(deck); setStudyCardIdx(0); setStudyFlipped(false); flipAnim.setValue(0); }}
-                      style={{
-                        backgroundColor: cardBg, borderWidth: 1, borderColor: border2,
-                        borderRadius: 18, overflow: "hidden"
-                      }}
-                      scaleTo={0.97}
-                    >
-                      <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, backgroundColor: "#a855f7" }} />
+                    <View style={{ width: "100%", alignItems: "center", paddingTop: 60, gap: 12 }}>
+                      <Ionicons name="copy-outline" size={36} color={muted} />
+                      <Text style={{ fontSize: 14, color: muted, textAlign: "center" }}>
+                        {t('flashcards.empty_create') || "Click + to create your first deck"}
+                      </Text>
+                    </View>
+                  );
+                }
+                const filteredDecks = allDecks.filter((d: any) => {
+                  const matchSearch = d.title.toLowerCase().includes(homeSearch.toLowerCase());
+                  if (!matchSearch) return false;
+                  
+                  const cardCount = (d.cards || []).length;
+                  const dueCount = (d.cards || []).filter((c: any) => !c.sm2_nextReviewDate || c.sm2_nextReviewDate <= Date.now()).length;
+                  const masteredCount = (d.cards || []).filter((c: any) => c.sm2_repetition > 0).length;
+                  const masteryPercent = cardCount === 0 ? 0 : Math.round((masteredCount / cardCount) * 100);
+
+                  if (flashcardFilter === "due") return dueCount > 0;
+                  if (flashcardFilter === "progress") return masteryPercent > 0 && masteryPercent < 100;
+                  if (flashcardFilter === "mastered") return masteryPercent === 100 && cardCount > 0;
+                  return true;
+                });
+                if (filteredDecks.length === 0) {
+                  return (
+                    <View style={{ width: "100%", alignItems: "center", paddingTop: 60, gap: 12 }}>
+                      <Ionicons name="search-outline" size={36} color={muted} />
+                      <Text style={{ fontSize: 14, color: muted, textAlign: "center" }}>
+                        {t('flashcards.empty_search') || "No decks match your search"}
+                      </Text>
+                    </View>
+                  );
+                }
+
+
+                return (
+                  <>
+                    {filteredDecks.map((deck: any) => {
+                      const cardCount = (deck.cards || []).length;
+                      const dueCount = (deck.cards || []).filter((c: any) => !c.sm2_nextReviewDate || c.sm2_nextReviewDate <= Date.now()).length;
+                      const masteredCount = (deck.cards || []).filter((c: any) => c.sm2_repetition > 0).length;
+                      const masteryPercent = cardCount === 0 ? 0 : Math.round((masteredCount / cardCount) * 100);
                       
-                      <View style={{ paddingLeft: 18, paddingRight: 16, paddingVertical: 16 }}>
-                        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                            <View style={{ width: 34, height: 34, backgroundColor: "rgba(168,85,247,0.1)", borderRadius: 10, alignItems: "center", justifyContent: "center" }}>
-                              <Ionicons name="albums-outline" size={16} color="#a855f7" />
-                            </View>
-                            <View>
-                              <Text style={{ fontSize: 14, fontWeight: "500", color: txt, letterSpacing: -0.2 }}>{deck.title}</Text>
-                              <View style={{ backgroundColor: "rgba(168,85,247,0.1)", borderWidth: 1, borderColor: "rgba(168,85,247,0.2)", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2, marginTop: 3, alignSelf: "flex-start" }}>
-                                <Text style={{ fontSize: 9, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: "#a855f7", letterSpacing: 0.8 }}>DECK</Text>
-                              </View>
-                            </View>
-                          </View>
-                          
-                          <View style={{ flexDirection: "row", gap: 6 }}>
-                            <AnimatedPressable 
-                              onPress={() => {
-                                setEditingDeckId(deck.id);
-                                setFcTitle(deck.title);
-                                setFcCards(deck.cards?.length > 0 ? JSON.parse(JSON.stringify(deck.cards)) : [{ front: "", back: "" }]);
-                                setFcCurrentIdx(0);
-                                setCardType(deck.cardType || "Basic");
-                                setCreationMode("flashcard");
-                                setActiveTab("add");
-                              }}
-                              style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: bg, borderWidth: 1, borderColor: border, alignItems: "center", justifyContent: "center" }}
-                              scaleTo={0.88}
-                            >
-                              <Ionicons name="pencil" size={13} color={muted} />
-                            </AnimatedPressable>
-                          </View>
-                        </View>
-
-                        <View style={{ flexDirection: "row", gap: 12, marginTop: 10 }}>
-                          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                            <Ionicons name="copy-outline" size={11} color={muted} />
-                            <Text style={{ fontSize: 10, color: muted, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>{cardCount} {cardCount === 1 ? 'card' : 'cards'}</Text>
-                          </View>
-                          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                            <Ionicons name="time-outline" size={11} color={muted} />
-                            <Text style={{ fontSize: 10, color: muted, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>Just created</Text>
-                          </View>
-                        </View>
-
-                        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: border }}>
-                          <View style={{ flex: 1, marginRight: 12 }}>
-                            <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 5 }}>
-                              <Text style={{ fontSize: 10, color: muted, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>Mastered</Text>
-                              <Text style={{ fontSize: 10, color: muted, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>0 / {cardCount}</Text>
-                            </View>
-                            <View style={{ height: 2, backgroundColor: border, borderRadius: 2, overflow: "hidden" }}>
-                              <View style={{ height: "100%", width: "0%", backgroundColor: "#a855f7", borderRadius: 2 }} />
-                            </View>
-                          </View>
+                      return (
+                        <View key={deck.id} style={{ width: "100%", marginBottom: 20 }}>
                           <AnimatedPressable 
-                            onPress={() => { setStudyingDeck(deck); setStudyCardIdx(0); setStudyFlipped(false); flipAnim.setValue(0); }}
-                            style={{ backgroundColor: "rgba(168,85,247,0.1)", borderWidth: 1, borderColor: "#3a2a5a", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 7 }}
-                            scaleTo={0.92}
+                            onPress={() => { startStudy(deck); }}
+                            style={{ flexDirection: "row", alignItems: "center", width: "100%" }}
+                            scaleTo={0.97}
                           >
-                            <Text style={{ color: "#a855f7", fontSize: 11, fontWeight: "500" }}>Study now</Text>
+                            {/* Left Icon Wrapper */}
+                            <View style={{ 
+                              width: 52, height: 52, borderRadius: 12, 
+                              backgroundColor: isDark ? "#232e42" : "#e0e7ff", 
+                              alignItems: "center", justifyContent: "center", marginRight: 16 
+                            }}>
+                              <Ionicons name="copy-outline" size={24} color={isDark ? "#38bdf8" : "#3b82f6"} style={{ transform: [{ rotate: "-5deg" }] }} />
+                            </View>
+                            
+                            {/* Text Content */}
+                            <View style={{ flex: 1, paddingRight: 8 }}>
+                              <Text style={{ fontSize: 16, fontWeight: "700", color: isDark ? "#ffffff" : "#0d0f14", marginBottom: 4 }} numberOfLines={1}>
+                                {deck.title}
+                              </Text>
+                              <Text style={{ fontSize: 13, color: isDark ? "#e2e8f0" : "#64748b", fontWeight: "600" }}>
+                                {cardCount} {cardCount === 1 ? (t('flashcards.term') || 'term') : (t('flashcards.terms') || 'terms')} • {dueCount} {t('flashcards.due') || 'due'}
+                              </Text>
+                            </View>
+
+                            {/* Options Button */}
+                            <Pressable 
+                              onPress={(e) => { e.stopPropagation(); setShowFlashcardOptions(deck); }} 
+                              style={({pressed}) => [{ padding: 8, opacity: pressed ? 0.5 : 1 }]}
+                            >
+                              <Ionicons name="ellipsis-vertical" size={18} color={isDark ? "#94a3b8" : "#64748b"} />
+                            </Pressable>
                           </AnimatedPressable>
                         </View>
-                      </View>
-                    </AnimatedPressable>
-                  );
-                })}
-              </View>
-            )}
+                      );
+                    })}
+
+                  </>
+                );
+              })()}
+            </View>
           </ScrollView>
           );
         })();
@@ -3816,20 +4467,26 @@ export default function HomeScreen() {
 
             {/* Embedded Local Video Tutorial */}
             <Text style={[styles.sectionHeading, !settingsDarkMode && styles.lightText]}>Watch Tutorial Video</Text>
-            <View style={[styles.videoPlayerCard, !settingsDarkMode && styles.lightCard, { height: 220, overflow: "hidden" }]}>
+            <View style={[styles.videoPlayerCard, !settingsDarkMode && styles.lightCard, { height: 220, overflow: "hidden", position: "relative", justifyContent: "center", alignItems: "center" }]}>
               <VideoView
-                style={{ flex: 1 }}
+                style={{ width: "100%", height: "100%" }}
                 player={localVideoPlayer}
                 allowsPictureInPicture={true}
                 fullscreenOptions={{ enable: true }}
+                contentFit="contain"
               />
+              {!isVideoPlaying && (
+                <View style={{ position: "absolute", pointerEvents: "none", opacity: 0.8 }}>
+                  <Ionicons name="play-circle" size={64} color="#ffffff" />
+                </View>
+              )}
             </View>
 
             {/* Format Instructions */}
             <Text style={[styles.sectionHeading, !settingsDarkMode && styles.lightText]}>Step 1: Format Your Text File (.qst)</Text>
             <View style={[styles.guideStepCard, !settingsDarkMode && styles.lightCard]}>
               <Text style={[styles.guideStepText, !settingsDarkMode && styles.lightTextSub]}>
-                QuizForge reads custom quizzes written in a simple text format. Create a plain text file ending in <Text style={{ color: "#00e5a0", fontWeight: "bold" }}>.qst</Text> and follow this layout:
+                Recall reads custom quizzes written in a simple text format. Create a plain text file ending in <Text style={{ color: "#00e5a0", fontWeight: "bold" }}>.qst</Text> and follow this layout:
               </Text>
 
               <View style={[styles.codeBlockContainer, !settingsDarkMode && styles.lightCodeBlock]}>
@@ -3894,11 +4551,11 @@ export default function HomeScreen() {
       case "menu":
         return (() => {
           const isDark  = settingsDarkMode;
-          const bg      = isDark ? "#0a0a0f" : "#f4f4f8";
-          const cardBg  = isDark ? "#111118" : "#ffffff";
+          const bg      = isDark ? "#0f172a" : "#f4f4f8";
+          const cardBg  = isDark ? "#1e293b" : "#ffffff";
           const border  = isDark ? "#1e1e2e" : "rgba(0,0,0,0.07)";
-          const muted   = isDark ? "#8e8e9e" : "#666677";
-          const txt     = isDark ? "#f1f0ff" : "#0d0f14";
+          const muted   = isDark ? "#ffffff" : "#666677";
+          const txt     = isDark ? "#ffffff" : "#0d0f14";
 
           const Row = ({ icon, iconBg, iconColor, title, sub, onPress, right }: any) => (
             <Pressable onPress={onPress}
@@ -3980,7 +4637,7 @@ export default function HomeScreen() {
                     <Text style={{ fontSize: 15, fontWeight: "500", color: "#f1f0ff" }} numberOfLines={1}>
                       {firebaseUser ? getUserFullName(firebaseUser) : "Guest"}
                     </Text>
-                    <Text style={{ fontSize: 11, color: "#4a4a6a", marginTop: 3, fontWeight: "300" }} numberOfLines={1}>
+                    <Text style={{ fontSize: 11, color: "#ffffff", marginTop: 3, fontWeight: "300" }} numberOfLines={1}>
                       {firebaseUser ? firebaseUser.email ?? "" : "// sign in to sync your data"}
                     </Text>
                   </View>
@@ -4002,7 +4659,7 @@ export default function HomeScreen() {
 
                 {/* ── Preferences ── */}
                 <Text style={{ fontSize: 10, color: muted, letterSpacing: 1.2, textTransform: "uppercase",
-                  paddingHorizontal: 20, paddingTop: 20, paddingBottom: 8 }}>Preferences</Text>
+                  paddingHorizontal: 20, paddingTop: 20, paddingBottom: 8 }}>{t('profile.preferences') || 'Preferences'}</Text>
 
                 <View style={{ paddingHorizontal: 20, gap: 6 }}>
                   {/* Dark mode toggle */}
@@ -4015,37 +4672,67 @@ export default function HomeScreen() {
                       <Ionicons name="moon-outline" size={16} color="#6366f1" />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 13, fontWeight: "500", color: txt }}>Dark mode</Text>
+                      <Text style={{ fontSize: 13, fontWeight: "500", color: txt }}>{t('profile.dark_mode') || 'Dark mode'}</Text>
                       <Text style={{ fontSize: 11, color: muted, marginTop: 2, fontWeight: "300" }}>
-                        {settingsDarkMode ? "Currently enabled" : "Currently disabled"}
+                        {settingsDarkMode ? (t('profile.enabled') || 'Currently enabled') : (t('profile.disabled') || 'Currently disabled')}
                       </Text>
                     </View>
                     <ToggleSwitch checked={settingsDarkMode} onChange={setSettingsDarkMode} darkMode={isDark} />
+                  </Pressable>
+
+                  {/* Language selector */}
+                  <Pressable
+                    onPress={() => setShowLanguageModal(true)}
+                    style={({ pressed }) => [{ backgroundColor: cardBg, borderWidth: 1, borderColor: border,
+                      borderRadius: 14, padding: 14, paddingHorizontal: 16,
+                      flexDirection: "row", alignItems: "center", gap: 12 }, pressed && styles.pressedScale]}>
+                    <View style={{ width: 32, height: 32, borderRadius: 10,
+                      backgroundColor: "rgba(99,102,241,0.1)", alignItems: "center", justifyContent: "center" }}>
+                      <Ionicons name="language-outline" size={16} color="#6366f1" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 13, fontWeight: "500", color: txt }}>{t('profile.language') || 'Language'}</Text>
+                      <Text style={{ fontSize: 11, color: muted, marginTop: 2, fontWeight: "300" }}>
+                        {i18n.language === 'en' ? 'English' : 
+                         i18n.language === 'es' ? 'Spanish' : 
+                         i18n.language === 'fr' ? 'French' : 
+                         i18n.language === 'hi' ? 'Hindi' : 
+                         i18n.language === 'ru' ? 'Russian' : 
+                         i18n.language === 'kk' ? 'Kazakh' : 'System language'}
+                      </Text>
+                    </View>
+                    <Chevron />
                   </Pressable>
                 </View>
 
                 {/* ── Support ── */}
                 <Text style={{ fontSize: 10, color: muted, letterSpacing: 1.2, textTransform: "uppercase",
-                  paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 }}>Support</Text>
+                  paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 }}>{t('profile.support') || 'Support'}</Text>
 
                 <View style={{ paddingHorizontal: 20, gap: 6 }}>
                   <Row icon="book-outline" iconBg="rgba(99,102,241,0.1)" iconColor="#6366f1"
-                    title="How to format quiz (.txt)" sub="Formatting guide"
+                    title={t('profile.guide') || "How to format quiz (.txt)"} sub={t('profile.guide_sub') || "Formatting guide"}
                     onPress={() => setActiveTab("guide")} right={<Chevron />} />
                   <Row icon="chatbubble-ellipses-outline" iconBg="rgba(99,102,241,0.1)" iconColor="#6366f1"
-                    title="Feedback" sub="Help improve QuizForge"
+                    title={t('profile.feedback') || "Feedback"} sub={t('profile.feedback_sub') || "Help improve QuizForge"}
                     onPress={() => setShowFeedbackPage(true)} right={<Chevron />} />
-                  <Row icon="information-circle-outline" iconBg="rgba(99,102,241,0.1)" iconColor="#6366f1"
-                    title="About" sub="Version 1.0.0"
-                    onPress={() => setShowAboutPage(true)} right={<Chevron />} />
+                </View>
+
+                {/* ── About ── */}
+                <Text style={{ fontSize: 10, color: muted, letterSpacing: 1.2, textTransform: "uppercase",
+                  paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 }}>{t('profile.about') || 'About'}</Text>
+
+                <View style={{ paddingHorizontal: 20, gap: 6 }}>
+                  <Row icon="lock-closed-outline" iconBg="rgba(99,102,241,0.1)" iconColor="#6366f1"
+                    title={"Privacy policy"} 
+                    onPress={() => setShowPrivacyPolicy(true)} right={<Chevron />} />
+                  <Row icon="document-text-outline" iconBg="rgba(99,102,241,0.1)" iconColor="#6366f1"
+                    title={"Terms of service"} 
+                    onPress={() => setShowTermsOfService(true)} right={<Chevron />} />
                 </View>
 
                 {/* ── Danger zone ── */}
                 <View style={{ paddingHorizontal: 20, paddingTop: 16, gap: 6 }}>
-                  <Row icon="trash-outline" iconBg="rgba(226,75,74,0.1)" iconColor="#e24b4a"
-                    title="Reset statistics" sub="Clear all progress data"
-                    onPress={() => setShowResetConfirm(true)} right={<Chevron />} />
-
                   {firebaseUser && (
                     <Pressable
                       onPress={async () => {
@@ -4058,13 +4745,29 @@ export default function HomeScreen() {
                       disabled={signOutLoading}
                       style={({ pressed }) => [{ backgroundColor: cardBg, borderWidth: 1, borderColor: border,
                         borderRadius: 14, padding: 14, paddingHorizontal: 16,
+                        flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 6 }, pressed && styles.pressedScale]}>
+                      <View style={{ width: 32, height: 32, borderRadius: 10,
+                        backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)", alignItems: "center", justifyContent: "center" }}>
+                        <Ionicons name="log-out-outline" size={16} color={txt} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 13, fontWeight: "500", color: txt }}>Logout</Text>
+                      </View>
+                    </Pressable>
+                  )}
+
+                  {firebaseUser && (
+                    <Pressable
+                      onPress={() => setShowDeleteAccountConfirm(true)}
+                      style={({ pressed }) => [{ backgroundColor: cardBg, borderWidth: 1, borderColor: border,
+                        borderRadius: 14, padding: 14, paddingHorizontal: 16,
                         flexDirection: "row", alignItems: "center", gap: 12 }, pressed && styles.pressedScale]}>
                       <View style={{ width: 32, height: 32, borderRadius: 10,
                         backgroundColor: "rgba(226,75,74,0.1)", alignItems: "center", justifyContent: "center" }}>
-                        <Ionicons name="log-out-outline" size={16} color="#e24b4a" />
+                        <Ionicons name="trash-bin-outline" size={16} color="#e24b4a" />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 13, fontWeight: "500", color: "#e24b4a" }}>Sign out</Text>
+                        <Text style={{ fontSize: 13, fontWeight: "500", color: "#e24b4a" }}>Delete account</Text>
                       </View>
                     </Pressable>
                   )}
@@ -4080,11 +4783,17 @@ export default function HomeScreen() {
         // "home" quizzes list view
         return (() => {
           const isDark   = settingsDarkMode;
-          const bg       = isDark ? "#0a0a0f" : "#f4f4f8";
-          const cardBg   = isDark ? "#111118" : "#ffffff";
+          const bg       = isDark ? "#0f172a" : "#f4f4f8";
+          const cardBg   = isDark ? "#1e293b" : "#ffffff";
           const border   = isDark ? "#1e1e2e" : "rgba(0,0,0,0.07)";
-          const muted    = isDark ? "#8e8e9e" : "#666677";
-          const txt      = isDark ? "#f1f0ff" : "#0d0f14";
+          const muted    = isDark ? "#ffffff" : "#666677";
+          const txt      = isDark ? "#ffffff" : "#0d0f14";
+
+          const totalQuestionsInAllQuizzes = quizzes.reduce((acc: number, q: any) => acc + (q.questions || 1), 0);
+          const totalCorrectInAllQuizzes = quizzes.reduce((acc: number, q: any) => acc + (q.uniqueCorrectIds || []).length, 0);
+          const overallProgressPct = totalQuestionsInAllQuizzes > 0 
+            ? Math.min(Math.round((totalCorrectInAllQuizzes / totalQuestionsInAllQuizzes) * 100), 100) 
+            : 0;
 
           const filtered = quizzes.filter(q => {
             const attempts = q.attempts || [];
@@ -4099,10 +4808,10 @@ export default function HomeScreen() {
           });
 
           const chips: { key: "all"|"progress"|"notstarted"|"done"; label: string }[] = [
-            { key: "all",        label: "All" },
-            { key: "progress",   label: "In progress" },
-            { key: "notstarted", label: "Not started" },
-            { key: "done",       label: "Completed" },
+            { key: "all",        label: t('home.filter_all') || "All" },
+            { key: "progress",   label: t('home.filter_progress') || "In progress" },
+            { key: "notstarted", label: t('home.filter_notstarted') || "Not started" },
+            { key: "done",       label: t('home.filter_completed') || "Completed" },
           ];
 
           return (
@@ -4116,10 +4825,10 @@ export default function HomeScreen() {
                 paddingHorizontal: 20, paddingTop: 52 }}>
                 <View style={{ flex: 1, paddingRight: 10 }}>
                   <Text style={{ fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 4 }}>
-                    {"// Active Learner"}
+                    {`// OVERALL PROGRESS: ${overallProgressPct}%`}
                   </Text>
                   <Text style={{ fontSize: 20, fontWeight: "600", color: txt, letterSpacing: -0.5 }}>
-                    Your Active Quizzes
+                    {t('home.active_quizzes') || "Your Active Quizzes"}
                   </Text>
                 </View>
                 <Pressable
@@ -4147,10 +4856,10 @@ export default function HomeScreen() {
               <View style={{ marginHorizontal: 20, marginTop: 16, flexDirection: "row",
                 alignItems: "center", gap: 10, backgroundColor: cardBg,
                 borderWidth: 1, borderColor: border, borderRadius: 14,
-                paddingHorizontal: 16, paddingVertical: 12 }}>
+                paddingHorizontal: 14, paddingVertical: 8 }}>
                 <Ionicons name="search-outline" size={16} color={muted} />
                 <TextInput
-                  placeholder="Search quizzes..."
+                  placeholder={t('home.search_placeholder') || "Search quizzes..."}
                   placeholderTextColor={muted}
                   value={homeSearch}
                   onChangeText={setHomeSearch}
@@ -4190,10 +4899,10 @@ export default function HomeScreen() {
               <View style={{ flexDirection: "row", justifyContent: "space-between",
                 alignItems: "center", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 12 }}>
                 <Text style={{ fontSize: 11, color: muted, letterSpacing: 1.2, textTransform: "uppercase" }}>
-                  Quizzes
+                  {t('home.quizzes_label') || "Quizzes"}
                 </Text>
                 <Text style={{ fontSize: 11, color: "#6366f1", letterSpacing: 0.5 }}>
-                  {filtered.length} active
+                  {filtered.length} {t('home.active_label') || "active"}
                 </Text>
               </View>
 
@@ -4233,11 +4942,15 @@ export default function HomeScreen() {
                         <View style={{ flexDirection: "row", gap: 12, marginTop: 8, flexWrap: "wrap" }}>
                           <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
                             <Ionicons name="help-circle-outline" size={12} color={muted} />
-                            <Text style={{ fontSize: 10, color: muted }}>{quiz.questions} question{quiz.questions !== 1 ? "s" : ""}</Text>
+                            <Text style={{ fontSize: 10, color: muted }}>{quiz.questions} {t('actions.questions') || "questions"}</Text>
                           </View>
                           <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
                             <Ionicons name="refresh-outline" size={12} color={muted} />
-                            <Text style={{ fontSize: 10, color: muted }}>{attempts.length} attempt{attempts.length !== 1 ? "s" : ""}</Text>
+                            <Text style={{ fontSize: 10, color: muted }}>{attempts.length} {t('actions.attempts') || "attempts"}</Text>
+                          </View>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                            <Ionicons name="checkmark-circle-outline" size={12} color={muted} />
+                            <Text style={{ fontSize: 10, color: muted }}>{uniqueCount} correct</Text>
                           </View>
                           {multiplier && multiplier > 1 && (
                             <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
@@ -4247,10 +4960,9 @@ export default function HomeScreen() {
                           )}
                         </View>
 
-                        {/* Bottom: score + bar + label */}
+                        {/* Bottom: score + bar */}
                         <View style={{ flexDirection: "row", alignItems: "center",
-                          marginTop: 14, paddingTop: 12,
-                          borderTopWidth: 1, borderTopColor: isDark ? "#1a1a2a" : "rgba(0,0,0,0.06)" }}>
+                          marginTop: 14, paddingTop: 4 }}>
                           <Text style={{ fontSize: 11, color: completionPct !== null ? "#6366f1" : muted, minWidth: 30 }}>
                             {completionPct !== null ? `${completionPct}%` : "0%"}
                           </Text>
@@ -4261,9 +4973,6 @@ export default function HomeScreen() {
                                 backgroundColor: "#6366f1" }} />
                             )}
                           </View>
-                          <Text style={{ fontSize: 10, color: muted }}>
-                            {attempts.length > 0 ? `${attempts.length} attempt${attempts.length !== 1 ? "s" : ""}` : "Not started"}
-                          </Text>
                         </View>
                       </View>
                     </AnimatedPressable>
@@ -4273,14 +4982,30 @@ export default function HomeScreen() {
                     <View style={{ alignItems: "center", paddingTop: 60, gap: 12 }}>
                       <Ionicons name="search-outline" size={36} color={muted} />
                       <Text style={{ fontSize: 14, color: muted, textAlign: "center" }}>
-                        No quizzes match your search
+                        {t('home.empty_search') || "No quizzes match your search"}
                       </Text>
+                    </View>
+                  ) : quizzes.length === 0 ? (
+                    <View style={{ alignItems: "center", paddingTop: 48, paddingHorizontal: 24, gap: 10 }}>
+                      <Ionicons name="document-text-outline" size={32} color={muted} style={{ opacity: 0.5 }} />
+                      <Text style={{ fontSize: 13, color: muted, textAlign: "center", lineHeight: 19, opacity: 0.8 }}>
+                        {"Create a .txt file → tap + to import → start practicing"}
+                      </Text>
+                      <View style={{ flexDirection: "row", gap: 12, marginTop: 4 }}>
+                        <Pressable onPress={() => setActiveTab("guide")} style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}>
+                          <Text style={{ fontSize: 13, color: "#6366f1", fontWeight: "600" }}>Watch tutorial</Text>
+                        </Pressable>
+                        <Text style={{ fontSize: 13, color: muted, opacity: 0.4 }}>·</Text>
+                        <Pressable onPress={() => setShowAddMenu(true)} style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}>
+                          <Text style={{ fontSize: 13, color: "#6366f1", fontWeight: "600" }}>Import file</Text>
+                        </Pressable>
+                      </View>
                     </View>
                   ) : (
                     <View style={{ alignItems: "center", paddingTop: 60, gap: 12 }}>
                       <Ionicons name="document-text-outline" size={36} color={muted} />
                       <Text style={{ fontSize: 14, color: muted, textAlign: "center" }}>
-                        No active quizzes yet
+                        {t('home.empty_active') || "No active quizzes"}
                       </Text>
                     </View>
                   )
@@ -4506,57 +5231,6 @@ export default function HomeScreen() {
     );
   };
 
-  const renderLandingScreen = () => (
-    <Animated.View style={[styles.landingContainer, { opacity: splashFadeOut }]}>
-      {/* Ambient blobs */}
-      <View style={styles.landingBlob1} />
-      <View style={styles.landingBlob2} />
-      <View style={styles.landingBlob3} />
-
-      {/* Centered content */}
-      <View style={styles.landingSplashCenter}>
-
-        {/* Animated logo ring */}
-        <Animated.View style={[
-          styles.landingLogoRing,
-          { opacity: splashLogoOpacity, transform: [{ scale: splashLogoScale }] }
-        ]}>
-          <View style={styles.landingLogoInner}>
-            <Ionicons name="flash" size={48} color="#000000" />
-          </View>
-        </Animated.View>
-
-        {/* App name slides up */}
-        <Animated.Text style={[
-          styles.landingAppName,
-          { opacity: splashNameOpacity, transform: [{ translateY: splashNameY }] }
-        ]}>
-          QuizForge
-        </Animated.Text>
-
-        {/* Tagline fades in */}
-        <Animated.Text style={[styles.landingTagline, { opacity: splashTagOpacity }]}>
-          {"Turn any text into a quiz.\nMaster anything, faster."}
-        </Animated.Text>
-
-        {/* Three coloured dots that pop in */}
-        <Animated.View style={[styles.landingDotRow, { opacity: splashTagOpacity, transform: [{ scale: splashDotScale }] }]}>
-          <View style={[styles.landingDot, { backgroundColor: "#00e5a0" }]} />
-          <View style={[styles.landingDot, { backgroundColor: "#3b82f6" }]} />
-          <View style={[styles.landingDot, { backgroundColor: "#a855f7" }]} />
-        </Animated.View>
-
-      </View>
-    </Animated.View>
-  );
-
-  if (showLanding) {
-    return (
-      <SafeAreaView style={styles.landingSafeArea} edges={["top", "left", "right", "bottom"]}>
-        {renderLandingScreen()}
-      </SafeAreaView>
-    );
-  }
 
   if (showAuthScreen) {
     return (
@@ -4573,7 +5247,7 @@ export default function HomeScreen() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#0a0a0f" : "#f4f4f8" }}>
+    <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#0f172a" : "#f4f4f8" }}>
     <SafeAreaView style={[styles.rootContainer, !settingsDarkMode && styles.lightRootContainer]} edges={["top", "left", "right"]}>
       {activeSession ? (
         renderActiveSessionView()
@@ -4596,14 +5270,14 @@ export default function HomeScreen() {
               <AnimatedPressable onPress={() => setActiveTab("home")} style={styles.tabItem} scaleTo={0.88}>
                 <Ionicons name={activeTab === "home" ? "home" : "home-outline"} size={22}
                   color={activeTab === "home" ? "#6366f1" : settingsDarkMode ? "#6e727a" : "#999"} />
-                <Text style={[styles.tabLabel, activeTab === "home" && styles.tabLabelActive]}>Home</Text>
+                <Text style={[styles.tabLabel, activeTab === "home" && styles.tabLabelActive]}>{t('tabs.home')}</Text>
               </AnimatedPressable>
 
               {/* Flashcards */}
               <AnimatedPressable onPress={() => { setActiveTab("flashcards"); setStudyingDeck(null); }} style={styles.tabItem} scaleTo={0.88}>
                 <Ionicons name={activeTab === "flashcards" ? "copy" : "copy-outline"} size={22}
                   color={activeTab === "flashcards" ? "#6366f1" : settingsDarkMode ? "#6e727a" : "#999"} />
-                <Text style={[styles.tabLabel, activeTab === "flashcards" && styles.tabLabelActive]}>Flashcards</Text>
+                <Text style={[styles.tabLabel, activeTab === "flashcards" && styles.tabLabelActive]}>{t('tabs.flashcards')}</Text>
               </AnimatedPressable>
 
               {/* Centre Create */}
@@ -4615,21 +5289,21 @@ export default function HomeScreen() {
                 >
                   <Feather name="plus" size={26} color="#ffffff" />
                 </AnimatedPressable>
-                <Text style={[styles.tabLabel, { color: settingsDarkMode ? "#6e727a" : "#999", marginTop: 2 }]}>Create</Text>
+                <Text style={[styles.tabLabel, { color: settingsDarkMode ? "#6e727a" : "#999", marginTop: 2 }]}>{t('tabs.create')}</Text>
               </View>
 
-              {/* Quizzes */}
+              {/* Statistics */}
               <AnimatedPressable onPress={() => setActiveTab("dashboard")} style={styles.tabItem} scaleTo={0.88}>
-                <Ionicons name={activeTab === "dashboard" ? "layers" : "layers-outline"} size={22}
+                <Ionicons name={activeTab === "dashboard" ? "bar-chart" : "bar-chart-outline"} size={22}
                   color={activeTab === "dashboard" ? "#6366f1" : settingsDarkMode ? "#6e727a" : "#999"} />
-                <Text style={[styles.tabLabel, activeTab === "dashboard" && styles.tabLabelActive]}>Quizzes</Text>
+                <Text style={[styles.tabLabel, activeTab === "dashboard" && styles.tabLabelActive]}>{t('tabs.statistics')}</Text>
               </AnimatedPressable>
 
               {/* Profile (replaces menu) */}
               <AnimatedPressable onPress={() => setActiveTab("menu")} style={styles.tabItem} scaleTo={0.88}>
                 <Ionicons name={activeTab === "menu" ? "person-circle" : "person-circle-outline"} size={24}
                   color={activeTab === "menu" ? "#6366f1" : settingsDarkMode ? "#6e727a" : "#999"} />
-                <Text style={[styles.tabLabel, activeTab === "menu" && styles.tabLabelActive]}>Profile</Text>
+                <Text style={[styles.tabLabel, activeTab === "menu" && styles.tabLabelActive]}>{t('tabs.profile')}</Text>
               </AnimatedPressable>
 
             </View>
@@ -4684,7 +5358,7 @@ export default function HomeScreen() {
                 {showQuizActions?.title}
               </Text>
               <Text style={{ fontSize: 12, color: "#6e727a", marginTop: 3 }}>
-                {showQuizActions?.questions} Questions
+                {showQuizActions?.questions} {t('actions.questions') || "Questions"}
               </Text>
             </View>
 
@@ -4708,7 +5382,30 @@ export default function HomeScreen() {
                 <Ionicons name="play" size={22} color="#00e5a0" />
               </View>
               <Text style={{ fontSize: 16, fontWeight: "700", flex: 1,
-                color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>Start Test</Text>
+                color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('actions.start_test') || "Start Test"}</Text>
+            </AnimatedPressable>
+
+            <View style={{ height: 0.5, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)", marginHorizontal: 24 }} />
+
+            {/* View (PDF Mode) */}
+            <AnimatedPressable
+              onPress={() => {
+                const quiz = showQuizActions;
+                setPdfViewQuiz(quiz);
+                setShowQuizActions(null);
+              }}
+              style={{
+                flexDirection: "row", alignItems: "center", gap: 16,
+                paddingVertical: 17, paddingHorizontal: 24,
+              }}
+              scaleTo={0.97}
+            >
+              <View style={{ width: 44, height: 44, borderRadius: 12,
+                backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)", alignItems: "center", justifyContent: "center" }}>
+                <Ionicons name="document-text-outline" size={22} color={settingsDarkMode ? "#ffffff" : "#0d0f14"} />
+              </View>
+              <Text style={{ fontSize: 16, fontWeight: "700", flex: 1,
+                color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>View</Text>
             </AnimatedPressable>
 
             <View style={{ height: 0.5, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)", marginHorizontal: 24 }} />
@@ -4733,7 +5430,7 @@ export default function HomeScreen() {
                 <Ionicons name="bar-chart-outline" size={22} color="#6366f1" />
               </View>
               <Text style={{ fontSize: 16, fontWeight: "700", flex: 1,
-                color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>Statistics</Text>
+                color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('actions.statistics') || "Statistics"}</Text>
             </AnimatedPressable>
 
             <View style={{ height: 0.5, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)", marginHorizontal: 24 }} />
@@ -4757,7 +5454,7 @@ export default function HomeScreen() {
                 <Ionicons name="pencil-outline" size={22} color={settingsDarkMode ? "#ccccdd" : "#555566"} />
               </View>
               <Text style={{ fontSize: 16, fontWeight: "700", flex: 1,
-                color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>Rename</Text>
+                color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('actions.rename') || "Rename"}</Text>
             </AnimatedPressable>
 
 
@@ -4778,7 +5475,7 @@ export default function HomeScreen() {
                 backgroundColor: "rgba(239,68,68,0.1)", alignItems: "center", justifyContent: "center" }}>
                 <Ionicons name="trash-outline" size={22} color="#ef4444" />
               </View>
-              <Text style={{ fontSize: 16, fontWeight: "700", flex: 1, color: "#ef4444" }}>Delete</Text>
+              <Text style={{ fontSize: 16, fontWeight: "700", flex: 1, color: "#ef4444" }}>{t('actions.delete') || "Delete"}</Text>
             </AnimatedPressable>
           </View>
         </Pressable>
@@ -4832,6 +5529,15 @@ export default function HomeScreen() {
                   onPress={() => {
                     if (renameTitle.trim() && renamingQuiz) {
                       setQuizzes(quizzes.map(q => q.id === renamingQuiz.id ? { ...q, title: renameTitle.trim() } : q));
+                      // Sync rename to Neon if logged in
+                      const neonId = renamingQuiz.neonId ?? renamingQuiz.id;
+                      if (firebaseUser && neonId && !String(neonId).startsWith("local_")) {
+                        updateMobileQuiz({
+                          userId: firebaseUser.uid,
+                          quizId: neonId,
+                          title: renameTitle.trim()
+                        }).catch(err => console.warn("[NeonSync] quiz rename failed:", err));
+                      }
                       setRenamingQuiz(null);
                       setRenameTitle("");
                     }
@@ -4967,11 +5673,77 @@ export default function HomeScreen() {
               <Pressable
                 onPress={() => {
                   setQuizzes(quizzes.map(q => ({ ...q, attempts: [], wrongQuestions: [], uniqueCorrectIds: [] })));
+                  // Sync all resets to Neon
+                  if (firebaseUser) {
+                    quizzes.forEach(q => {
+                      const neonId = q.neonId ?? q.id;
+                      if (neonId && !String(neonId).startsWith("local_")) {
+                        updateMobileQuiz({
+                          userId: firebaseUser.uid,
+                          quizId: neonId,
+                          attempts: [],
+                          wrongQuestions: [],
+                          uniqueCorrectIds: []
+                        }).catch(err => console.warn("[NeonSync] quiz reset failed:", err));
+                      }
+                    });
+                  }
                   setShowResetConfirm(false);
                 }}
                 style={({ pressed }) => [styles.dialogConfirm, { backgroundColor: "#ef4444", shadowColor: "#ef4444" }, pressed && styles.pressedScale]}
               >
                 <Text style={[styles.dialogConfirmText, { color: "#ffffff" }]}>Reset</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* ── Delete Account Confirm ── */}
+      <Modal visible={showDeleteAccountConfirm} animationType="fade" transparent onRequestClose={() => setShowDeleteAccountConfirm(false)}>
+        <Pressable style={styles.centerModalBackdrop} onPress={() => setShowDeleteAccountConfirm(false)}>
+          <View style={[styles.dialogCard, !settingsDarkMode && styles.lightModal]} onStartShouldSetResponder={() => true}>
+            <View style={[styles.dialogIcon, { backgroundColor: "rgba(239, 68, 68, 0.12)" }]}>
+              <Ionicons name="warning-outline" size={28} color="#ef4444" />
+            </View>
+            <Text style={[styles.dialogTitle, !settingsDarkMode && styles.lightText, { color: "#ef4444" }]}>Delete Account</Text>
+            <Text style={[styles.dialogDescription, !settingsDarkMode && styles.lightTextSub, { textAlign: "center", marginBottom: 20, lineHeight: 20 }]}>
+              Are you sure you want to permanently delete your account and all associated data? This action cannot be undone.
+            </Text>
+            <View style={styles.dialogButtons}>
+              <Pressable
+                onPress={() => setShowDeleteAccountConfirm(false)}
+                disabled={deleteAccountLoading}
+                style={({ pressed }) => [styles.dialogCancel, !settingsDarkMode && { borderColor: "rgba(0,0,0,0.15)" }, pressed && styles.pressedScale]}
+              >
+                <Text style={[styles.dialogCancelText, !settingsDarkMode && styles.lightText]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={async () => {
+                  if (firebaseUser) {
+                    setDeleteAccountLoading(true);
+                    try {
+                      await deleteUserFromNeon(firebaseUser.uid);
+                      await deleteAccount();
+                      setShowDeleteAccountConfirm(false);
+                      setActiveTab("home");
+                    } catch (e) {
+                      console.warn("Failed to delete account", e);
+                      alert("Please re-authenticate and try again. For security, you must have signed in recently to delete your account.");
+                      setShowDeleteAccountConfirm(false);
+                    } finally {
+                      setDeleteAccountLoading(false);
+                    }
+                  }
+                }}
+                disabled={deleteAccountLoading}
+                style={({ pressed }) => [styles.dialogConfirm, { backgroundColor: "#ef4444", shadowColor: "#ef4444" }, pressed && styles.pressedScale]}
+              >
+                {deleteAccountLoading ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={[styles.dialogConfirmText, { color: "#ffffff" }]}>Delete</Text>
+                )}
               </Pressable>
             </View>
           </View>
@@ -5007,85 +5779,192 @@ export default function HomeScreen() {
         </Pressable>
       </Modal>
 
-      {/* ── About — full-screen slide-up page ── */}
-      <Modal visible={showAboutPage} animationType="slide" transparent={false} onRequestClose={() => setShowAboutPage(false)}>
-        <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#0a0a0f" : "#f4f4f8" }}>
-          {/* Header */}
-          <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingTop: 56, paddingBottom: 20 }}>
-            <Pressable
-              onPress={() => setShowAboutPage(false)}
-              style={({ pressed }) => [{ padding: 8, borderRadius: 12,
-                backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)" }, pressed && styles.pressedScale]}
-            >
-              <Ionicons name="arrow-back" size={20} color={settingsDarkMode ? "#fff" : "#0d0f14"} />
-            </Pressable>
-            <Text style={{ fontSize: 18, fontWeight: "700", color: settingsDarkMode ? "#fff" : "#0d0f14", marginLeft: 14 }}>About</Text>
+      {/* ── Restart Quiz Confirm — in-app modal ── */}
+      <Modal visible={showRestartConfirm} animationType="fade" transparent onRequestClose={() => setShowRestartConfirm(false)}>
+        <Pressable style={styles.centerModalBackdrop} onPress={() => setShowRestartConfirm(false)}>
+          <View style={[styles.dialogCard, !settingsDarkMode && styles.lightModal, { paddingBottom: 24 }]} onStartShouldSetResponder={() => true}>
+            <View style={[styles.dialogIcon, { backgroundColor: "rgba(99,102,241,0.12)" }]}>
+              <Ionicons name="refresh" size={30} color="#6366f1" />
+            </View>
+            <Text style={[styles.dialogTitle, !settingsDarkMode && styles.lightText]}>Restart Quiz?</Text>
+            <Text style={[styles.dialogDescription, !settingsDarkMode && styles.lightTextSub, { textAlign: "center", lineHeight: 20, marginBottom: 24 }]}>
+              This will erase all your current answers and let you start over.
+            </Text>
+            <View style={styles.dialogButtons}>
+              <Pressable
+                onPress={() => setShowRestartConfirm(false)}
+                style={({ pressed }) => [styles.dialogCancel, !settingsDarkMode && { borderColor: "rgba(0,0,0,0.15)" }, pressed && styles.pressedScale]}
+              >
+                <Text style={[styles.dialogCancelText, !settingsDarkMode && styles.lightText]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => { 
+                  setShowRestartConfirm(false); 
+                  setActiveSession({
+                    ...activeSession,
+                    answers: {},
+                    submitted: [],
+                    currentIndex: 0,
+                    isFinished: false,
+                    startedAt: Date.now()
+                  });
+                  quizFlatListRef.current?.scrollToIndex({ index: 0, animated: false });
+                  quizNumbersScrollRef.current?.scrollTo({ x: 0, animated: false });
+                }}
+                style={({ pressed }) => [styles.dialogConfirm, { backgroundColor: "#6366f1" }, pressed && styles.pressedScale]}
+              >
+                <Text style={[styles.dialogConfirmText, { color: "#ffffff" }]}>Restart</Text>
+              </Pressable>
+            </View>
           </View>
+        </Pressable>
+      </Modal>
 
-          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
-            {/* Hero card */}
-            <View style={{
-              borderRadius: 24, padding: 28, alignItems: "center", marginBottom: 20,
-              backgroundColor: settingsDarkMode ? "#12132a" : "#ffffff",
-              borderWidth: 1, borderColor: settingsDarkMode ? "rgba(0,229,160,0.12)" : "rgba(0,229,160,0.15)",
-              shadowColor: "#00e5a0", shadowOffset: { width: 0, height: 10 },
-              shadowOpacity: settingsDarkMode ? 0.2 : 0.08, shadowRadius: 24, elevation: 10,
-            }}>
-              <View style={{ width: 72, height: 72, borderRadius: 22, backgroundColor: "rgba(0,229,160,0.12)",
-                borderWidth: 1, borderColor: "rgba(0,229,160,0.25)", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
-                <Ionicons name="flash" size={34} color="#00e5a0" />
-              </View>
-              <Text style={{ fontSize: 26, fontWeight: "800", color: settingsDarkMode ? "#fff" : "#0d0f14", letterSpacing: -0.5, marginBottom: 4 }}>
-                QuizForge
-              </Text>
-              <Text style={{ fontSize: 13, color: "#00e5a0", fontWeight: "600", letterSpacing: 0.5, marginBottom: 16 }}>Version 1.0.0</Text>
-              <Text style={{ fontSize: 14, color: settingsDarkMode ? "#8888aa" : "#666677", textAlign: "center", lineHeight: 22 }}>
-                Made to help students study smarter — transform any notes into powerful MCQ quizzes, track your progress, and master any subject faster.
-              </Text>
-            </View>
-
-            {/* Guidance */}
-            <View style={{
-              borderRadius: 18, padding: 20, marginBottom: 14,
-              backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.04)" : "#ffffff",
-              borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)",
-              shadowColor: "#000", shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: settingsDarkMode ? 0.3 : 0.06, shadowRadius: 10, elevation: 4,
-            }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                <Ionicons name="school-outline" size={16} color="#00e5a0" />
-                <Text style={{ fontSize: 11, fontWeight: "700", letterSpacing: 1, color: "#00e5a0" }}>UNDER THE GUIDANCE OF</Text>
-              </View>
-              <Text style={{ fontSize: 17, fontWeight: "700", color: settingsDarkMode ? "#fff" : "#0d0f14" }}>Dr. Namrata Kumari</Text>
-            </View>
-
-            {/* Features */}
-            {[
-              { icon: "document-text-outline" as const, label: "Import quiz files (.txt / .qst)" },
-              { icon: "layers-outline" as const, label: "Flashcard study decks" },
-              { icon: "bar-chart-outline" as const, label: "Attempt tracking & score history" },
-              { icon: "moon-outline" as const, label: "Dark & light mode" },
-              { icon: "cloud-done-outline" as const, label: "Cloud sync across devices" },
-            ].map((f) => (
-              <View key={f.label} style={{
-                flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 13,
-                borderBottomWidth: 1, borderBottomColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)",
-              }}>
-                <View style={{ width: 38, height: 38, borderRadius: 11,
-                  backgroundColor: settingsDarkMode ? "rgba(99,102,241,0.12)" : "rgba(99,102,241,0.08)",
-                  alignItems: "center", justifyContent: "center" }}>
-                  <Ionicons name={f.icon} size={18} color="#6366f1" />
+      {/* ── Attempt Actions Modal (Sleek Bottom Sheet) ── */}
+      <Modal visible={!!selectedAttemptForModal} animationType="slide" transparent onRequestClose={() => setSelectedAttemptForModal(null)}>
+        <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }} onPress={() => setSelectedAttemptForModal(null)}>
+          {selectedAttemptForModal && (
+            <View style={{ backgroundColor: settingsDarkMode ? "#16162a" : "#ffffff", borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 40 }} onStartShouldSetResponder={() => true}>
+              {/* Drag Handle */}
+              <View style={{ width: 40, height: 4, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)", borderRadius: 2, alignSelf: "center", marginBottom: 24 }} />
+              
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 28 }}>
+                <View>
+                  <Text style={{ fontSize: 22, fontWeight: "700", color: settingsDarkMode ? "#ffffff" : "#0d0f14", letterSpacing: -0.5 }}>
+                    Attempt #{selectedAttemptForModal.attemptNum}
+                  </Text>
+                  <Text style={{ fontSize: 13, color: settingsDarkMode ? "#94a3b8" : "#64748b", marginTop: 6 }}>
+                    Score: {selectedAttemptForModal.attempt.score}% • {selectedAttemptForModal.attempt.correct} correct
+                  </Text>
                 </View>
-                <Text style={{ fontSize: 14, fontWeight: "500", color: settingsDarkMode ? "#ccccdd" : "#333344" }}>{f.label}</Text>
+                <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: settingsDarkMode ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.1)", alignItems: "center", justifyContent: "center" }}>
+                  <Ionicons name="bar-chart" size={24} color="#6366f1" />
+                </View>
               </View>
-            ))}
-          </ScrollView>
-        </View>
+              
+              <View style={{ gap: 12, width: "100%" }}>
+                {/* Re-attempt All Action */}
+                <Pressable
+                  onPress={() => {
+                    const quiz = quizzes.find(q => q.id === selectedAttemptForModal.quizId);
+                    if (quiz) {
+                      let qsList = quiz.questionsList && quiz.questionsList.length > 0 ? [...quiz.questionsList] : [];
+                      if (qsList.length === 0) {
+                        qsList = generateMockQuestionsForQuiz(quiz.title, quiz.questions);
+                      }
+                      const attemptQuestionIds = selectedAttemptForModal.attempt.questionIds;
+                      if (attemptQuestionIds && attemptQuestionIds.length > 0) {
+                        qsList = qsList.filter(q => attemptQuestionIds.includes(q.id));
+                      }
+                      setActiveSession({
+                        quizId: quiz.id,
+                        quizTitle: quiz.title,
+                        questions: qsList,
+                        selectionMode: "all",
+                        shuffleQuestions: false,
+                        shuffleAnswers: false,
+                        showAnswerOnSubmit: true,
+                        timePerQuestion: null,
+                        currentIndex: 0,
+                        answers: {},
+                        submitted: [] as string[],
+                        isFinished: false,
+                        startedAt: Date.now()
+                      });
+                      setSelectedAttemptForModal(null);
+                    }
+                  }}
+                  style={({ pressed }) => [
+                    { flexDirection: "row", alignItems: "center", padding: 16, borderRadius: 20, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.03)" : "#f8fafc", borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "#e2e8f0" },
+                    pressed && { opacity: 0.7, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.06)" : "#f1f5f9" }
+                  ]}
+                >
+                  <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(99, 102, 241, 0.12)", alignItems: "center", justifyContent: "center", marginRight: 14 }}>
+                    <Ionicons name="play" size={20} color="#6366f1" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 16, fontWeight: "600", color: settingsDarkMode ? "#ffffff" : "#0f172a" }}>Re-attempt</Text>
+                    <Text style={{ fontSize: 12, color: settingsDarkMode ? "#94a3b8" : "#64748b", marginTop: 2 }}>Start fresh with these questions</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={settingsDarkMode ? "#6e727a" : "#94a3b8"} />
+                </Pressable>
+
+                {/* Re-attempt Incorrect Action */}
+                {(selectedAttemptForModal.attempt.wrongQuestionIds || []).length > 0 && (
+                  <Pressable
+                    onPress={() => {
+                      const quiz = quizzes.find(q => q.id === selectedAttemptForModal.quizId);
+                      if (quiz) {
+                        let qsList = quiz.questionsList && quiz.questionsList.length > 0 ? [...quiz.questionsList] : [];
+                        if (qsList.length === 0) {
+                          qsList = generateMockQuestionsForQuiz(quiz.title, quiz.questions);
+                        }
+                        const wrongIds = selectedAttemptForModal.attempt.wrongQuestionIds;
+                        const filteredList = qsList.filter(q => wrongIds.includes(q.id));
+                        if (filteredList.length > 0) {
+                          setActiveSession({
+                            quizId: quiz.id,
+                            quizTitle: quiz.title,
+                            questions: filteredList,
+                            selectionMode: "wrong",
+                            shuffleQuestions: false,
+                            shuffleAnswers: false,
+                            showAnswerOnSubmit: true,
+                            timePerQuestion: null,
+                            currentIndex: 0,
+                            answers: {},
+                            submitted: [] as string[],
+                            isFinished: false,
+                            startedAt: Date.now(),
+                            targetAttemptId: selectedAttemptForModal.attempt.id
+                          });
+                          setSelectedAttemptForModal(null);
+                        }
+                      }
+                    }}
+                    style={({ pressed }) => [
+                      { flexDirection: "row", alignItems: "center", padding: 16, borderRadius: 20, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.03)" : "#f8fafc", borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "#e2e8f0" },
+                      pressed && { opacity: 0.7, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.06)" : "#f1f5f9" }
+                    ]}
+                  >
+                    <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(245, 158, 11, 0.12)", alignItems: "center", justifyContent: "center", marginRight: 14 }}>
+                      <Ionicons name="refresh" size={20} color="#f59e0b" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 16, fontWeight: "600", color: settingsDarkMode ? "#ffffff" : "#0f172a" }}>{t('profile.re_attempt_wrong') || "Re-attempt Incorrect"}</Text>
+                      <Text style={{ fontSize: 12, color: settingsDarkMode ? "#94a3b8" : "#64748b", marginTop: 2 }}>{selectedAttemptForModal.attempt.wrongQuestionIds.length} {t('profile.missed_questions') || "missed questions"}</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={settingsDarkMode ? "#6e727a" : "#94a3b8"} />
+                  </Pressable>
+                )}
+
+                {/* Delete Attempt Action */}
+                <Pressable
+                  onPress={() => {
+                    handleDeleteAttemptOnMobile(selectedAttemptForModal.quizId, selectedAttemptForModal.attempt.id);
+                    setSelectedAttemptForModal(null);
+                  }}
+                  style={({ pressed }) => [
+                    { flexDirection: "row", alignItems: "center", padding: 16, borderRadius: 20, backgroundColor: settingsDarkMode ? "rgba(239, 68, 68, 0.05)" : "rgba(239, 68, 68, 0.05)", borderWidth: 1, borderColor: "rgba(239, 68, 68, 0.15)", marginTop: 12 },
+                    pressed && { opacity: 0.7, backgroundColor: "rgba(239, 68, 68, 0.1)" }
+                  ]}
+                >
+                  <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(239, 68, 68, 0.12)", alignItems: "center", justifyContent: "center", marginRight: 14 }}>
+                    <Feather name="trash-2" size={18} color="#ef4444" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 16, fontWeight: "600", color: "#ef4444" }}>{t('profile.delete_attempt') || "Delete Attempt"}</Text>
+                  </View>
+                </Pressable>
+              </View>
+            </View>
+          )}
+        </Pressable>
       </Modal>
 
       {/* ── Feedback — full-screen slide-up page ── */}
       <Modal visible={showFeedbackPage} animationType="slide" transparent={false} onRequestClose={() => setShowFeedbackPage(false)}>
-        <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#0a0a0f" : "#f4f4f8" }}>
+        <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#000000" : "#f4f4f8" }}>
           {/* Header */}
           <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingTop: 56, paddingBottom: 20 }}>
             <Pressable
@@ -5101,53 +5980,274 @@ export default function HomeScreen() {
           <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 60 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             <View style={{
               borderRadius: 24, padding: 24, marginBottom: 20,
-              backgroundColor: settingsDarkMode ? "#12132a" : "#ffffff",
-              borderWidth: 1, borderColor: settingsDarkMode ? "rgba(59,130,246,0.12)" : "rgba(59,130,246,0.12)",
-              shadowColor: "#3b82f6", shadowOffset: { width: 0, height: 10 },
-              shadowOpacity: settingsDarkMode ? 0.2 : 0.06, shadowRadius: 24, elevation: 10,
+              backgroundColor: settingsDarkMode ? "#121212" : "#ffffff",
+              borderWidth: 1, borderColor: settingsDarkMode ? "#222222" : "#e5e5ea",
             }}>
               <View style={{ width: 56, height: 56, borderRadius: 18, backgroundColor: "rgba(59,130,246,0.12)",
-                borderWidth: 1, borderColor: "rgba(59,130,246,0.2)", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
+                alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
                 <Ionicons name="chatbubble-ellipses-outline" size={26} color="#3b82f6" />
               </View>
               <Text style={{ fontSize: 22, fontWeight: "800", color: settingsDarkMode ? "#fff" : "#0d0f14", marginBottom: 6, letterSpacing: -0.3 }}>
-                Share your thoughts
+                {t('profile.feedback_title') || "Share your thoughts"}
               </Text>
               <Text style={{ fontSize: 14, color: settingsDarkMode ? "#8888aa" : "#666677", lineHeight: 20 }}>
-                Found a bug? Have a suggestion? Want a new feature? We're all ears.
+                {t('profile.feedback_desc') || "Found a bug? Have a suggestion? Want a new feature? We're all ears."}
               </Text>
             </View>
 
             {/* Text area */}
             <TextInput
               multiline
-              placeholder="Tell us what you think…"
-              placeholderTextColor={settingsDarkMode ? "#3a3a5a" : "#c0c0d0"}
+              placeholder={t('profile.feedback_placeholder') || "Tell us what you think…"}
+              placeholderTextColor={settingsDarkMode ? "#555555" : "#c0c0d0"}
               style={{
-                backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "#ffffff",
+                backgroundColor: settingsDarkMode ? "#121212" : "#ffffff",
                 borderRadius: 18, padding: 18,
                 color: settingsDarkMode ? "#fff" : "#0d0f14", fontSize: 15,
                 minHeight: 180, textAlignVertical: "top",
-                borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)",
+                borderWidth: 1, borderColor: settingsDarkMode ? "#222222" : "#e5e5ea",
                 marginBottom: 20,
-                shadowColor: "#000", shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: settingsDarkMode ? 0.3 : 0.06, shadowRadius: 10, elevation: 4,
               }}
               value={feedbackText}
               onChangeText={setFeedbackText}
             />
 
             <Pressable
-              onPress={() => { setShowFeedbackPage(false); setFeedbackText(""); }}
+              onPress={async () => { 
+                if (feedbackText.trim().length === 0) {
+                  Alert.alert("Empty Feedback", "Please write something before sending.");
+                  return;
+                }
+                setFeedbackLoading(true);
+                const { ok, error } = await sendFeedback({
+                  userId: firebaseUser?.uid,
+                  userEmail: firebaseUser?.email || undefined,
+                  message: feedbackText
+                });
+                setFeedbackLoading(false);
+                if (ok) {
+                  Alert.alert("Thank You!", "Your feedback has been sent directly to the developer.");
+                  setShowFeedbackPage(false); 
+                  setFeedbackText("");
+                } else {
+                  console.warn("Failed to send feedback", error);
+                  Alert.alert("Error", "Could not send feedback. Please try again later.");
+                }
+              }}
+              disabled={feedbackLoading}
               style={({ pressed }) => [{
                 height: 54, borderRadius: 18, alignItems: "center", justifyContent: "center",
-                backgroundColor: "#3b82f6",
-                shadowColor: "#3b82f6", shadowOffset: { width: 0, height: 6 },
-                shadowOpacity: 0.4, shadowRadius: 14, elevation: 8,
-              }, pressed && styles.pressedScale]}
+                backgroundColor: feedbackLoading ? "#60a5fa" : "#3b82f6",
+              }, pressed && !feedbackLoading && styles.pressedScale]}
             >
-              <Text style={{ fontSize: 16, fontWeight: "700", color: "#fff" }}>Send Feedback</Text>
+              {feedbackLoading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={{ fontSize: 16, fontWeight: "700", color: "#fff" }}>{t('profile.send_feedback') || "Send Feedback"}</Text>
+              )}
             </Pressable>
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* ── Privacy Policy Modal ── */}
+      <Modal visible={showPrivacyPolicy} animationType="slide" transparent={false} onRequestClose={() => setShowPrivacyPolicy(false)}>
+        <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#0a0f1e" : "#f6f7fb" }}>
+
+          {/* Sticky header */}
+          <View style={{ paddingTop: 56, paddingBottom: 16, paddingHorizontal: 20,
+            backgroundColor: settingsDarkMode ? "#0a0f1e" : "#f6f7fb",
+            borderBottomWidth: 1, borderBottomColor: settingsDarkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)",
+            flexDirection: "row", alignItems: "center", gap: 14 }}>
+            <Pressable onPress={() => setShowPrivacyPolicy(false)}
+              style={({ pressed }) => ({ width: 36, height: 36, borderRadius: 10,
+                backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
+                alignItems: "center", justifyContent: "center", opacity: pressed ? 0.6 : 1 })}>
+              <Ionicons name="arrow-back" size={20} color={settingsDarkMode ? "#fff" : "#0d0f14"} />
+            </Pressable>
+            <Text style={{ fontSize: 17, fontWeight: "700", color: settingsDarkMode ? "#fff" : "#0d0f14", letterSpacing: -0.3 }}>Privacy Policy</Text>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 80 }}>
+
+            {/* Hero banner */}
+            <LinearGradient colors={settingsDarkMode ? ["#1a1040", "#0d1535"] : ["#ebe9ff", "#f0f4ff"]}
+              style={{ paddingHorizontal: 24, paddingTop: 36, paddingBottom: 32, alignItems: "center" }}>
+              <View style={{ width: 72, height: 72, borderRadius: 22,
+                backgroundColor: settingsDarkMode ? "rgba(99,102,241,0.25)" : "rgba(99,102,241,0.12)",
+                borderWidth: 1.5, borderColor: settingsDarkMode ? "rgba(99,102,241,0.4)" : "rgba(99,102,241,0.2)",
+                alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
+                <Ionicons name="lock-closed" size={32} color="#6366f1" />
+              </View>
+              <Text style={{ fontSize: 26, fontWeight: "900", color: settingsDarkMode ? "#fff" : "#0d0f14",
+                letterSpacing: -0.5, textAlign: "center", marginBottom: 10 }}>Privacy Policy</Text>
+              <Text style={{ fontSize: 13, color: settingsDarkMode ? "#818cf8" : "#6366f1", fontWeight: "600",
+                textAlign: "center", marginBottom: 12 }}>Recall App · Last updated June 2025</Text>
+              <Text style={{ fontSize: 14, color: settingsDarkMode ? "#94a3b8" : "#555577",
+                textAlign: "center", lineHeight: 22, maxWidth: 300 }}>
+                We believe your data belongs to you. Here's exactly what we collect, why, and how we keep it safe.
+              </Text>
+            </LinearGradient>
+
+            <View style={{ paddingHorizontal: 20, paddingTop: 28 }}>
+              {[
+                { num: "01", icon: "person-outline" as const, accent: "#6366f1", title: "Information We Collect",
+                  body: "When you sign in with Google or Email, we collect your name, email address, and profile photo solely to create your Recall account. If you use the app without signing in, we collect no personal data whatsoever." },
+                { num: "02", icon: "school-outline" as const, accent: "#8b5cf6", title: "Quiz & Flashcard Data",
+                  body: "Your quizzes, flashcard decks, attempt history, correct/wrong answers, and study streaks are stored in our secure Neon (PostgreSQL) database and linked to your account. This enables your progress to sync seamlessly across devices." },
+                { num: "03", icon: "phone-portrait-outline" as const, accent: "#06b6d4", title: "Local Storage",
+                  body: "Your device uses AsyncStorage to cache quizzes and session data for offline access. This data lives only on your device and is never transmitted to or shared with any third party." },
+                { num: "04", icon: "analytics-outline" as const, accent: "#10b981", title: "How We Use Your Data",
+                  body: "Your data is used exclusively to power the Recall experience — syncing your progress, displaying your stats, and personalising your study sessions. We do not sell, rent, or share your data with advertisers or any third parties, ever." },
+                { num: "05", icon: "shield-checkmark-outline" as const, accent: "#f59e0b", title: "Data Security",
+                  body: "All data in transit is protected by HTTPS/TLS encryption. Our Neon database sits behind authenticated API endpoints. Firebase Authentication handles all sign-in security. We never store raw passwords." },
+                { num: "06", icon: "trash-outline" as const, accent: "#ef4444", title: "Deleting Your Data",
+                  body: "You can permanently delete your account and all associated data at any time from Settings → Reset Statistics or by contacting us. Deletion removes your profile, quizzes, flashcards, and full attempt history from our servers immediately." },
+                { num: "07", icon: "mail-outline" as const, accent: "#6366f1", title: "Contact Us",
+                  body: "Questions about this policy or requests for data deletion? Reach us at recall.support@example.com and we'll respond within 48 hours." },
+              ].map((s, i, arr) => (
+                <View key={i}>
+                  <View style={{ flexDirection: "row", gap: 14, paddingVertical: 20 }}>
+                    {/* Left accent + number */}
+                    <View style={{ alignItems: "center", width: 44 }}>
+                      <View style={{ width: 44, height: 44, borderRadius: 14,
+                        backgroundColor: `${s.accent}18`, borderWidth: 1.5,
+                        borderColor: `${s.accent}30`, alignItems: "center", justifyContent: "center" }}>
+                        <Ionicons name={s.icon} size={20} color={s.accent} />
+                      </View>
+                      {i < arr.length - 1 && (
+                        <View style={{ width: 1.5, flex: 1, marginTop: 8,
+                          backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.07)" }} />
+                      )}
+                    </View>
+                    {/* Content */}
+                    <View style={{ flex: 1, paddingTop: 4 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                        <Text style={{ fontSize: 10, fontWeight: "800", color: s.accent, letterSpacing: 1.2 }}>{s.num}</Text>
+                        <Text style={{ fontSize: 15, fontWeight: "700",
+                          color: settingsDarkMode ? "#e2e8f0" : "#0d0f14", letterSpacing: -0.2 }}>{s.title}</Text>
+                      </View>
+                      <Text style={{ fontSize: 13.5, color: settingsDarkMode ? "#94a3b8" : "#555577",
+                        lineHeight: 22 }}>{s.body}</Text>
+                    </View>
+                  </View>
+                </View>
+              ))}
+
+              {/* Footer */}
+              <View style={{ marginTop: 8, padding: 20, borderRadius: 16,
+                backgroundColor: settingsDarkMode ? "rgba(99,102,241,0.07)" : "rgba(99,102,241,0.06)",
+                borderWidth: 1, borderColor: settingsDarkMode ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.12)",
+                alignItems: "center" }}>
+                <Ionicons name="shield-checkmark" size={24} color="#6366f1" style={{ marginBottom: 8 }} />
+                <Text style={{ fontSize: 13, fontWeight: "600", color: settingsDarkMode ? "#818cf8" : "#4f46e5",
+                  textAlign: "center", lineHeight: 20 }}>Your privacy is our priority.{"\n"}Recall will never misuse your data.</Text>
+              </View>
+              <View style={{ height: 40 }} />
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* ── Terms of Service Modal ── */}
+      <Modal visible={showTermsOfService} animationType="slide" transparent={false} onRequestClose={() => setShowTermsOfService(false)}>
+        <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#0a0f1e" : "#f6f7fb" }}>
+
+          {/* Sticky header */}
+          <View style={{ paddingTop: 56, paddingBottom: 16, paddingHorizontal: 20,
+            backgroundColor: settingsDarkMode ? "#0a0f1e" : "#f6f7fb",
+            borderBottomWidth: 1, borderBottomColor: settingsDarkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)",
+            flexDirection: "row", alignItems: "center", gap: 14 }}>
+            <Pressable onPress={() => setShowTermsOfService(false)}
+              style={({ pressed }) => ({ width: 36, height: 36, borderRadius: 10,
+                backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
+                alignItems: "center", justifyContent: "center", opacity: pressed ? 0.6 : 1 })}>
+              <Ionicons name="arrow-back" size={20} color={settingsDarkMode ? "#fff" : "#0d0f14"} />
+            </Pressable>
+            <Text style={{ fontSize: 17, fontWeight: "700", color: settingsDarkMode ? "#fff" : "#0d0f14", letterSpacing: -0.3 }}>Terms of Service</Text>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 80 }}>
+
+            {/* Hero banner */}
+            <LinearGradient colors={settingsDarkMode ? ["#0d2010", "#0d1535"] : ["#e6fff5", "#f0f9ff"]}
+              style={{ paddingHorizontal: 24, paddingTop: 36, paddingBottom: 32, alignItems: "center" }}>
+              <View style={{ width: 72, height: 72, borderRadius: 22,
+                backgroundColor: settingsDarkMode ? "rgba(0,229,160,0.2)" : "rgba(0,229,160,0.12)",
+                borderWidth: 1.5, borderColor: settingsDarkMode ? "rgba(0,229,160,0.35)" : "rgba(0,229,160,0.25)",
+                alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
+                <Ionicons name="document-text" size={32} color="#00e5a0" />
+              </View>
+              <Text style={{ fontSize: 26, fontWeight: "900", color: settingsDarkMode ? "#fff" : "#0d0f14",
+                letterSpacing: -0.5, textAlign: "center", marginBottom: 10 }}>Terms of Service</Text>
+              <Text style={{ fontSize: 13, color: settingsDarkMode ? "#34d399" : "#059669", fontWeight: "600",
+                textAlign: "center", marginBottom: 12 }}>Recall App · Last updated June 2025</Text>
+              <Text style={{ fontSize: 14, color: settingsDarkMode ? "#94a3b8" : "#555577",
+                textAlign: "center", lineHeight: 22, maxWidth: 300 }}>
+                Simple, fair terms for using Recall. By using the app, you agree to these.
+              </Text>
+            </LinearGradient>
+
+            <View style={{ paddingHorizontal: 20, paddingTop: 28 }}>
+              {[
+                { num: "01", icon: "checkmark-circle-outline" as const, accent: "#00e5a0", title: "Acceptance of Terms",
+                  body: "By downloading or using Recall, you agree to be bound by these Terms of Service. If you do not agree with any part of these terms, please uninstall the app and discontinue use." },
+                { num: "02", icon: "phone-portrait-outline" as const, accent: "#06b6d4", title: "Use of the App",
+                  body: "Recall is a personal study tool for creating quizzes, studying flashcards, and tracking learning progress. You may not use Recall for any unlawful purpose or to distribute harmful, abusive, or infringing content." },
+                { num: "03", icon: "person-outline" as const, accent: "#6366f1", title: "User Accounts",
+                  body: "You are responsible for maintaining the security of your account credentials. Notify us immediately of any unauthorised use. We are not liable for losses resulting from unauthorised access due to your negligence." },
+                { num: "04", icon: "document-outline" as const, accent: "#8b5cf6", title: "Your Content",
+                  body: "You own all quiz content, notes, and flashcards you create in Recall. By using the app, you grant us a limited licence to store and process your content solely to provide the Recall service back to you." },
+                { num: "05", icon: "cloud-outline" as const, accent: "#3b82f6", title: "Cloud Sync & Data",
+                  body: "When signed in, your quizzes and progress sync to our servers on a best-effort basis. While we work hard to ensure reliability, we cannot guarantee 100% uninterrupted access to cloud-synced data." },
+                { num: "06", icon: "ban-outline" as const, accent: "#ef4444", title: "Prohibited Activities",
+                  body: "You agree not to: reverse-engineer or decompile the app, attempt to gain unauthorised access to our servers or databases, use automated tools to scrape or abuse the service, or impersonate other users or Recall staff." },
+                { num: "07", icon: "construct-outline" as const, accent: "#f59e0b", title: "Modifications & Availability",
+                  body: "We reserve the right to update, modify, or discontinue any features of Recall at any time. We will notify users of significant changes where possible. Continued use after changes constitutes acceptance of the new terms." },
+                { num: "08", icon: "shield-outline" as const, accent: "#94a3b8", title: "Disclaimer of Warranties",
+                  body: "Recall is provided \"as is\" without warranties of any kind. We do not guarantee that the app will be error-free or that AI-generated quiz content will always be 100% accurate. Always verify critical information from authoritative sources." },
+                { num: "09", icon: "mail-outline" as const, accent: "#00e5a0", title: "Contact",
+                  body: "Questions about these terms? Contact us at recall.support@example.com and we will respond within 48 hours." },
+              ].map((s, i, arr) => (
+                <View key={i}>
+                  <View style={{ flexDirection: "row", gap: 14, paddingVertical: 20 }}>
+                    {/* Left accent icon with connector line */}
+                    <View style={{ alignItems: "center", width: 44 }}>
+                      <View style={{ width: 44, height: 44, borderRadius: 14,
+                        backgroundColor: `${s.accent}18`, borderWidth: 1.5,
+                        borderColor: `${s.accent}30`, alignItems: "center", justifyContent: "center" }}>
+                        <Ionicons name={s.icon} size={20} color={s.accent} />
+                      </View>
+                      {i < arr.length - 1 && (
+                        <View style={{ width: 1.5, flex: 1, marginTop: 8,
+                          backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.07)" }} />
+                      )}
+                    </View>
+                    {/* Content */}
+                    <View style={{ flex: 1, paddingTop: 4 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                        <Text style={{ fontSize: 10, fontWeight: "800", color: s.accent, letterSpacing: 1.2 }}>{s.num}</Text>
+                        <Text style={{ fontSize: 15, fontWeight: "700",
+                          color: settingsDarkMode ? "#e2e8f0" : "#0d0f14", letterSpacing: -0.2 }}>{s.title}</Text>
+                      </View>
+                      <Text style={{ fontSize: 13.5, color: settingsDarkMode ? "#94a3b8" : "#555577",
+                        lineHeight: 22 }}>{s.body}</Text>
+                    </View>
+                  </View>
+                </View>
+              ))}
+
+              {/* Footer */}
+              <View style={{ marginTop: 8, padding: 20, borderRadius: 16,
+                backgroundColor: settingsDarkMode ? "rgba(0,229,160,0.06)" : "rgba(0,229,160,0.07)",
+                borderWidth: 1, borderColor: settingsDarkMode ? "rgba(0,229,160,0.15)" : "rgba(0,229,160,0.15)",
+                alignItems: "center" }}>
+                <Ionicons name="document-text" size={24} color="#00e5a0" style={{ marginBottom: 8 }} />
+                <Text style={{ fontSize: 13, fontWeight: "600", color: settingsDarkMode ? "#34d399" : "#059669",
+                  textAlign: "center", lineHeight: 20 }}>These terms are designed to be fair and transparent.{"\n"}Thank you for using Recall.</Text>
+              </View>
+              <View style={{ height: 40 }} />
+            </View>
           </ScrollView>
         </View>
       </Modal>
@@ -5183,8 +6283,24 @@ export default function HomeScreen() {
         transparent={true}
         onRequestClose={() => setSelectedQuiz(null)}
       >
-        <View style={styles.modalBackdrop}>
-          <View style={[styles.quizOptionsCard, !settingsDarkMode && styles.lightModal, { maxHeight: "75%", paddingBottom: 10 }]}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setSelectedQuiz(null)}>
+          <View style={[{
+            backgroundColor: settingsDarkMode ? "#1E293B" : "#ffffff",
+            borderTopLeftRadius: 28, borderTopRightRadius: 28,
+            paddingBottom: Platform.OS === "ios" ? 36 : 24,
+            paddingHorizontal: 20,
+            paddingTop: 12,
+            width: "100%",
+            maxHeight: "85%",
+            overflow: "hidden",
+            marginTop: "auto"
+          }, !settingsDarkMode && styles.lightModal]} onStartShouldSetResponder={() => true}>
+            {/* Drag handle */}
+            <View style={{ alignItems: "center", paddingBottom: 16 }}>
+              <View style={{ width: 36, height: 4, borderRadius: 2,
+                backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.12)" }} />
+            </View>
+
             {/* Header */}
             <View style={[styles.optionsHeader, !settingsDarkMode && styles.lightBorder]}>
               <View style={{ flex: 1, marginRight: 8 }}>
@@ -5205,26 +6321,28 @@ export default function HomeScreen() {
 
             <ScrollView
               style={styles.optionsScroll}
-              contentContainerStyle={{ paddingBottom: 10 }}
+              contentContainerStyle={{ paddingBottom: 20 }}
               showsVerticalScrollIndicator={false}
             >
               {/* Question Selection Section */}
               <Text style={[styles.optionsSectionTitle, !settingsDarkMode && styles.lightTextSub]}>Question Selection</Text>
-              <View style={styles.chipsContainer}>
+              <View 
+                style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 }}
+              >
                 {[
                   { value: "all" as const, label: "All" },
-                  { value: "random" as const, label: "Random" },
-                  { value: "range" as const, label: "Range" },
-                  {
-                    value: "unanswered" as const,
-                    label: "Unanswered",
-                    disabled: unansweredCount === 0,
-                  },
                   {
                     value: "wrong" as const,
                     label: "Wrong",
                     disabled: wrongCount === 0,
                   },
+                  {
+                    value: "unanswered" as const,
+                    label: "Unanswered",
+                    disabled: unansweredCount === 0,
+                  },
+                  { value: "random" as const, label: "Random" },
+                  { value: "range" as const, label: "Range" },
                 ].map(({ value, label, disabled }) => {
                   const isActive = selectionMode === value;
                   return (
@@ -5251,77 +6369,230 @@ export default function HomeScreen() {
                   );
                 })}
               </View>
-
-              {/* Inline Steppers for Random / Range Mode */}
-              {selectionMode === "random" && (
-                <View style={[styles.compactControlsRow, !settingsDarkMode && styles.lightCard]}>
-                  <Text style={[styles.compactControlLabel, !settingsDarkMode && styles.lightText]}>Random Count</Text>
-                  <Stepper
-                    value={randomCount}
-                    min={1}
-                    max={totalQuestions}
-                    onChange={(val) => setRandomCount(val)}
-                    darkMode={settingsDarkMode}
-                  />
-                </View>
-              )}
-
-              {selectionMode === "range" && (
-                <View style={[styles.compactControlsRow, !settingsDarkMode && styles.lightCard]}>
-                  <Text style={[styles.compactControlLabel, !settingsDarkMode && styles.lightText]}>Set Range</Text>
-                  <View style={styles.rangeStepperGroup}>
+              {/* Unified Controls Row to Prevent Layout Shifts */}
+              <View style={[styles.compactControlsRow, !settingsDarkMode && styles.lightCard, { minHeight: 48 }]}>
+                {selectionMode === "random" ? (
+                  <>
+                    <Text style={[styles.compactControlLabel, !settingsDarkMode && styles.lightText]}>Random Count</Text>
                     <Stepper
-                      value={rangeStart}
+                      value={randomCount}
                       min={1}
-                      max={rangeEnd}
-                      onChange={(val) => setRangeStart(val)}
-                      darkMode={settingsDarkMode}
-                    />
-                    <Text style={[styles.rangeToText, !settingsDarkMode && styles.lightTextSub]}>to</Text>
-                    <Stepper
-                      value={rangeEnd}
-                      min={rangeStart}
                       max={totalQuestions}
-                      onChange={(val) => setRangeEnd(val)}
+                      onChange={(val) => setRandomCount(val)}
                       darkMode={settingsDarkMode}
                     />
-                  </View>
-                </View>
-              )}
+                  </>
+                ) : selectionMode === "range" ? (
+                  <>
+                    <Text style={[styles.compactControlLabel, !settingsDarkMode && styles.lightText]}>Set Range</Text>
+                    <View style={styles.rangeStepperGroup}>
+                      <Stepper
+                        value={rangeStart}
+                        min={1}
+                        max={rangeEnd}
+                        onChange={(val) => setRangeStart(val)}
+                        darkMode={settingsDarkMode}
+                      />
+                      <Text style={[styles.rangeToText, !settingsDarkMode && styles.lightTextSub]}>to</Text>
+                      <Stepper
+                        value={rangeEnd}
+                        min={rangeStart}
+                        max={totalQuestions}
+                        onChange={(val) => setRangeEnd(val)}
+                        darkMode={settingsDarkMode}
+                      />
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <Text style={[styles.compactControlLabel, !settingsDarkMode && styles.lightText]}>
+                      {selectionMode === "all" ? "Total Questions" : selectionMode === "wrong" ? "Wrong Answers" : "Unanswered"}
+                    </Text>
+                    <Stepper
+                      value={selectionMode === "all" ? totalQuestions : selectionMode === "wrong" ? wrongCount : unansweredCount}
+                      min={1}
+                      max={totalQuestions}
+                      onChange={() => {}}
+                      darkMode={settingsDarkMode}
+                      disabled={true}
+                    />
+                  </>
+                )}
+              </View>
 
               {/* Timer & Gameplay Options (Sleek Combined iOS-style Card) */}
               <Text style={[styles.optionsSectionTitle, !settingsDarkMode && styles.lightTextSub]}>Gameplay Configurations</Text>
               <View style={[styles.sectionCardCompact, !settingsDarkMode && styles.lightCard]}>
                 {/* Time Limit Row */}
-                <View style={styles.switchRowCompact}>
+                <View style={[styles.switchRowCompact, { alignItems: "center", zIndex: 10, position: "relative" }]}>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.switchLabelCompact, !settingsDarkMode && styles.lightText]}>Time limit per question</Text>
-                    {timePerQuestion !== null && (
-                      <Text style={[styles.switchSubCompact, !settingsDarkMode && styles.lightTextSub]}>Limit: {timePerQuestion}s</Text>
-                    )}
+                    <Text style={[styles.switchLabelCompact, !settingsDarkMode && styles.lightText]}>Quiz time limit</Text>
+                    <Text style={[styles.switchSubCompact, !settingsDarkMode && styles.lightTextSub]}>
+                      {quizTimeLimit !== null ? `Auto-submits after ${quizTimeLimit} min` : "No time limit"}
+                    </Text>
                   </View>
-                  <ToggleSwitch
-                    checked={timePerQuestion !== null}
-                    onChange={(checked) => setTimePerQuestion(checked ? 30 : null)}
-                    darkMode={settingsDarkMode}
-                  />
+
+                  {/* Input chip + chevron */}
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <View style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 3,
+                      backgroundColor: settingsDarkMode ? "#1c2235" : "#ffffff",
+                      borderWidth: 1,
+                      borderColor: quizTimeLimit !== null
+                        ? (settingsDarkMode ? "#4f52a0" : "#c7c9f5")
+                        : (settingsDarkMode ? "#252d40" : "#e8eaee"),
+                      borderRadius: 10,
+                      paddingHorizontal: 11,
+                      paddingVertical: 7,
+                      shadowColor: quizTimeLimit !== null ? "#6366f1" : "#000000",
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: quizTimeLimit !== null ? 0.25 : 0.08,
+                      shadowRadius: quizTimeLimit !== null ? 6 : 3,
+                      elevation: quizTimeLimit !== null ? 4 : 2,
+                    }}>
+                      <TextInput
+                        value={quizTimeLimit !== null ? String(quizTimeLimit) : ""}
+                        onChangeText={(t) => {
+                          const clean = t.replace(/[^0-9]/g, "");
+                          if (clean === "") {
+                            setQuizTimeLimit(null);
+                          } else {
+                            const n = parseInt(clean, 10);
+                            if (n >= 1 && n <= 180) setQuizTimeLimit(n);
+                          }
+                        }}
+                        placeholder="—"
+                        placeholderTextColor={settingsDarkMode ? "#3a4260" : "#bbbec8"}
+                        keyboardType="number-pad"
+                        maxLength={3}
+                        selectTextOnFocus
+                        selection={quizTimeLimit === null ? { start: 0, end: 0 } : undefined}
+                        style={{
+                          color: quizTimeLimit !== null
+                            ? (settingsDarkMode ? "#a5b4fc" : "#4f46e5")
+                            : (settingsDarkMode ? "#3a4260" : "#bbbec8"),
+                          fontSize: 14,
+                          fontWeight: "700",
+                          width: 30,
+                          textAlign: "center",
+                          padding: 0,
+                          margin: 0,
+                        }}
+                      />
+                      <Text style={{
+                        color: quizTimeLimit !== null
+                          ? (settingsDarkMode ? "#818cf8" : "#6366f1")
+                          : (settingsDarkMode ? "#3a4260" : "#bbbec8"),
+                        fontSize: 12,
+                        fontWeight: "600",
+                      }}>min</Text>
+                    </View>
+
+                    {/* Dropdown toggle chevron */}
+                    <Pressable
+                      onPress={() => setShowTimeLimitDropdown(v => !v)}
+                      style={({ pressed }) => ({
+                        width: 30,
+                        height: 30,
+                        borderRadius: 8,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        backgroundColor: showTimeLimitDropdown
+                          ? (settingsDarkMode ? "rgba(99,102,241,0.18)" : "rgba(99,102,241,0.1)")
+                          : "transparent",
+                        opacity: pressed ? 0.6 : 1,
+                      })}
+                    >
+                      <Ionicons
+                        name={showTimeLimitDropdown ? "chevron-up" : "chevron-down"}
+                        size={16}
+                        color={settingsDarkMode ? "#6366f1" : "#4f46e5"}
+                      />
+                    </Pressable>
+                  </View>
+
+                  {/* Floating Preset dropdown */}
+                  {showTimeLimitDropdown && (
+                    <>
+                      {/* Invisible overlay to catch outside clicks */}
+                      <Pressable
+                        style={{
+                          position: "absolute",
+                          top: -1000,
+                          bottom: -1000,
+                          left: -1000,
+                          right: -1000,
+                          zIndex: 90,
+                        }}
+                        onPress={() => setShowTimeLimitDropdown(false)}
+                      />
+                      <View style={{
+                        position: "absolute",
+                        top: "100%",
+                        right: 16,
+                        marginTop: 4,
+                        backgroundColor: settingsDarkMode ? "#1e2436" : "#ffffff",
+                        borderRadius: 12,
+                        width: 150,
+                        maxHeight: 240,
+                        shadowColor: "#000",
+                        shadowOffset: { width: 0, height: 6 },
+                        shadowOpacity: settingsDarkMode ? 0.4 : 0.1,
+                        shadowRadius: 16,
+                        elevation: 20,
+                        borderWidth: 1,
+                        borderColor: settingsDarkMode ? "#2a3142" : "#eaecf0",
+                        zIndex: 100,
+                      }}>
+                        <ScrollView
+                          showsVerticalScrollIndicator={true}
+                          contentContainerStyle={{ padding: 6 }}
+                          nestedScrollEnabled={true}
+                          scrollEnabled={true}
+                          style={{ borderRadius: 12 }}
+                        >
+                          {[null, 5, 10, 15, 30, 60].map((preset) => {
+                            const isActive = quizTimeLimit === preset;
+                            const label = preset === null ? "No limit" : `${preset} min`;
+                            return (
+                              <Pressable
+                                key={String(preset)}
+                                onPress={() => {
+                                  setQuizTimeLimit(preset);
+                                  setShowTimeLimitDropdown(false);
+                                }}
+                                style={({ pressed }) => ({
+                                  paddingHorizontal: 12,
+                                  paddingVertical: 10,
+                                  borderRadius: 8,
+                                  backgroundColor: isActive
+                                    ? (settingsDarkMode ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.08)")
+                                    : (pressed ? (settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)") : "transparent"),
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                  justifyContent: "space-between",
+                                })}
+                              >
+                                <Text style={{
+                                  fontSize: 14,
+                                  fontWeight: isActive ? "700" : "500",
+                                  color: isActive 
+                                    ? (settingsDarkMode ? "#818cf8" : "#4f46e5") 
+                                    : (settingsDarkMode ? "#cbd5e1" : "#475569"),
+                                }}>{label}</Text>
+                                {isActive && (
+                                  <Ionicons name="checkmark" size={16} color={settingsDarkMode ? "#818cf8" : "#4f46e5"} />
+                                )}
+                              </Pressable>
+                            );
+                          })}
+                        </ScrollView>
+                      </View>
+                    </>
+                  )}
                 </View>
-
-                {timePerQuestion !== null && (
-                  <View style={styles.stepperSubRowCompact}>
-                    <Text style={[styles.stepperSubRowTextCompact, !settingsDarkMode && styles.lightTextSub]}>Seconds limit</Text>
-                    <Stepper
-                      value={timePerQuestion}
-                      min={5}
-                      max={120}
-                      step={5}
-                      suffix="s"
-                      onChange={(val) => setTimePerQuestion(val)}
-                      darkMode={settingsDarkMode}
-                    />
-                  </View>
-                )}
-
                 <View style={[styles.switchRowSeparator, !settingsDarkMode && styles.lightBorderTop]} />
 
                 {/* Shuffle Questions Row */}
@@ -5364,6 +6635,91 @@ export default function HomeScreen() {
               </Pressable>
             </View>
           </View>
+        </Pressable>
+      </Modal>
+
+      {/* ── PDF / View Mode Modal ── */}
+      <Modal visible={!!pdfViewQuiz} animationType="slide" transparent={false} onRequestClose={() => setPdfViewQuiz(null)}>
+        <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#0a1020" : "#f4f4f8" }}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingTop: 52, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flex: 1 }}>
+              <Pressable onPress={() => setPdfViewQuiz(null)} style={({ pressed }) => [{ padding: 4 }, pressed && styles.opacityPress]}>
+                <Ionicons name="arrow-back" size={24} color={settingsDarkMode ? "#ffffff" : "#0d0f14"} />
+              </Pressable>
+              <View>
+                <Text style={{ color: settingsDarkMode ? "#888888" : "#666677", fontSize: 12, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5 }}>View</Text>
+                <Text style={{ color: settingsDarkMode ? "#ffffff" : "#0d0f14", fontSize: 18, fontWeight: "700" }} numberOfLines={1}>{pdfViewQuiz?.title}</Text>
+              </View>
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
+              <Ionicons name="filter" size={22} color={settingsDarkMode ? "#ffffff" : "#0d0f14"} />
+              <Ionicons name="information-circle-outline" size={24} color={settingsDarkMode ? "#ffffff" : "#0d0f14"} />
+              <Ionicons name="search" size={22} color={settingsDarkMode ? "#ffffff" : "#0d0f14"} />
+            </View>
+          </View>
+
+          <FlatList
+            data={(() => {
+              if (!pdfViewQuiz) return [];
+              return pdfViewQuiz.questionsList || [];
+            })()}
+            keyExtractor={(item, index) => String(item.id || index)}
+            contentContainerStyle={{ padding: 16, paddingBottom: 60, gap: 16 }}
+            renderItem={({ item, index }) => (
+              <View style={{
+                backgroundColor: settingsDarkMode ? "#121622" : "#ffffff",
+                borderRadius: 16,
+                padding: 16,
+                borderWidth: 1,
+                borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)",
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: settingsDarkMode ? 0.2 : 0.05,
+                shadowRadius: 8,
+                elevation: 2,
+              }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+                  <Text style={{ flex: 1, color: settingsDarkMode ? "#ffffff" : "#0d0f14", fontSize: 16, fontWeight: "600", lineHeight: 24 }}>
+                    <Text style={{ color: settingsDarkMode ? "#888888" : "#888888" }}>#{index + 1} </Text>
+                    {item.prompt}
+                  </Text>
+                  <Ionicons name="heart-outline" size={20} color={settingsDarkMode ? "#b91c1c" : "#ef4444"} style={{ marginLeft: 12, marginTop: 2 }} />
+                </View>
+
+                <View style={{ gap: 4 }}>
+                  {(item.answers || []).map((ans: any, aIndex: number) => {
+                    const isCorrect = ans.isCorrect;
+                    return (
+                      <View key={aIndex} style={{
+                        backgroundColor: isCorrect 
+                          ? (settingsDarkMode ? "rgba(16, 185, 129, 0.15)" : "rgba(16, 185, 129, 0.1)")
+                          : "transparent",
+                        paddingVertical: 10,
+                        paddingHorizontal: 12,
+                        borderRadius: 8,
+                      }}>
+                        <Text style={{
+                          color: isCorrect 
+                            ? (settingsDarkMode ? "#34d399" : "#059669")
+                            : (settingsDarkMode ? "#a1a1aa" : "#475569"),
+                          fontSize: 15,
+                          lineHeight: 22,
+                        }}>
+                          {ans.text}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+            ListEmptyComponent={
+              <View style={{ alignItems: "center", justifyContent: "center", paddingVertical: 60 }}>
+                <Ionicons name="document-text-outline" size={48} color={settingsDarkMode ? "#333333" : "#cccccc"} />
+                <Text style={{ marginTop: 12, color: settingsDarkMode ? "#888888" : "#666677", fontSize: 16 }}>No questions to display.</Text>
+              </View>
+            }
+          />
         </View>
       </Modal>
 
@@ -5379,7 +6735,7 @@ export default function HomeScreen() {
           onPress={() => setShowAddMenu(false)}
         >
           <View style={{
-            backgroundColor: settingsDarkMode ? "#0d1a2e" : "#ffffff",
+            backgroundColor: settingsDarkMode ? "#1E293B" : "#ffffff",
             borderTopLeftRadius: 28, borderTopRightRadius: 28,
             paddingBottom: Platform.OS === "ios" ? 36 : 24,
             overflow: "hidden",
@@ -5426,32 +6782,7 @@ export default function HomeScreen() {
                   <Ionicons name="document-text-outline" size={20} color={settingsDarkMode ? "#aaaacc" : "#666688"} />
                 </View>
                 <Text style={{ fontSize: 15, fontWeight: "600",
-                  color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>Import from File (.txt)</Text>
-              </View>
-            </AnimatedPressable>
-
-            <View style={{ height: 1, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)", marginHorizontal: 20 }} />
-
-            {/* Create Quiz */}
-            <AnimatedPressable
-              onPress={() => {
-                setShowAddMenu(false);
-                setCreationMode("quiz");
-                setCreationStep("setup");
-                setActiveTab("add");
-              }}
-              style={{
-                paddingVertical: 13, paddingHorizontal: 20,
-              }}
-              scaleTo={0.97}
-            >
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
-                <View style={{ width: 40, height: 40, borderRadius: 12,
-                  backgroundColor: "rgba(99,102,241,0.12)", alignItems: "center", justifyContent: "center" }}>
-                  <Ionicons name="create-outline" size={20} color="#6366f1" />
-                </View>
-                <Text style={{ fontSize: 15, fontWeight: "600",
-                  color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>Create Quiz</Text>
+                  color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('create_menu.import_txt') || "Import quiz from file (.txt)"}</Text>
               </View>
             </AnimatedPressable>
 
@@ -5476,7 +6807,32 @@ export default function HomeScreen() {
                   <Ionicons name="copy-outline" size={20} color="#6366f1" />
                 </View>
                 <Text style={{ fontSize: 15, fontWeight: "600",
-                  color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>Flashcard set</Text>
+                  color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('create_menu.flashcard_set') || "Flashcard set"}</Text>
+              </View>
+            </AnimatedPressable>
+
+            <View style={{ height: 1, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)", marginHorizontal: 20 }} />
+
+            {/* Create Quiz */}
+            <AnimatedPressable
+              onPress={() => {
+                setShowAddMenu(false);
+                setCreationMode("quiz");
+                setCreationStep("setup");
+                setActiveTab("add");
+              }}
+              style={{
+                paddingVertical: 13, paddingHorizontal: 20,
+              }}
+              scaleTo={0.97}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+                <View style={{ width: 40, height: 40, borderRadius: 12,
+                  backgroundColor: "rgba(99,102,241,0.12)", alignItems: "center", justifyContent: "center" }}>
+                  <Ionicons name="create-outline" size={20} color="#6366f1" />
+                </View>
+                <Text style={{ fontSize: 15, fontWeight: "600",
+                  color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('create_menu.create_manual') || "Create quiz manually"}</Text>
               </View>
             </AnimatedPressable>
           </View>
@@ -5557,6 +6913,146 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
+      {/* Flashcard Options Modal */}
+      <Modal visible={showFlashcardOptions !== null} transparent animationType="slide" onRequestClose={() => setShowFlashcardOptions(null)}>
+        <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }} onPress={() => setShowFlashcardOptions(null)}>
+          <View style={{ backgroundColor: settingsDarkMode ? "#1e293b" : "#ffffff", borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 8, paddingBottom: 36 }} onStartShouldSetResponder={() => true}>
+            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.12)", alignSelf: "center", marginBottom: 16 }} />
+            <Text style={{ fontSize: 17, fontWeight: "700", color: settingsDarkMode ? "#ffffff" : "#0d0f14", paddingHorizontal: 20, marginBottom: 12 }}>
+              {showFlashcardOptions?.title}
+            </Text>
+            
+            <Pressable onPress={() => {
+              const deck = showFlashcardOptions;
+              setEditingDeckId(deck.id);
+              setFcTitle(deck.title);
+              setFcCards(deck.cards?.length > 0 ? JSON.parse(JSON.stringify(deck.cards)) : [{ front: "", back: "" }]);
+              setFcCurrentIdx(0);
+              setCardType(deck.cardType || "Basic");
+              setCreationMode("flashcard");
+              setActiveTab("add");
+              setShowFlashcardOptions(null);
+            }} style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 20, paddingVertical: 16, backgroundColor: pressed ? (settingsDarkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)") : "transparent" }]}>
+              <View style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)", alignItems: "center", justifyContent: "center" }}>
+                <Ionicons name="pencil" size={20} color={settingsDarkMode ? "#fff" : "#000"} />
+              </View>
+              <Text style={{ fontSize: 15, color: settingsDarkMode ? "#fff" : "#000" }}>Edit Deck</Text>
+            </Pressable>
+
+            <Pressable onPress={() => {
+              setViewingInsightsDeck(showFlashcardOptions);
+              setActiveTab("deck-insights");
+              setShowFlashcardOptions(null);
+            }} style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 20, paddingVertical: 16, backgroundColor: pressed ? (settingsDarkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)") : "transparent" }]}>
+              <View style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)", alignItems: "center", justifyContent: "center" }}>
+                <Ionicons name="bar-chart-outline" size={20} color={settingsDarkMode ? "#fff" : "#000"} />
+              </View>
+              <Text style={{ fontSize: 15, color: settingsDarkMode ? "#fff" : "#000" }}>Statistics</Text>
+            </Pressable>
+
+            <Pressable onPress={() => {
+              const deckId = showFlashcardOptions?.id;
+              const neonId = showFlashcardOptions?.neonId;
+              setFlashcardDecks(flashcardDecks.filter(d => d.id !== deckId));
+              if (firebaseUser && neonId && !String(neonId).startsWith("local_")) {
+                deleteFlashcardDeck(firebaseUser.uid, neonId).catch(err => console.warn("[NeonSync] deck delete failed:", err));
+              }
+              setShowFlashcardOptions(null);
+            }} style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 20, paddingVertical: 16, backgroundColor: pressed ? "rgba(239,68,68,0.06)" : "transparent" }]}>
+              <View style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: "rgba(239,68,68,0.1)", alignItems: "center", justifyContent: "center" }}>
+                <Ionicons name="trash-outline" size={20} color="#ef4444" />
+              </View>
+              <Text style={{ fontSize: 15, color: "#ef4444" }}>Delete Deck</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
+
+      <Modal visible={showLanguageModal} animationType="slide" transparent={true} onRequestClose={() => setShowLanguageModal(false)}>
+        <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#090d14" : "#f0f2f5" }}>
+          <SafeAreaView style={{ flex: 1 }}>
+            {/* Header */}
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16 }}>
+              <Text style={{ fontSize: 24, fontWeight: "600", color: settingsDarkMode ? "#fff" : "#111" }}>Language</Text>
+              <Pressable onPress={() => setShowLanguageModal(false)} style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: "rgba(16,185,129,0.15)", alignItems: "center", justifyContent: "center" }}>
+                <Ionicons name="close" size={20} color="#10b981" />
+              </Pressable>
+            </View>
+
+            {/* Search */}
+            <View style={{ paddingHorizontal: 20, paddingBottom: 16 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: settingsDarkMode ? "#1e293b" : "#e2e8f0", borderRadius: 8, paddingHorizontal: 12, height: 44, borderWidth: 1, borderColor: "rgba(16,185,129,0.3)" }}>
+                <TextInput
+                  placeholder="Search"
+                  placeholderTextColor={settingsDarkMode ? "#64748b" : "#94a3b8"}
+                  style={{ flex: 1, color: settingsDarkMode ? "#fff" : "#000", fontSize: 15 }}
+                  value={languageSearch}
+                  onChangeText={setLanguageSearch}
+                />
+              </View>
+              <View style={{ height: 2, backgroundColor: "#10b981", marginTop: -2, borderBottomLeftRadius: 8, borderBottomRightRadius: 8 }} />
+            </View>
+
+            {/* List */}
+            <ScrollView style={{ flex: 1, paddingHorizontal: 20 }}>
+              {APP_LANGUAGES.filter(l => l.name.toLowerCase().includes(languageSearch.toLowerCase()) || l.nativeName.toLowerCase().includes(languageSearch.toLowerCase())).map((l, idx) => {
+                const isSelected = (l.id === 'system' && !savedAppLanguage) || (savedAppLanguage === l.code && l.id !== 'system');
+                return (
+                  <Pressable
+                    key={l.id}
+                    onPress={() => {
+                      if (l.id === "system") {
+                        AsyncStorage.removeItem("user-language");
+                        setSavedAppLanguage(null);
+                        i18n.changeLanguage("en"); // fallback to en or device locale
+                      } else {
+                        i18n.changeLanguage(l.code);
+                        AsyncStorage.setItem("user-language", l.code);
+                        setSavedAppLanguage(l.code);
+                      }
+                      setShowLanguageModal(false);
+                    }}
+                    style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 18, borderBottomWidth: 1, borderBottomColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}
+                  >
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
+                      {l.id === 'system' ? (
+                        <View style={{ width: 32, height: 24, borderRadius: 4, backgroundColor: settingsDarkMode ? "#334155" : "#cbd5e1", alignItems: "center", justifyContent: "center" }}>
+                          <Text style={{ fontSize: 12, fontWeight: "bold", color: settingsDarkMode ? "#fff" : "#000" }}>A文</Text>
+                        </View>
+                      ) : (
+                        <Text style={{ fontSize: 24 }}>{l.flag}</Text>
+                      )}
+                      <View>
+                        <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#f8fafc" : "#0f172a" }}>
+                          {l.id === 'system' ? l.name : l.nativeName || l.name}
+                        </Text>
+                        {l.id !== 'system' && (
+                          <Text style={{ fontSize: 13, color: settingsDarkMode ? "#94a3b8" : "#64748b", marginTop: 2 }}>{l.name}</Text>
+                        )}
+                      </View>
+                    </View>
+                    {/* Radio Button */}
+                    <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: isSelected ? "#10b981" : (settingsDarkMode ? "#64748b" : "#cbd5e1"), alignItems: "center", justifyContent: "center" }}>
+                      {isSelected && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: "#10b981" }} />}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            {/* Bottom Info Card */}
+            <View style={{ margin: 20, padding: 16, borderRadius: 16, backgroundColor: settingsDarkMode ? "rgba(217,119,6,0.15)" : "rgba(217,119,6,0.1)", flexDirection: "row", alignItems: "center", gap: 12 }}>
+              <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "rgba(217,119,6,0.2)", alignItems: "center", justifyContent: "center" }}>
+                <Ionicons name="information" size={18} color="#d97706" />
+              </View>
+              <Text style={{ flex: 1, fontSize: 12, color: settingsDarkMode ? "#fbbf24" : "#b45309", lineHeight: 18 }}>
+                If you have remarks on the translations, please feel free to write to the mail with suggestions for improvement.
+              </Text>
+            </View>
+          </SafeAreaView>
+        </View>
+      </Modal>
+
     </SafeAreaView>
     </View>
   );
@@ -5565,7 +7061,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   rootContainer: {
     flex: 1,
-    backgroundColor: "#0a0a0f",
+    backgroundColor: "#0f172a",
     overflow: "hidden",
   },
   screenContainer: {
@@ -5574,7 +7070,7 @@ const styles = StyleSheet.create({
   },
   homeContainer: {
     flex: 1,
-    backgroundColor: "#0a0a0f",
+    backgroundColor: "#0f172a",
   },
   topHeaderBar: {
     flexDirection: "row",
@@ -6010,7 +7506,7 @@ const styles = StyleSheet.create({
   },
   bottomTabBar: {
     flexDirection: "row",
-    backgroundColor: "#0a0a0f",
+    backgroundColor: "#0f172a",
     borderTopWidth: 1,
     borderTopColor: "rgba(255,255,255,0.06)",
     paddingTop: 10,
@@ -6093,24 +7589,20 @@ const styles = StyleSheet.create({
   },
   statsGrid: {
     flexDirection: "row",
-    flexWrap: "wrap",
+    flexWrap: "nowrap",
     justifyContent: "space-between",
-    gap: 14,
+    gap: 12,
     marginBottom: 24,
   },
   statCard: {
+    flex: 1,
     backgroundColor: "rgba(255, 255, 255, 0.025)",
     borderColor: "rgba(255, 255, 255, 0.05)",
     borderWidth: 1,
     borderRadius: 20,
-    paddingVertical: 18,
-    paddingHorizontal: 16,
-    width: (SCREEN_WIDTH - 54) / 2,
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 3,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    alignItems: "center",
   },
   panelCard: {
     paddingVertical: 20,
@@ -6120,11 +7612,6 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255, 255, 255, 0.05)",
     borderWidth: 1,
     marginBottom: 18,
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 4,
   },
   statIconContainer: {
     width: 36,
@@ -6740,7 +8227,7 @@ const styles = StyleSheet.create({
   },
   sessionContainer: {
     flex: 1,
-    backgroundColor: "#0a0a0f",
+    backgroundColor: "#0f172a",
     paddingHorizontal: 20,
     paddingTop: 10,
   },
@@ -6958,11 +8445,6 @@ const styles = StyleSheet.create({
     width: "100%",
     alignItems: "center",
     marginBottom: 20,
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.16,
-    shadowRadius: 16,
-    elevation: 6,
   },
   scoreTextBig: {
     color: "#00e5a0",
@@ -7006,11 +8488,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 14,
     alignItems: "center",
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 5,
   },
   miniStatLabel: {
     color: "#6e727a",
@@ -7061,8 +8538,8 @@ const styles = StyleSheet.create({
     borderRadius: 18,
   },
   chipBtnActive: {
-    backgroundColor: "#00e5a0",
-    borderColor: "#00e5a0",
+    backgroundColor: "#8B5CF6",
+    borderColor: "#8B5CF6",
   },
   chipBtnDisabled: {
     opacity: 0.3,
@@ -7073,7 +8550,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   chipTextActive: {
-    color: "#000000",
+    color: "#FFFFFF",
     fontWeight: "bold",
   },
   chipTextDisabled: {
@@ -7194,10 +8671,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     borderColor: "rgba(0, 0, 0, 0.07)",
     shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
   lightTabBar: {
     backgroundColor: "#ffffff",

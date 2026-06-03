@@ -12,6 +12,7 @@ import {
   onAuthStateChanged,
   updateProfile,
   signInWithCredential,
+  deleteUser as firebaseDeleteUser,
   type User,
 } from "firebase/auth";
 import ReactNativeAsyncStorage from "@react-native-async-storage/async-storage";
@@ -67,14 +68,16 @@ export async function signInWithGoogle(): Promise<User | null> {
     } else {
       await GoogleSignin.hasPlayServices();
       const userInfo = await GoogleSignin.signIn();
-      const idToken = userInfo?.data?.idToken || userInfo?.idToken;
+      const idToken = (userInfo as any)?.data?.idToken || (userInfo as any)?.idToken;
       if (!idToken) throw new Error("No ID token found");
       const credential = GoogleAuthProvider.credential(idToken);
       const result = await signInWithCredential(auth, credential);
       return result.user;
     }
   } catch (err: any) {
-    if (err.code !== "auth/popup-closed-by-user") console.error("Google sign-in:", err);
+    if (err.code !== "auth/popup-closed-by-user") {
+      Alert.alert("Google Sign-In Failed", err.message || "Could not connect to Google services. Please check your internet connection.");
+    }
     return null;
   }
 }
@@ -128,6 +131,12 @@ export async function signOutUser(): Promise<void> {
 // ── Auth state listener ───────────────────────────────────────────
 export function onAuth(callback: (user: User | null) => void) {
   return onAuthStateChanged(auth, callback);
+}
+
+export async function deleteAccount(): Promise<void> {
+  if (auth.currentUser) {
+    await firebaseDeleteUser(auth.currentUser);
+  }
 }
 
 export type { User };
