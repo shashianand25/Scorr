@@ -7,7 +7,7 @@ require('dotenv').config();
 const app = express();
 const resend = new Resend('re_Kt6jhDqQ_FPcQUafA3aH3TkursCPxBcnW');
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 // Initialize Postgres connection pool
 // Neon provides a postgres connection string like postgresql://user:password@host/dbname
