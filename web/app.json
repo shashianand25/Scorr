@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "bccf8d26-f1a3-4ce4-809b-1d674a992c3e"
+      }
+    },
+    "android": {
+      "package": "com.radium230.web"
+    }
+  }
+}

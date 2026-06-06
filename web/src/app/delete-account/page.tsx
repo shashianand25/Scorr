@@ -4,14 +4,14 @@ export default function DeleteAccount() {
       <div className="max-w-2xl mx-auto bg-white p-8 md:p-12 rounded-2xl shadow-sm border border-red-100">
         <h1 className="text-3xl font-bold mb-4 text-red-600">Account Deletion</h1>
         <p className="text-gray-700 leading-relaxed mb-8">
-          We believe you should have complete control over your data. If you no longer wish to use Recall, you can permanently delete your account and all associated data.
+          We believe you should have complete control over your data. If you no longer wish to use Scorr, you can permanently delete your account and all associated data.
         </p>
         
         <div className="space-y-6">
           <div className="bg-red-50 p-6 rounded-xl border border-red-100">
             <h2 className="text-lg font-bold text-red-800 mb-2">How to delete your account (In-App)</h2>
             <ol className="list-decimal list-inside text-red-900 space-y-2">
-              <li>Open the Recall app and ensure you are signed in.</li>
+              <li>Open the Scorr app and ensure you are signed in.</li>
               <li>Tap the Menu icon (bottom right).</li>
               <li>Scroll down to the Danger Zone section.</li>
               <li>Tap <strong>Delete account</strong>.</li>

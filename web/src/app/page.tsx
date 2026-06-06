@@ -4,7 +4,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-8 font-sans">
       <main className="max-w-2xl w-full bg-white p-12 rounded-3xl shadow-sm border border-gray-100 text-center">
-        <h1 className="text-4xl font-extrabold text-gray-900 mb-4 tracking-tight">Recall</h1>
+        <h1 className="text-4xl font-extrabold text-gray-900 mb-4 tracking-tight">Scorr</h1>
         <p className="text-lg text-gray-600 mb-12">
           Your AI-powered flashcards and quizzes, built for seamless studying and progress tracking.
         </p>
@@ -25,7 +25,7 @@ export default function Home() {
       </main>
 
       <footer className="mt-12 text-sm text-gray-400">
-        &copy; {new Date().getFullYear()} Recall App. All rights reserved.
+        &copy; {new Date().getFullYear()} Scorr App. All rights reserved.
       </footer>
     </div>
   );

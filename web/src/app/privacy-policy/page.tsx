@@ -9,7 +9,7 @@ export default function PrivacyPolicy() {
           <section>
             <h2 className="text-xl font-semibold mb-3">1. Information We Collect</h2>
             <p className="text-gray-700 leading-relaxed">
-              When you sign in with Google or Email, we collect your name, email address, and profile photo solely to create your Recall account. If you use the app without signing in, we collect no personal data whatsoever.
+              When you sign in with Google or Email, we collect your name, email address, and profile photo solely to create your Scorr account. If you use the app without signing in, we collect no personal data whatsoever.
             </p>
           </section>
 
@@ -23,7 +23,7 @@ export default function PrivacyPolicy() {
           <section>
             <h2 className="text-xl font-semibold mb-3">3. How We Use Your Data</h2>
             <p className="text-gray-700 leading-relaxed">
-              Your data is used exclusively to power the Recall experience — syncing your progress, displaying your stats, and personalising your study sessions. We do not sell, rent, or share your data with advertisers or any third parties, ever.
+              Your data is used exclusively to power the Scorr experience — syncing your progress, displaying your stats, and personalising your study sessions. We do not sell, rent, or share your data with advertisers or any third parties, ever.
             </p>
           </section>
 

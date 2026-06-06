@@ -9,28 +9,28 @@ export default function TermsOfService() {
           <section>
             <h2 className="text-xl font-semibold mb-3">1. Acceptance of Terms</h2>
             <p className="text-gray-700 leading-relaxed">
-              By downloading or using the Recall app, you agree to be bound by these Terms of Service. If you do not agree with any part of these terms, please discontinue use.
+              By downloading or using the Scorr app, you agree to be bound by these Terms of Service. If you do not agree with any part of these terms, please discontinue use.
             </p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold mb-3">2. Use of the App</h2>
             <p className="text-gray-700 leading-relaxed">
-              Recall is a personal study tool for creating quizzes, studying flashcards, and tracking learning progress. You may not use Recall for any unlawful purpose or to distribute harmful content.
+              Scorr is a personal study tool for creating quizzes, studying flashcards, and tracking learning progress. You may not use Scorr for any unlawful purpose or to distribute harmful content.
             </p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold mb-3">3. Your Content</h2>
             <p className="text-gray-700 leading-relaxed">
-              You own all quiz content, notes, and flashcards you create in Recall. By using the app, you grant us a limited licence to store and process your content solely to provide the Recall service back to you.
+              You own all quiz content, notes, and flashcards you create in Scorr. By using the app, you grant us a limited licence to store and process your content solely to provide the Scorr service back to you.
             </p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold mb-3">4. Disclaimer of Warranties</h2>
             <p className="text-gray-700 leading-relaxed">
-              Recall is provided "as is" without warranties of any kind. We do not guarantee that the app will be error-free or that AI-generated quiz content will always be accurate.
+              Scorr is provided "as is" without warranties of any kind. We do not guarantee that the app will be error-free or that AI-generated quiz content will always be accurate.
             </p>
           </section>
 
