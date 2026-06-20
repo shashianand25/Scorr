@@ -1,7 +1,6 @@
 {
   "tabs": {
     "home": "Inicio",
-    "flashcards": "Tarjetas",
     "create": "Crear",
     "statistics": "Estadísticas",
     "profile": "Perfil"
@@ -65,37 +64,15 @@
     "missed_questions": "preguntas falladas",
     "delete_attempt": "Eliminar Intento"
   },
-  "flashcards": {
-    "fc_title": "Tarjetas",
-    "library": "// tu biblioteca",
-    "search": "Buscar mazos...",
-    "all_decks": "Todos los Mazos",
-    "due": "pendientes",
-    "progress": "En Curso",
-    "mastered": "Dominado",
-    "your_decks": "Tus mazos",
-    "deck_singular": "mazo",
-    "deck_plural": "mazos",
-    "empty_create": "Haz clic en + para crear tu primer mazo",
-    "empty_search": "No se encontraron mazos",
-    "term": "término",
-    "terms": "términos"
-  },
   "create_pick": {
     "pick_title": "Crear",
     "pick_subtitle": "¿Qué te gustaría hacer?",
     "quiz_title": "Prueba",
     "quiz_sub": "Preguntas de opción múltiple",
-    "fc_title": "Tarjetas",
-    "fc_sub": "Mazos de estudio",
     "tag_timed": "Modo temporizado",
     "tag_shuffle": "Aleatorio",
     "tag_wrong": "Repaso de errores",
-    "tag_multi": "Selección múltiple",
-    "tag_frontback": "Frente y dorso",
-    "tag_flip": "Voltear para revelar",
-    "tag_deck": "Modo mazo",
-    "tag_quick": "Recuerdo rápido"
+    "tag_multi": "Selección múltiple"
   },
   "dashboard": {
     "accuracy": "PRECISIÓN EN TODOS LOS INTENTOS",
@@ -107,7 +84,6 @@
     "completion": "Finalización (Dominado)",
     "stats_quizzes": "PRUEBAS",
     "stats_questions": "PREGUNTAS",
-    "stats_decks": "MAZOS",
     "starred": "Destacado",
     "starred_title": "Preguntas destacadas",
     "saved": "guardado"
@@ -133,7 +109,6 @@
   },
   "create_menu": {
     "import_txt": "Importar de archivo (.txt)",
-    "flashcard_set": "Conjunto de tarjetas",
     "create_manual": "Crear prueba manualmente"
   }
 }

@@ -1,7 +1,6 @@
 {
   "tabs": {
     "home": "होम",
-    "flashcards": "फ्लैशकार्ड",
     "create": "बनाएं",
     "statistics": "आँकड़े",
     "profile": "प्रोफ़ाइल"
@@ -65,37 +64,15 @@
     "missed_questions": "छूटे हुए प्रश्न",
     "delete_attempt": "प्रयास हटाएं"
   },
-  "flashcards": {
-    "fc_title": "फ्लैशकार्ड",
-    "library": "// आपकी लाइब्रेरी",
-    "search": "डेक खोजें...",
-    "all_decks": "सभी डेक",
-    "due": "बाकी",
-    "progress": "प्रगति में",
-    "mastered": "महारत हासिल",
-    "your_decks": "आपके डेक",
-    "deck_singular": "डेक",
-    "deck_plural": "डेक",
-    "empty_create": "अपना पहला डेक बनाने के लिए + पर क्लिक करें",
-    "empty_search": "कोई डेक नहीं मिला",
-    "term": "शब्द",
-    "terms": "शब्द"
-  },
   "create_pick": {
     "pick_title": "बनाएं",
     "pick_subtitle": "आप क्या बनाना चाहेंगे?",
     "quiz_title": "क्विज़",
     "quiz_sub": "बहुविकल्पीय प्रश्न",
-    "fc_title": "फ्लैशकार्ड",
-    "fc_sub": "फ्लिप-कार्ड अध्ययन डेक",
     "tag_timed": "समयबद्ध मोड",
     "tag_shuffle": "शफ़ल",
     "tag_wrong": "गलत समीक्षा",
-    "tag_multi": "बहु-चयन",
-    "tag_frontback": "आगे और पीछे",
-    "tag_flip": "दिखाने के लिए पलटें",
-    "tag_deck": "डेक मोड",
-    "tag_quick": "त्वरित स्मरण"
+    "tag_multi": "बहु-चयन"
   },
   "dashboard": {
     "accuracy": "सभी प्रयासों में सटीकता",
@@ -107,7 +84,6 @@
     "completion": "पूरा किया (महारत हासिल)",
     "stats_quizzes": "क्विज़",
     "stats_questions": "प्रश्न",
-    "stats_decks": "डेक",
     "starred": "तारांकित",
     "starred_title": "तारांकित प्रश्न",
     "saved": "सहेजा गया"
@@ -133,7 +109,6 @@
   },
   "create_menu": {
     "import_txt": "फ़ाइल से आयात करें (.txt)",
-    "flashcard_set": "फ्लैशकार्ड सेट",
     "create_manual": "मैन्युअल रूप से क्विज़ बनाएं"
   }
 }

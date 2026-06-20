@@ -1,7 +1,6 @@
 {
   "tabs": {
     "home": "Accueil",
-    "flashcards": "Cartes",
     "create": "Créer",
     "statistics": "Statistiques",
     "profile": "Profil"
@@ -65,37 +64,15 @@
     "missed_questions": "questions manquées",
     "delete_attempt": "Supprimer la tentative"
   },
-  "flashcards": {
-    "fc_title": "Cartes",
-    "library": "// votre bibliothèque",
-    "search": "Rechercher des paquets...",
-    "all_decks": "Tous les Paquets",
-    "due": "à réviser",
-    "progress": "En Cours",
-    "mastered": "Maîtrisé",
-    "your_decks": "Vos paquets",
-    "deck_singular": "paquet",
-    "deck_plural": "paquets",
-    "empty_create": "Cliquez sur + pour créer votre premier paquet",
-    "empty_search": "Aucun paquet trouvé",
-    "term": "terme",
-    "terms": "termes"
-  },
   "create_pick": {
     "pick_title": "Créer",
     "pick_subtitle": "Que souhaitez-vous faire ?",
     "quiz_title": "Quiz",
     "quiz_sub": "Questions à choix multiples",
-    "fc_title": "Cartes",
-    "fc_sub": "Paquets de cartes à retourner",
     "tag_timed": "Mode chronométré",
     "tag_shuffle": "Aléatoire",
     "tag_wrong": "Révision des erreurs",
-    "tag_multi": "Choix multiples",
-    "tag_frontback": "Recto-verso",
-    "tag_flip": "Retourner pour voir",
-    "tag_deck": "Mode paquet",
-    "tag_quick": "Rappel rapide"
+    "tag_multi": "Choix multiples"
   },
   "dashboard": {
     "accuracy": "PRÉCISION SUR TOUTES LES TENTATIVES",
@@ -107,7 +84,6 @@
     "completion": "Achèvement (Maîtrisé)",
     "stats_quizzes": "QUIZ",
     "stats_questions": "QUESTIONS",
-    "stats_decks": "PAQUETS",
     "starred": "Favoris",
     "starred_title": "Questions favorites",
     "saved": "sauvegardé"
@@ -133,7 +109,6 @@
   },
   "create_menu": {
     "import_txt": "Importer d'un fichier (.txt)",
-    "flashcard_set": "Jeu de cartes",
     "create_manual": "Créer un quiz manuellement"
   }
 }

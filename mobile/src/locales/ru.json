@@ -1,7 +1,6 @@
 {
   "tabs": {
     "home": "Главная",
-    "flashcards": "Карточки",
     "create": "Создать",
     "statistics": "Статистика",
     "profile": "Профиль"
@@ -65,37 +64,15 @@
     "missed_questions": "пропущенных вопросов",
     "delete_attempt": "Удалить попытку"
   },
-  "flashcards": {
-    "fc_title": "Карточки",
-    "library": "// ваша библиотека",
-    "search": "Поиск колод...",
-    "all_decks": "Все колоды",
-    "due": "к повторению",
-    "progress": "В процессе",
-    "mastered": "Изучено",
-    "your_decks": "Ваши колоды",
-    "deck_singular": "колода",
-    "deck_plural": "колод",
-    "empty_create": "Нажмите +, чтобы создать первую колоду",
-    "empty_search": "Колоды не найдены",
-    "term": "термин",
-    "terms": "терминов"
-  },
   "create_pick": {
     "pick_title": "Создать",
     "pick_subtitle": "Что бы вы хотели создать?",
     "quiz_title": "Тест",
     "quiz_sub": "Вопросы с вариантами ответов",
-    "fc_title": "Карточки",
-    "fc_sub": "Колоды карточек для изучения",
     "tag_timed": "На время",
     "tag_shuffle": "Перемешать",
     "tag_wrong": "Работа над ошибками",
-    "tag_multi": "Множественный выбор",
-    "tag_frontback": "Лицо и изнанка",
-    "tag_flip": "Перевернуть",
-    "tag_deck": "Режим колоды",
-    "tag_quick": "Быстрое повторение"
+    "tag_multi": "Множественный выбор"
   },
   "dashboard": {
     "accuracy": "ТОЧНОСТЬ ПО ВСЕМ ПОПЫТКАМ",
@@ -107,7 +84,6 @@
     "completion": "Завершено (Изучено)",
     "stats_quizzes": "ТЕСТЫ",
     "stats_questions": "ВОПРОСЫ",
-    "stats_decks": "КОЛОДЫ",
     "starred": "Избранное",
     "starred_title": "Избранные вопросы",
     "saved": "сохранено"
@@ -133,7 +109,6 @@
   },
   "create_menu": {
     "import_txt": "Импорт из файла (.txt)",
-    "flashcard_set": "Набор карточек",
     "create_manual": "Создать вручную"
   }
 }

@@ -1,0 +1,42 @@
+{
+  "_note": "Archived flashcard locale keys from mobile/src/locales/en.json — removed 2026-06-05",
+  "_restore_instructions": "Merge these keys back into each locale file. The 'tabs.flashcards' key goes inside 'tabs'. The 'flashcards' section goes at the top level. The 'create_pick' keys go inside the existing 'create_pick' section. Similarly for 'create_menu' and 'dashboard'.",
+  
+  "tabs": {
+    "flashcards": "Flashcards"
+  },
+  
+  "flashcards": {
+    "fc_title": "Flashcards",
+    "library": "// your library",
+    "search": "Search decks...",
+    "all_decks": "All Decks",
+    "due": "due",
+    "progress": "In Progress",
+    "mastered": "Mastered",
+    "your_decks": "Your decks",
+    "deck_singular": "deck",
+    "deck_plural": "decks",
+    "empty_create": "Click + to create your first deck",
+    "empty_search": "No decks match your search",
+    "term": "term",
+    "terms": "terms"
+  },
+  
+  "create_pick": {
+    "fc_title": "Flashcards",
+    "fc_sub": "Flip-card study decks",
+    "tag_frontback": "Front & back",
+    "tag_flip": "Flip to reveal",
+    "tag_deck": "Deck mode",
+    "tag_quick": "Quick recall"
+  },
+  
+  "create_menu": {
+    "flashcard_set": "Flashcard set"
+  },
+  
+  "dashboard": {
+    "stats_decks": "DECKS"
+  }
+}

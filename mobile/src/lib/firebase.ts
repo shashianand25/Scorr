@@ -1,4 +1,5 @@
 import { initializeApp, getApps } from "firebase/app";
+import { getFirestore } from "firebase/firestore";
 import {
   initializeAuth,
   // @ts-ignore
@@ -13,6 +14,7 @@ import {
   updateProfile,
   signInWithCredential,
   deleteUser as firebaseDeleteUser,
+  sendPasswordResetEmail,
   type User,
 } from "firebase/auth";
 import ReactNativeAsyncStorage from "@react-native-async-storage/async-storage";
@@ -67,6 +69,12 @@ export async function signInWithGoogle(): Promise<User | null> {
       return result.user;
     } else {
       await GoogleSignin.hasPlayServices();
+      // Force account picker by signing out first
+      try {
+        await GoogleSignin.signOut();
+      } catch (e) {
+        // Ignore if already signed out
+      }
       const userInfo = await GoogleSignin.signIn();
       const idToken = (userInfo as any)?.data?.idToken || (userInfo as any)?.idToken;
       if (!idToken) throw new Error("No ID token found");
@@ -75,7 +83,12 @@ export async function signInWithGoogle(): Promise<User | null> {
       return result.user;
     }
   } catch (err: any) {
-    if (err.code !== "auth/popup-closed-by-user") {
+    const isCancelled = err.code === "auth/popup-closed-by-user" || 
+                        err.code === "SIGN_IN_CANCELLED" || 
+                        err.code === "12501" || 
+                        err.code === "-5" ||
+                        String(err.message).includes("CANCELLED");
+    if (!isCancelled) {
       Alert.alert("Google Sign-In Failed", err.message || "Could not connect to Google services. Please check your internet connection.");
     }
     return null;
@@ -99,7 +112,7 @@ export async function signUpWithEmail(
       err.code === "auth/email-already-in-use" ? "This email is already registered." :
       err.code === "auth/weak-password" ? "Password must be at least 6 characters." :
       err.code === "auth/invalid-email" ? "Please enter a valid email." :
-      "Sign up failed. Please try again.";
+      err.message || "Sign up failed. Please try again.";
     return { user: null, error: msg };
   }
 }
@@ -118,14 +131,35 @@ export async function signInWithEmail(
         ? "Incorrect email or password." :
       err.code === "auth/invalid-email" ? "Please enter a valid email." :
       err.code === "auth/too-many-requests" ? "Too many attempts. Try again later." :
-      "Sign in failed. Please try again.";
+      err.message || "Sign in failed. Please try again.";
     return { user: null, error: msg };
+  }
+}
+
+// ── Password Reset ────────────────────────────────────────────────
+export async function resetPassword(email: string): Promise<{ success: boolean; error: string | null }> {
+  try {
+    await sendPasswordResetEmail(auth, email);
+    return { success: true, error: null };
+  } catch (err: any) {
+    const msg = 
+      err.code === "auth/user-not-found" ? "No account found with this email." :
+      err.code === "auth/invalid-email" ? "Please enter a valid email." :
+      err.message || "Failed to send reset email. Please try again.";
+    return { success: false, error: msg };
   }
 }
 
 // ── Sign Out ──────────────────────────────────────────────────────
 export async function signOutUser(): Promise<void> {
   await firebaseSignOut(auth);
+  if (Platform.OS !== "web") {
+    try {
+      await GoogleSignin.signOut();
+    } catch (error) {
+      console.warn("Google Signin signout error:", error);
+    }
+  }
 }
 
 // ── Auth state listener ───────────────────────────────────────────
@@ -138,5 +172,7 @@ export async function deleteAccount(): Promise<void> {
     await firebaseDeleteUser(auth.currentUser);
   }
 }
+
+export const db = getFirestore(app);
 
 export type { User };

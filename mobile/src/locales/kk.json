@@ -1,7 +1,6 @@
 {
   "tabs": {
     "home": "Басты бет",
-    "flashcards": "Карточкалар",
     "create": "Жасау",
     "statistics": "Статистика",
     "profile": "Профиль"
@@ -65,37 +64,15 @@
     "missed_questions": "өткізілген сұрақтар",
     "delete_attempt": "Әрекетті жою"
   },
-  "flashcards": {
-    "fc_title": "Карточкалар",
-    "library": "// сіздің кітапханаңыз",
-    "search": "Колодаларды іздеу...",
-    "all_decks": "Барлық колодалар",
-    "due": "қайталауға",
-    "progress": "Орындалуда",
-    "mastered": "Меңгерілді",
-    "your_decks": "Сіздің колодаларыңыз",
-    "deck_singular": "колода",
-    "deck_plural": "колода",
-    "empty_create": "Алғашқы колоданы жасау үшін + басыңыз",
-    "empty_search": "Колодалар табылмады",
-    "term": "термин",
-    "terms": "термин"
-  },
   "create_pick": {
     "pick_title": "Жасау",
     "pick_subtitle": "Не жасағыңыз келеді?",
     "quiz_title": "Тест",
     "quiz_sub": "Бірнеше жауапты сұрақтар",
-    "fc_title": "Карточкалар",
-    "fc_sub": "Оқуға арналған карточкалар колодасы",
     "tag_timed": "Уақытпен",
     "tag_shuffle": "Араластыру",
     "tag_wrong": "Қателерді қайталау",
-    "tag_multi": "Бірнеше таңдау",
-    "tag_frontback": "Алды мен арты",
-    "tag_flip": "Аудару",
-    "tag_deck": "Колода режимі",
-    "tag_quick": "Жылдам қайталау"
+    "tag_multi": "Бірнеше таңдау"
   },
   "dashboard": {
     "accuracy": "БАРЛЫҚ ӘРЕКЕТТЕР БОЙЫНША ДӘЛДІК",
@@ -107,7 +84,6 @@
     "completion": "Аяқталды (Меңгерілді)",
     "stats_quizzes": "ТЕСТТЕР",
     "stats_questions": "СҰРАҚТАР",
-    "stats_decks": "КОЛОДАЛАР",
     "starred": "Таңдаулы",
     "starred_title": "Таңдаулы сұрақтар",
     "saved": "сақталды"
@@ -133,7 +109,6 @@
   },
   "create_menu": {
     "import_txt": "Файлдан импорттау (.txt)",
-    "flashcard_set": "Карточкалар жинағы",
     "create_manual": "Қолмен жасау"
   }
 }

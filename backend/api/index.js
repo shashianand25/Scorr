@@ -130,6 +130,38 @@ app.get('/api/quiz-history', async (req, res) => {
   }
 });
 
+// ── Battle History ───────────────────────────────────────────────────────
+app.post('/api/battle-history', async (req, res) => {
+  const { userId, roomCode, quizTitle, myScore, opponentScore, opponentName, won, myTime, opponentTime } = req.body;
+  const eventId = generateId();
+  
+  try {
+    await pool.query(
+      `INSERT INTO battle_history (id, user_id, room_code, quiz_title, my_score, opponent_score, opponent_name, won, my_time, opponent_time) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [eventId, userId, roomCode, quizTitle, myScore, opponentScore, opponentName, won, myTime || null, opponentTime || null]
+    );
+    res.json({ eventId });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/battle-history', async (req, res) => {
+  const { userId, limit = 50 } = req.query;
+  try {
+    const result = await pool.query(
+      `SELECT * FROM battle_history WHERE user_id = $1 ORDER BY created_at ASC LIMIT $2`,
+      [userId, parseInt(limit)]
+    );
+    res.json({ history: result.rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Mobile Quizzes ───────────────────────────────────────────────────────
 app.get('/api/mobile-quizzes', async (req, res) => {
   const { userId } = req.query;
@@ -202,6 +234,14 @@ app.delete('/api/mobile-quizzes', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ── App Updates ────────────────────────────────────────────────────────────
+app.get('/api/version-config', (req, res) => {
+  res.json({
+    latestVersion: process.env.APP_LATEST_VERSION || "1.0.0",
+    minimumVersion: process.env.APP_MINIMUM_VERSION || "1.0.0"
+  });
 });
 
 // Start server locally

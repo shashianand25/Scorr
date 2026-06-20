@@ -14,7 +14,7 @@ import { Platform } from "react-native";
 
 const BASE_URL =
   process.env.EXPO_PUBLIC_API_URL ?? 
-  (Platform.OS === "android" ? "http://10.0.2.2:3000" : "http://localhost:3000");
+  (Platform.OS === "android" ? "http://10.0.2.2:3001" : "http://localhost:3001");
 
 // ── Helpers ────────────────────────────────────────────────────────────
 async function apiFetch<T>(
@@ -24,6 +24,7 @@ async function apiFetch<T>(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 8000); // 8-second timeout
 
+  let responseClone: Response | null = null;
   try {
     const res = await fetch(`${BASE_URL}${path}`, {
       headers: { "Content-Type": "application/json" },
@@ -32,7 +33,16 @@ async function apiFetch<T>(
     });
     clearTimeout(timeoutId);
     
-    const json = await res.json();
+    responseClone = res.clone();
+    let json: any;
+    try {
+      json = await res.json();
+    } catch (parseErr: any) {
+      const text = await responseClone.text();
+      console.warn(`[API Parse Error] Failed to parse JSON from ${path}. Status: ${res.status}. Response text (first 800 chars):`, text.substring(0, 800));
+      return { data: null, error: `JSON Parse error from server (Status ${res.status}): ${parseErr.message}` };
+    }
+
     if (!res.ok) {
       return { data: null, error: json?.error ?? `HTTP ${res.status}` };
     }
@@ -161,82 +171,51 @@ export async function fetchQuizHistory(
   return { history: data?.history ?? [], error };
 }
 
-// ── Flashcard Decks ────────────────────────────────────────────────────
+// ── Battle History ───────────────────────────────────────────────────────
 
-export interface NeonFlashcardCard {
+export interface BattleHistoryEvent {
   id: string;
-  front: string;
-  back: string;
-  order: number;
+  user_id: string;
+  room_code: string;
+  quiz_title: string;
+  my_score: number;
+  opponent_score: number;
+  opponent_name: string;
+  won: boolean;
+  my_time?: number;
+  opponent_time?: number;
+  created_at: string;
 }
 
-export interface NeonFlashcardDeck {
-  id: string;
-  title: string;
-  cardType: string;
-  updatedAt: string;
-  createdAt: string;
-  cards: NeonFlashcardCard[];
-}
-
-/**
- * Fetches all flashcard decks for the logged-in user from Neon.
- */
-export async function fetchFlashcardDecks(
-  userId: string
-): Promise<{ decks: NeonFlashcardDeck[]; error: string | null }> {
-  const { data, error } = await apiFetch<{ decks: NeonFlashcardDeck[] }>(
-    `/api/flashcard-decks?userId=${encodeURIComponent(userId)}`
-  );
-  return { decks: data?.decks ?? [], error };
-}
-
-/**
- * Creates a new flashcard deck in Neon.
- * Returns the deck with its server-assigned id.
- */
-export async function createFlashcardDeck(params: {
+export async function saveBattleHistory(params: {
   userId: string;
-  title: string;
-  cardType: string;
-  cards: { front: string; back: string }[];
-}): Promise<{ deck: NeonFlashcardDeck | null; error: string | null }> {
-  const { data, error } = await apiFetch<{ deck: NeonFlashcardDeck }>(
-    "/api/flashcard-decks",
-    { method: "POST", body: JSON.stringify(params) }
+  roomCode: string;
+  quizTitle: string;
+  myScore: number;
+  opponentScore: number;
+  opponentName: string;
+  won: boolean;
+  myTime?: number;
+  opponentTime?: number;
+}): Promise<{ eventId: string | null; error: string | null }> {
+  const { data, error } = await apiFetch<{ eventId: string }>(
+    "/api/battle-history",
+    {
+      method: "POST",
+      body: JSON.stringify(params),
+    }
   );
-  return { deck: data?.deck ?? null, error };
+  return { eventId: data?.eventId ?? null, error };
 }
 
-/**
- * Updates an existing deck in Neon (replaces cards wholesale).
- */
-export async function updateFlashcardDeck(params: {
-  userId: string;
-  deckId: string;
-  title?: string;
-  cardType?: string;
-  cards?: { front: string; back: string }[];
-}): Promise<{ deck: NeonFlashcardDeck | null; error: string | null }> {
-  const { data, error } = await apiFetch<{ deck: NeonFlashcardDeck }>(
-    "/api/flashcard-decks",
-    { method: "PUT", body: JSON.stringify(params) }
-  );
-  return { deck: data?.deck ?? null, error };
-}
-
-/**
- * Permanently deletes a deck from Neon.
- */
-export async function deleteFlashcardDeck(
+export async function fetchBattleHistory(
   userId: string,
-  deckId: string
-): Promise<{ error: string | null }> {
-  const { error } = await apiFetch<{ ok: boolean }>(
-    `/api/flashcard-decks?userId=${encodeURIComponent(userId)}&deckId=${encodeURIComponent(deckId)}`,
-    { method: "DELETE" }
+  limit = 50
+): Promise<{ history: BattleHistoryEvent[]; error: string | null }> {
+  const { data, error } = await apiFetch<{ history: BattleHistoryEvent[] }>(
+    `/api/battle-history?userId=${encodeURIComponent(userId)}&limit=${limit}`
   );
-  return { error };
+  return { history: data?.history ?? [], error };
 }
 
 // ── Mobile Quizzes ─────────────────────────────────────────────────────
@@ -319,3 +298,17 @@ export async function deleteMobileQuiz(
   return { error };
 }
 
+// ── App Updates ────────────────────────────────────────────────────────
+
+export interface VersionConfig {
+  latestVersion: string;
+  minimumVersion: string;
+}
+
+/**
+ * Fetches the version configuration to determine if an update is required.
+ */
+export async function fetchVersionConfig(): Promise<{ config: VersionConfig | null; error: string | null }> {
+  const { data, error } = await apiFetch<VersionConfig>("/api/version-config");
+  return { config: data ?? null, error };
+}

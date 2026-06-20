@@ -2,9 +2,12 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
 import { useColorScheme, Platform } from 'react-native';
 import { Stack } from 'expo-router';
 import { useEffect } from 'react';
+import { useAppUpdater } from '../hooks/useAppUpdater';
+import ForceUpdateScreen from '../components/ForceUpdateScreen';
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  const { forceUpdateRequired } = useAppUpdater();
 
   useEffect(() => {
     if (Platform.OS === 'web') {
@@ -14,6 +17,10 @@ export default function RootLayout() {
       document.head.appendChild(link);
     }
   }, []);
+
+  if (forceUpdateRequired) {
+    return <ForceUpdateScreen />;
+  }
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>

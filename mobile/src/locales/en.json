@@ -1,7 +1,6 @@
 {
   "tabs": {
     "home": "Home",
-    "flashcards": "Flashcards",
     "create": "Create",
     "statistics": "Statistics",
     "profile": "Profile"
@@ -50,7 +49,7 @@
     "guide": "How to format quiz (.txt)",
     "guide_sub": "Formatting guide",
     "feedback": "Feedback",
-    "feedback_sub": "Help improve QuizForge",
+    "feedback_sub": "Help improve Scorr",
     "about": "About",
     "about_sub": "Version 1.0.0",
     "logout": "Log out",
@@ -65,37 +64,15 @@
     "missed_questions": "missed questions",
     "delete_attempt": "Delete Attempt"
   },
-  "flashcards": {
-    "fc_title": "Flashcards",
-    "library": "// your library",
-    "search": "Search decks...",
-    "all_decks": "All Decks",
-    "due": "due",
-    "progress": "In Progress",
-    "mastered": "Mastered",
-    "your_decks": "Your decks",
-    "deck_singular": "deck",
-    "deck_plural": "decks",
-    "empty_create": "Click + to create your first deck",
-    "empty_search": "No decks match your search",
-    "term": "term",
-    "terms": "terms"
-  },
   "create_pick": {
     "pick_title": "Create",
     "pick_subtitle": "What would you like to make?",
     "quiz_title": "Quiz",
     "quiz_sub": "Multiple-choice questions",
-    "fc_title": "Flashcards",
-    "fc_sub": "Flip-card study decks",
     "tag_timed": "Timed mode",
     "tag_shuffle": "Shuffle",
     "tag_wrong": "Wrong review",
-    "tag_multi": "Multi-select",
-    "tag_frontback": "Front & back",
-    "tag_flip": "Flip to reveal",
-    "tag_deck": "Deck mode",
-    "tag_quick": "Quick recall"
+    "tag_multi": "Multi-select"
   },
   "dashboard": {
     "accuracy": "ACCURACY OVER ALL ATTEMPTS",
@@ -107,7 +84,6 @@
     "completion": "Completion (Mastered)",
     "stats_quizzes": "QUIZZES",
     "stats_questions": "QUESTIONS",
-    "stats_decks": "DECKS",
     "starred": "Starred",
     "starred_title": "Starred Questions",
     "saved": "saved"
@@ -133,7 +109,6 @@
   },
   "create_menu": {
     "import_txt": "Import quiz from file (.txt)",
-    "flashcard_set": "Flashcard set",
     "create_manual": "Create quiz manually"
   }
 }

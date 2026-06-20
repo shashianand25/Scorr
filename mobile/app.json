@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Recall",
+    "name": "Scorr",
     "slug": "quizforge",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -31,13 +31,15 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#141625"
+          "backgroundColor": "#141625",
+          "image": "./assets/images/splash-icon.png"
         }
       ],
-      "expo-video",
+
       "expo-audio",
       "@react-native-google-signin/google-signin",
-      "expo-localization"
+      "expo-localization",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,

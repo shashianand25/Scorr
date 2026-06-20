@@ -17,19 +17,21 @@ import {
   ActivityIndicator,
   PanResponder,
   KeyboardAvoidingView,
+  Keyboard,
   BackHandler,
   FlatList,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { Feather, Ionicons, FontAwesome6 } from "@expo/vector-icons";
-import { useVideoPlayer, VideoView } from "expo-video";
-import { useEvent } from "expo";
+import { Feather, Ionicons, FontAwesome6, MaterialCommunityIcons } from "@expo/vector-icons";
+import { GestureHandlerRootView, FlingGestureHandler, Directions, State } from "react-native-gesture-handler";
+import YoutubeIframe from "react-native-youtube-iframe";
 import { useAudioPlayer, setAudioModeAsync } from "expo-audio";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import { LinearGradient } from "expo-linear-gradient";
-import { signInWithGoogle, signInWithEmail, signUpWithEmail, signOutUser, onAuth, deleteAccount, type User } from "../lib/firebase";
-import { syncUserToNeon, createFlashcardDeck, updateFlashcardDeck, deleteFlashcardDeck, fetchFlashcardDecks, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz, deleteUserFromNeon, sendFeedback } from "../lib/api";
+import { signInWithGoogle, signInWithEmail, signUpWithEmail, signOutUser, onAuth, deleteAccount, resetPassword, type User } from "../lib/firebase";
+import { syncUserToNeon, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz, deleteUserFromNeon, sendFeedback, saveBattleHistory, fetchBattleHistory } from "../lib/api";
+import { createBattleRoom, joinBattleRoom, updateBattleScore, finishBattle, markPlayerFinished, listenToBattleRoom, getBattleRoom, type BattleRoom } from "../lib/multiplayer";
 // expo-speech requires a native rebuild — guarded so app doesn't crash before rebuild
 const Speech = (() => {
   try {
@@ -39,11 +41,46 @@ const Speech = (() => {
   }
 })();
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Notifications from "expo-notifications";
+// Serialize questionsList → compact QST text (? prompt \n + correct \n - wrong)
+// ~30KB for 100 questions — safe for Neon via HTTP
+const questionsToSourceText = (title: string, category: string, qs: any[]): string => {
+  if (!Array.isArray(qs) || qs.length === 0) return '';
+  const header = `@title: ${title}\n@category: ${category}\n\n`;
+  const body = qs.map((q: any) => {
+    // Support both parseQstText format (prompt/answers) and AI format (question/options/answer)
+    if (q.prompt && Array.isArray(q.answers)) {
+      const opts = q.answers.map((a: any) => `${a.isCorrect ? '+' : '-'} ${a.text}`).join('\n');
+      return `? ${q.prompt}\n${opts}`;
+    }
+    if (q.question && q.options) {
+      const opts = Object.entries(q.options).map(([k, v]) =>
+        `${k === q.answer ? '+' : '-'} ${v}`
+      ).join('\n');
+      return `? ${q.question}\n${opts}`;
+    }
+    return '';
+  }).filter(Boolean).join('\n\n');
+  return header + body;
+};
 import { useTranslation } from "react-i18next";
 import "../lib/i18n";
 
+// ── Flashcard API stubs (feature removed — dead code references kept for safety) ──
+const createFlashcardDeck = async (..._args: any[]) => ({ deck: null, error: null });
+const updateFlashcardDeck = async (..._args: any[]) => ({ deck: null, error: null });
+const deleteFlashcardDeck = async (..._args: any[]) => ({ error: null });
+
 // Get screen width/height for layout sizing
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+const KeyboardWrapper = Platform.OS === "ios" ? KeyboardAvoidingView : View;
+const handleModalCloseRequest = (closeAction: () => void) => {
+  if (Keyboard.isVisible()) {
+    Keyboard.dismiss();
+  } else {
+    closeAction();
+  }
+};
 
 const renderFormattedText = (text: string, baseStyle?: any) => {
   if (!text) return null;
@@ -359,6 +396,31 @@ function getCategoryIconDetails(categoryStr: string) {
   };
 }
 
+
+// ── Sample quiz — injected once on first launch ──────────────────────────
+const SAMPLE_QUIZ = {
+  id: "sample_quiz",
+  isSample: true,
+  title: "General Knowledge — Sample Quiz",
+  category: "General",
+  questions: 5,
+  attempts: [] as any[],
+  wrongQuestions: [] as any[],
+  uniqueCorrectIds: [] as string[],
+  questionsList: [
+    { id: "sq1", prompt: "What is the capital city of Japan?",
+      answers: [{ id: "sq1a", text: "Beijing", isCorrect: false }, { id: "sq1b", text: "Seoul", isCorrect: false }, { id: "sq1c", text: "Tokyo", isCorrect: true }, { id: "sq1d", text: "Bangkok", isCorrect: false }] },
+    { id: "sq2", prompt: "Which planet is known as the Red Planet?",
+      answers: [{ id: "sq2a", text: "Venus", isCorrect: false }, { id: "sq2b", text: "Mars", isCorrect: true }, { id: "sq2c", text: "Jupiter", isCorrect: false }, { id: "sq2d", text: "Saturn", isCorrect: false }] },
+    { id: "sq3", prompt: "How many sides does a hexagon have?",
+      answers: [{ id: "sq3a", text: "5", isCorrect: false }, { id: "sq3b", text: "7", isCorrect: false }, { id: "sq3c", text: "8", isCorrect: false }, { id: "sq3d", text: "6", isCorrect: true }] },
+    { id: "sq4", prompt: "Who painted the Mona Lisa?",
+      answers: [{ id: "sq4a", text: "Michelangelo", isCorrect: false }, { id: "sq4b", text: "Leonardo da Vinci", isCorrect: true }, { id: "sq4c", text: "Raphael", isCorrect: false }, { id: "sq4d", text: "Vincent van Gogh", isCorrect: false }] },
+    { id: "sq5", prompt: "What is the chemical symbol for water?",
+      answers: [{ id: "sq5a", text: "O2", isCorrect: false }, { id: "sq5b", text: "HO", isCorrect: false }, { id: "sq5c", text: "H2O", isCorrect: true }, { id: "sq5d", text: "CO2", isCorrect: false }] },
+  ],
+};
+
 function renderCategoryAvatar(category: string, settingsDarkMode: boolean) {
   const details = getCategoryIconDetails(category);
   
@@ -392,20 +454,53 @@ function renderCategoryAvatar(category: string, settingsDarkMode: boolean) {
   );
 }
 
+const BattleTimer = React.memo(({ startTime, settingsDarkMode }: { startTime: number, settingsDarkMode: boolean }) => {
+  const [elapsed, setElapsed] = useState(Date.now() - startTime);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setElapsed(Date.now() - startTime);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [startTime]);
+
+  const totalSecs = Math.floor(elapsed / 1000);
+  const m = Math.floor(totalSecs / 60);
+  const s = totalSecs % 60;
+  const timeString = `${m}:${s < 10 ? "0" : ""}${s}`;
+
+  return (
+    <Text style={{ fontSize: 10, fontWeight: "800", color: settingsDarkMode ? "#52525b" : "#94a3b8", letterSpacing: 1 }}>
+      ⏱️ {timeString}
+    </Text>
+  );
+});
+
 export default function HomeScreen() {
   const { t, i18n } = useTranslation();
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [languageSearch, setLanguageSearch] = useState("");
   const [savedAppLanguage, setSavedAppLanguage] = useState<string | null>(null);
 
+  // ── Unified global storage key ────────────────
+  const storageKey = (type: "quizzes") =>
+    `quizforge_${type}_global`;
+
+  const [quizzes, setQuizzes] = useState<any[]>([]);
+  const [flashcardDecks, setFlashcardDecks] = useState<any[]>([]);
+  const [flashcardFilter, setFlashcardFilter] = useState<"all"|"due"|"progress"|"mastered">("all");
+  const [showFlashcardOptions, setShowFlashcardOptions] = useState<any>(null);
+  const [dataLoaded, setDataLoaded] = useState(false);
+
+  // Track which uid slot is currently loaded so we know when to switch
+  const loadedUidRef = React.useRef<string | null | undefined>(undefined); // undefined = not loaded yet
+  const quizzesRef = React.useRef<any[]>([]);
+
   useEffect(() => {
     AsyncStorage.getItem("user-language").then(setSavedAppLanguage);
   }, []);
   const insets = useSafeAreaInsets();
-  const localVideoPlayer = useVideoPlayer(require("../../assets/videos/tutorial.mp4"), (player) => {
-    player.loop = false;
-  });
-  const { isPlaying: isVideoPlaying } = useEvent(localVideoPlayer, 'playingChange', { isPlaying: localVideoPlayer.playing });
+
 
   const correctPlayer = useAudioPlayer(require("../../assets/sounds/correct.mp3"));
   const wrongPlayer = useAudioPlayer(require("../../assets/sounds/wrong.mp3"));
@@ -424,7 +519,7 @@ export default function HomeScreen() {
 
   const playWrongSound = () => {
     try {
-      wrongPlayer.volume = 0.15; // Subtle wrong-answer buzzer — quiet and non-distracting
+      wrongPlayer.volume = 0.3; // Subtle wrong-answer buzzer — quiet and non-distracting
       wrongPlayer.seekTo(0);
       wrongPlayer.play();
     } catch (error) {
@@ -451,6 +546,8 @@ export default function HomeScreen() {
     }
   };
   const [showLanding, setShowLanding] = useState(false);
+  const [battlePopup, setBattlePopup] = useState<{myScore: number, opponentScore: number, opponentName: string, won: boolean} | null>(null);
+  const battleConfettiFiredRef = useRef(false);
 
   // ── Suppress browser native blue focus ring globally on web ──
   if (Platform.OS === "web" && typeof document !== "undefined") {
@@ -466,49 +563,10 @@ export default function HomeScreen() {
   // ── Firebase auth state listener — handles login, logout, account switch ──
   useEffect(() => {
     const unsub = onAuth(async (user) => {
-      const newUid = user?.uid ?? null;
-      const prevUid = loadedUidRef.current; // undefined means app just started
-
-      // Nothing changed (same user still logged in) — skip
-      if (prevUid !== undefined && prevUid === newUid) {
-        setFirebaseUser(user);
-        return;
-      }
-
-      // ── Save the outgoing user's data before switching ──────────────────
-      if (prevUid !== undefined) {
-        try {
-          await Promise.all([
-            AsyncStorage.setItem(storageKey("quizzes", prevUid), JSON.stringify(quizzesRef.current)),
-            AsyncStorage.setItem(storageKey("decks", prevUid), JSON.stringify(decksRef.current)),
-          ]);
-        } catch (e) { console.warn("[Persist] save-before-switch failed:", e); }
-      }
-
       setFirebaseUser(user);
 
       if (user) {
-        // ── Switching to a logged-in account ─────────────────────────────
-        let localQuizzesToSync: any[] = [];
-        try {
-          const [qRaw, dRaw, sRaw] = await Promise.all([
-            AsyncStorage.getItem(storageKey("quizzes", newUid)),
-            AsyncStorage.getItem(storageKey("decks", newUid)),
-            AsyncStorage.getItem(`quizforge_starred_${newUid}`),
-          ]);
-          localQuizzesToSync = qRaw ? JSON.parse(qRaw) : [];
-          setQuizzes(localQuizzesToSync);
-          setFlashcardDecks(dRaw ? JSON.parse(dRaw) : []);
-          if (sRaw) setStarredQuestions(new Set(JSON.parse(sRaw)));
-        } catch (e) { console.warn("[Persist] user load failed:", e); }
-        loadedUidRef.current = newUid;
-        setDataLoaded(true);
-
-        // 2. Start Sync Loading State (only if explicitly logging in/switching, not on startup)
-        if (prevUid !== undefined) {
-          setIsSyncingData(true);
-        }
-
+        setIsSyncingData(true);
         try {
           // 3. Sync user profile to Neon FIRST to guarantee user exists
           const { error: syncErr } = await syncUserToNeon({
@@ -523,67 +581,74 @@ export default function HomeScreen() {
             neonUserReadyRef.current = false;
           } else {
             neonUserReadyRef.current = true;
-            // 4. Fetch flashcard decks and quizzes concurrently
-            const [decksRes, quizzesRes] = await Promise.all([
-              fetchFlashcardDecks(user.uid),
-              fetchMobileQuizzes(user.uid)
-            ]);
+            // 4. Fetch quizzes from Neon
+            const quizzesRes = await fetchMobileQuizzes(user.uid);
 
-            if (decksRes.error || quizzesRes.error) {
-              console.warn("[NeonSync] fetch failed:", decksRes.error || quizzesRes.error);
-              // Alert.alert("Sync Error", "Some cloud data took too long to load. Using local data.");
-            }
-
-            if (!decksRes.error && decksRes.decks.length > 0) {
-              const normalizedDecks = decksRes.decks.map((d) => ({
-                id: d.id,
-                neonId: d.id,
-                title: d.title,
-                category: "General",
-                cardType: d.cardType,
-                type: "flashcard",
-                cards: d.cards.map((c: any) => ({ front: c.front, back: c.back })),
-              }));
-              setFlashcardDecks((local: any[]) => {
-                const localOnly = local.filter((l) => !normalizedDecks.find((n) => n.id === l.id));
-                return [...normalizedDecks, ...localOnly];
-              });
+            if (quizzesRes.error) {
+              console.warn("[NeonSync] fetch failed:", quizzesRes.error);
             }
 
             if (!quizzesRes.error && quizzesRes.quizzes.length > 0) {
-              const normalizedQuizzes = quizzesRes.quizzes.map((q) => ({
-                id: q.id,
-                neonId: q.id,
-                title: q.title,
-                questions: q.questionCount,
-                category: q.category,
-                time: "Synced",
-                sourceText: q.sourceText,
-                questionsList: (() => {
-                  try {
-                    return parseQstText(q.sourceText).questions;
-                  } catch { return []; }
-                })(),
-                attempts: q.attempts ?? [],
-                wrongQuestions: q.wrongQuestions ?? [],
-                uniqueCorrectIds: q.uniqueCorrectIds ?? [],
-              }));
+              const normalizedQuizzes = quizzesRes.quizzes.map((q) => {
+                // Find the local copy so we can preserve its questionsList
+                const localCopy = quizzesRef.current.find((l: any) => l.id === q.id || l.neonId === q.id);
+                return {
+                  id: q.id,
+                  neonId: q.id,
+                  title: q.title,
+                  questions: q.questionCount,
+                  category: q.category,
+                  time: "Synced",
+                  // Parse questionsList: new quizzes store it as JSON in sourceText
+                  questionsList: (() => {
+                    // 1. Prefer local copy (always most up to date)
+                    if (localCopy?.questionsList?.length > 0) return localCopy.questionsList;
+                    // 2. Try new format: sourceText is JSON array of questions
+                    try {
+                      const parsed = JSON.parse(q.sourceText);
+                      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+                    } catch {}
+                    // 3. Legacy fallback: reconstruct from raw sourceText
+                    try { return parseQstText(q.sourceText).questions; } catch { return []; }
+                  })(),
+                  attempts: (() => {
+                    const dbAttempts = q.attempts ?? [];
+                    const locAttempts = localCopy?.attempts ?? [];
+                    const attemptMap = new Map();
+                    for (const a of dbAttempts) attemptMap.set(a.id, a);
+                    for (const a of locAttempts) attemptMap.set(a.id, a);
+                    return Array.from(attemptMap.values()).sort((a, b) => Number(b.id) - Number(a.id));
+                  })(),
+                  uniqueCorrectIds: (() => {
+                    return Array.from(new Set([...(q.uniqueCorrectIds ?? []), ...(localCopy?.uniqueCorrectIds ?? [])]));
+                  })(),
+                  wrongQuestions: (() => {
+                    const wrongMap = new Map();
+                    for (const w of (q.wrongQuestions ?? [])) wrongMap.set(w.id || w, w);
+                    for (const w of (localCopy?.wrongQuestions ?? [])) wrongMap.set(w.id || w, w);
+                    
+                    const combinedCorrect = new Set([...(q.uniqueCorrectIds ?? []), ...(localCopy?.uniqueCorrectIds ?? [])]);
+                    return Array.from(wrongMap.values()).filter(w => !combinedCorrect.has(w.id || w));
+                  })(),
+                };
+              });
               setQuizzes((local: any[]) => {
-                const localOnly = local.filter((l) => !normalizedQuizzes.find((n) => n.id === l.id));
-                return [...normalizedQuizzes, ...localOnly];
+                // Exclude sample_quiz — it lives in its own sampleQuiz state, not the main quizzes array
+                const cleanLocal = local.filter((l) => l.id !== "sample_quiz" && !normalizedQuizzes.find((n) => n.id === l.id));
+                return [...normalizedQuizzes, ...cleanLocal];
               });
 
-              // Backfill local-only quizzes that aren't in Neon yet
+              // Backfill local-only quizzes that aren't in Neon yet (exclude sample_quiz — it must never be uploaded)
               const neonIds = new Set(normalizedQuizzes.map((q) => q.id));
-              const unsynced = localQuizzesToSync.filter((q) => !neonIds.has(q.id) && !q.neonId);
+              const unsynced = quizzesRef.current.filter((q) => !q.isSample && q.id !== "sample_quiz" && !neonIds.has(q.id) && !q.neonId);
               console.log(`[NeonSync] Neon has ${normalizedQuizzes.length} quizzes, ${unsynced.length} local unsynced`);
               for (const q of unsynced) {
                 createMobileQuiz({
                   userId: user.uid,
                   title: q.title,
                   category: q.category || "General",
-                  questionCount: q.questions || 0,
-                  sourceText: q.sourceText || "",
+                  questionCount: q.questionsList?.length ?? q.questions ?? 0,
+                  sourceText: questionsToSourceText(q.title, q.category || 'General', q.questionsList ?? []),
                   attempts: q.attempts || [],
                   wrongQuestions: q.wrongQuestions || [],
                   uniqueCorrectIds: q.uniqueCorrectIds || [],
@@ -598,15 +663,15 @@ export default function HomeScreen() {
               }
             } else if (!quizzesRes.error) {
               // Neon is empty — upload all local quizzes
-              console.log(`[NeonSync] Neon empty, uploading ${localQuizzesToSync.length} local quizzes`);
-              for (const q of localQuizzesToSync) {
-                if (q.neonId) continue; // already synced somehow
+              console.log(`[NeonSync] Neon empty, uploading ${quizzesRef.current.length} local quizzes`);
+              for (const q of quizzesRef.current) {
+                if (q.neonId || q.isSample || q.id === "sample_quiz") continue; // already synced somehow or is sample
                 createMobileQuiz({
                   userId: user.uid,
                   title: q.title,
                   category: q.category || "General",
-                  questionCount: q.questions || 0,
-                  sourceText: q.sourceText || "",
+                  questionCount: q.questionsList?.length ?? q.questions ?? 0,
+                  sourceText: questionsToSourceText(q.title, q.category || 'General', q.questionsList ?? []),
                   attempts: q.attempts || [],
                   wrongQuestions: q.wrongQuestions || [],
                   uniqueCorrectIds: q.uniqueCorrectIds || [],
@@ -621,6 +686,45 @@ export default function HomeScreen() {
                 }).catch((err) => console.warn("[NeonSync] upload error:", err));
               }
             }
+
+            // 5. Fetch battle history from Neon and merge
+            const battleHistoryRes = await fetchBattleHistory(user.uid);
+            if (!battleHistoryRes.error && battleHistoryRes.history.length > 0) {
+              AsyncStorage.getItem("battle_history").then(val => {
+                let localHistory = [];
+                try { if (val) localHistory = JSON.parse(val); } catch {}
+                
+                // Merge based on quiz_title, scores, and date roughly (using date or just avoiding exact duplicates)
+                // The easiest way is to use a Map keyed by `date` + `quizTitle`
+                const mergedMap = new Map();
+                localHistory.forEach((h: any) => mergedMap.set(`${h.date}_${h.quizTitle}`, h));
+                
+                // Add server history (map DB snake_case back to camelCase)
+                battleHistoryRes.history.forEach((h: any) => {
+                  const parsedDate = new Date(h.created_at).getTime();
+                  const key = `${parsedDate}_${h.quiz_title}`;
+                  if (!mergedMap.has(key)) {
+                    mergedMap.set(key, {
+                      date: parsedDate,
+                      quizTitle: h.quiz_title,
+                      myScore: h.my_score,
+                      opponentScore: h.opponent_score,
+                      opponentName: h.opponent_name,
+                      won: h.won,
+                      myTime: h.my_time,
+                      opponentTime: h.opponent_time
+                    });
+                  }
+                });
+                
+                const mergedArray = Array.from(mergedMap.values())
+                  .sort((a, b) => a.date - b.date)
+                  .slice(-50);
+                
+                setBattleHistory(mergedArray);
+                AsyncStorage.setItem("battle_history", JSON.stringify(mergedArray));
+              });
+            }
           }
         } catch (e) {
           console.warn("[NeonSync] sync pipeline failed:", e);
@@ -628,32 +732,57 @@ export default function HomeScreen() {
           setIsSyncingData(false);
         }
       } else {
-        // ── Signed out — switch back to the guest slot ───────────────────
         neonUserReadyRef.current = false;
-        try {
-          const [qRaw, dRaw, sRaw] = await Promise.all([
-            AsyncStorage.getItem(storageKey("quizzes", null)),
-            AsyncStorage.getItem(storageKey("decks", null)),
-            AsyncStorage.getItem(`quizforge_starred_guest`),
-          ]);
-          setQuizzes(qRaw ? JSON.parse(qRaw) : []);
-          setFlashcardDecks(dRaw ? JSON.parse(dRaw) : []);
-          if (sRaw) setStarredQuestions(new Set(JSON.parse(sRaw)));
-        } catch (e) { console.warn("[Persist] guest load failed:", e); }
-        loadedUidRef.current = null;
-        setDataLoaded(true);
       }
     });
     return unsub;
   }, []);
 
-  // ── Show full auth screen once after splash (first-time only) ──
+  // ── Pre-load quizzes instantly before Firebase initializes (offline-first) ──
+  // This runs in ~50ms. Firebase fires 2-3s later and silently updates if needed.
+  useEffect(() => {
+    (async () => {
+      try {
+        const [qRaw, sRaw] = await Promise.all([
+          AsyncStorage.getItem(storageKey("quizzes")),
+          AsyncStorage.getItem(`quizforge_starred_global`),
+        ]);
+        if (qRaw) {
+          const parsed = JSON.parse(qRaw);
+          setQuizzes(prev => prev.length === 0 ? parsed : prev);
+        }
+        if (sRaw) {
+          setStarredQuestions(new Set(JSON.parse(sRaw)));
+        }
+        setDataLoaded(true);
+      } catch {
+        setDataLoaded(true);
+      }
+    })();
+  }, []);
+
+  // ── Inject sample quiz on very first launch ───────────────────────────────
+  useEffect(() => {
+    if (!dataLoaded) return;
+    (async () => {
+      try {
+        const already = await AsyncStorage.getItem("quizforge_sample_injected");
+        if (already) return;
+        // The sample quiz is always shown via the sampleQuiz state — don't add it to the
+        // main quizzes array, otherwise it appears twice in combinedQuizzes.
+        await AsyncStorage.setItem("quizforge_sample_injected", "1");
+      } catch (e) {
+        console.warn("[Sample] inject failed:", e);
+      }
+    })();
+  }, [dataLoaded]);
+
   useEffect(() => {
     if (showLanding) return; // still on splash
     AsyncStorage.getItem("quizforge_has_seen_auth").then((val) => {
       if (!val) {
         // First ever launch — show full auth screen
-        setShowAuthScreen(true);
+        openAuthScreen();
         AsyncStorage.setItem("quizforge_has_seen_auth", "1");
       }
     });
@@ -665,15 +794,137 @@ export default function HomeScreen() {
         if (key === "pref_showAnswerOnSubmit" && val !== null) setShowAnswerOnSubmitRaw(val === "1");
       });
     });
+    // Load battle history and pending battles
+    AsyncStorage.multiGet(["battle_history", "pending_battles"]).then(async ([[_key1, histVal], [_key2, pendVal]]) => {
+      let loadedHistory = [];
+      if (histVal) {
+        try { 
+          loadedHistory = JSON.parse(histVal); 
+          setBattleHistory(loadedHistory); 
+        } catch {}
+      }
+
+      if (pendVal) {
+        try {
+          let pending = JSON.parse(pendVal) as {code: string, isHost: boolean}[];
+          let updatedPending = [...pending];
+          let historyUpdated = false;
+
+          for (const pb of pending) {
+            const room = await getBattleRoom(pb.code);
+            if (!room) {
+              updatedPending = updatedPending.filter(p => p.code !== pb.code);
+              continue;
+            }
+
+            if (room.hostFinished && room.guestFinished) {
+              const myScore = pb.isHost ? room.hostScore : room.guestScore;
+              const oppScore = pb.isHost ? room.guestScore : room.hostScore;
+              const oppName = pb.isHost ? (room.guestName || "Opponent") : room.hostName;
+              const myTime = pb.isHost ? (room.hostTime ?? Infinity) : (room.guestTime ?? Infinity);
+              const oppTime = pb.isHost ? (room.guestTime ?? Infinity) : (room.hostTime ?? Infinity);
+              let effectiveWin = false;
+              if (myScore > oppScore) effectiveWin = true;
+              else if (myScore === oppScore) {
+                effectiveWin = myTime < oppTime;
+              }
+
+              const entry = { date: Date.now(), quizTitle: room.quizTitle || "", myScore, opponentScore: oppScore, opponentName: oppName, won: effectiveWin, myTime: myTime !== Infinity ? myTime : undefined, opponentTime: oppTime !== Infinity ? oppTime : undefined };
+              loadedHistory = [...loadedHistory, entry].slice(-50);
+              historyUpdated = true;
+              updatedPending = updatedPending.filter(p => p.code !== pb.code);
+            } else {
+              const unsubscribe = listenToBattleRoom(pb.code, (data) => {
+                if (data.hostFinished && data.guestFinished) {
+                  const myScore = pb.isHost ? data.hostScore : data.guestScore;
+                  const oppScore = pb.isHost ? data.guestScore : data.hostScore;
+                  const oppName = pb.isHost ? (data.guestName || "Opponent") : data.hostName;
+                  const myTime = pb.isHost ? (data.hostTime ?? Infinity) : (data.guestTime ?? Infinity);
+                  const oppTime = pb.isHost ? (data.guestTime ?? Infinity) : (data.hostTime ?? Infinity);
+                  let effectiveWin = false;
+                  if (myScore > oppScore) effectiveWin = true;
+                  else if (myScore === oppScore) {
+                    effectiveWin = myTime < oppTime;
+                  }
+                  
+                  setBattleHistory(prev => {
+                    const next = [...prev, { date: Date.now(), quizTitle: data.quizTitle || "", myScore, opponentScore: oppScore, opponentName: oppName, won: effectiveWin, myTime: myTime !== Infinity ? myTime : undefined, opponentTime: oppTime !== Infinity ? oppTime : undefined }].slice(-50);
+                    AsyncStorage.setItem("battle_history", JSON.stringify(next));
+                    return next;
+                  });
+
+                  setBattlePopup({ myScore, opponentScore: oppScore, opponentName: oppName, won: effectiveWin });
+                  if (effectiveWin) triggerConfettiBurst();
+
+                  AsyncStorage.getItem("pending_battles").then(val => {
+                    if (val) {
+                      try {
+                        const currentPending = JSON.parse(val);
+                        const newPending = currentPending.filter((p: any) => p.code !== pb.code);
+                        AsyncStorage.setItem("pending_battles", JSON.stringify(newPending));
+                      } catch {}
+                    }
+                  });
+
+                  unsubscribe();
+                }
+              });
+            }
+          }
+
+          if (historyUpdated) {
+            setBattleHistory(loadedHistory);
+            AsyncStorage.setItem("battle_history", JSON.stringify(loadedHistory));
+          }
+          if (updatedPending.length !== pending.length) {
+            AsyncStorage.setItem("pending_battles", JSON.stringify(updatedPending));
+          }
+        } catch {}
+      }
+    });
   }, [showLanding]);
   // ─────────────────────────────────────────────────────────────────
 
-  const [activeTab, setActiveTab] = useState<"home" | "dashboard" | "add" | "flashcards" | "guide" | "menu" | "insights" | "deck-insights">("home");
+
+
+  const [activeTab, setActiveTab] = useState<"home" | "dashboard" | "add" | "guide" | "menu" | "insights" | "battle">("home");
+  const [battleRoomCode, setBattleRoomCode] = useState("");
+  const [battleRoomState, setBattleRoomState] = useState<BattleRoom | null>(null);
+  const [isHost, setIsHost] = useState(false);
+  const [joinCodeInput, setJoinCodeInput] = useState("");
+  const [battleError, setBattleError] = useState("");
+  const [showBattleQuizSelector, setShowBattleQuizSelector] = useState(false);
+  const [showBattleOptions, setShowBattleOptions] = useState(false);
+  const [battleOptionsQuiz, setBattleOptionsQuiz] = useState<any>(null);
+  const [battleShuffleQ, setBattleShuffleQ] = useState(false);
+  const [battleShuffleA, setBattleShuffleA] = useState(false);
+  const [battleRandomCount, setBattleRandomCount] = useState(10);
+  const [battleSelectionMode, setBattleSelectionMode] = useState<"all" | "random" | "range">("all");
+  const [battleRangeStart, setBattleRangeStart] = useState<number>(1);
+  const [battleRangeEnd, setBattleRangeEnd] = useState<number>(5);
+  const [showBattleHistory, setShowBattleHistory] = useState(false);
+  const [battleHistory, setBattleHistory] = useState<Array<{date: number, quizTitle: string, myScore: number, opponentScore: number, opponentName: string, won: boolean, myTime?: number, opponentTime?: number}>>([]);
+  const [battleConnError, setBattleConnError] = useState("");
+  const [battleCreating, setBattleCreating] = useState(false);
+  const [battleTimePerQuestion, setBattleTimePerQuestion] = useState<number | null>(null); // null = no limit
+  const battleUnsubscribeRef = useRef<(() => void) | null>(null);
+  const battleStartedRef = useRef(false);
+  const battleFinishedCalledRef = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      if (battleUnsubscribeRef.current) {
+        battleUnsubscribeRef.current();
+      }
+    };
+  }, []);
+
   const [showAddMenu, setShowAddMenu] = useState<boolean>(false);
   const [showWrongReview, setShowWrongReview] = useState<boolean>(false);
   const [showQuizActions, setShowQuizActions] = useState<any | null>(null);
   const [renamingQuiz, setRenamingQuiz] = useState<any | null>(null);
   const [importErrorDetails, setImportErrorDetails] = useState<{ title: string; message: string; details?: string } | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
   const [deletingQuizConfirm, setDeletingQuizConfirm] = useState<any | null>(null);
   const [renameTitle, setRenameTitle] = useState("");
   // In-app modals (replaces Alert.alert)
@@ -685,7 +936,6 @@ export default function HomeScreen() {
   const [selectedAttemptForModal, setSelectedAttemptForModal] = useState<any | null>(null);
   const [starredQuestions, setStarredQuestions] = useState<Set<string>>(new Set());
   const [homeFilter, setHomeFilter] = useState<"all"|"progress"|"notstarted"|"done">("all");
-  const [flashcardFilter, setFlashcardFilter] = useState<"all"|"due"|"progress"|"mastered">("all");
   const [homeSearch, setHomeSearch] = useState("");
   const [showFeedbackPage, setShowFeedbackPage] = useState(false);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
@@ -721,7 +971,24 @@ export default function HomeScreen() {
   const [shuffleAnswers, setShuffleAnswersRaw] = useState<boolean>(false);
   const [showAnswerOnSubmit, setShowAnswerOnSubmitRaw] = useState<boolean>(true);
   const [quizTimeLimit, setQuizTimeLimit] = useState<number | null>(null);
+  const [timeLimitText, setTimeLimitText] = useState(""); // local text state — avoids re-render flicker while typing
   const [showTimeLimitDropdown, setShowTimeLimitDropdown] = useState(false);
+
+
+  const [sampleDismissed, setSampleDismissed] = useState<boolean>(false);
+  const [sampleQuiz, setSampleQuiz] = useState<any>(SAMPLE_QUIZ);
+
+  // Load sample quiz state
+  useEffect(() => {
+    AsyncStorage.getItem("quizforge_sample_dismissed").then(val => {
+      if (val === "1") setSampleDismissed(true);
+    });
+    AsyncStorage.getItem("quizforge_sample_data").then(val => {
+      if (val) {
+        try { setSampleQuiz(JSON.parse(val)); } catch {}
+      }
+    });
+  }, []);
 
   const setShuffleQuestions = (val: boolean) => {
     setShuffleQuestionsRaw(val);
@@ -738,6 +1005,7 @@ export default function HomeScreen() {
 
   const [activeSession, setActiveSession] = useState<any | null>(null);
   const [sessionTimeLeft, setSessionTimeLeft] = useState<number>(0);
+  const [battleQuestionTimeLeft, setBattleQuestionTimeLeft] = useState<number>(0); // per-question countdown in battle
   const [viewingInsightsQuiz, setViewingInsightsQuiz] = useState<any | null>(null);
   const [viewingInsightsDeck, setViewingInsightsDeck] = useState<any | null>(null);
   const [viewingInsightsQuizFromTab, setViewingInsightsQuizFromTab] = useState<string>("dashboard");
@@ -754,23 +1022,15 @@ export default function HomeScreen() {
     const onBackPress = () => {
       if (activeSession) {
         if (activeSession.isFinished) {
-          // Results page — back goes straight to home, no confirmation needed
-          setActiveSession(null);
+          // Results page — back saves progress and goes straight to home
+          saveAndExitQuizSession();
         } else {
           setShowQuitConfirm(true);
         }
         return true;
       }
-      if (studyingDeck) {
-        setStudyingDeck(null);
-        return true;
-      }
       if (activeTab === "insights") {
         setActiveTab("dashboard");
-        return true;
-      }
-      if (activeTab === "deck-insights") {
-        setActiveTab("flashcards");
         return true;
       }
       if (activeTab === "home") {
@@ -852,12 +1112,50 @@ export default function HomeScreen() {
     setConfettiParticles(newParticles);
   };
 
-  // Trigger celebration when quiz finishes successfully
+  // Trigger celebration when quiz finishes successfully (80%+ score)
   React.useEffect(() => {
     if (activeSession && activeSession.isFinished) {
-      triggerConfettiBurst();
+      const questions = activeSession.questions || [];
+      if (questions.length === 0) return;
+      
+      let correctCount = 0;
+      questions.forEach((q: any) => {
+        const selected = activeSession.answers[q.id] || [];
+        if (selected.length > 0) {
+          const correctIds = q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.id);
+          const isAllCorrect = selected.every((id: string) => correctIds.includes(id)) && selected.length === correctIds.length;
+          if (isAllCorrect) correctCount++;
+        }
+      });
+      
+      const scorePct = Math.round((correctCount / questions.length) * 100);
+      if (scorePct >= 80 && !activeSession.isBattle) {
+        triggerConfettiBurst();
+      }
     }
   }, [activeSession?.isFinished]);
+
+  useEffect(() => {
+    if (activeSession?.isBattle && activeSession.isFinished && battleRoomState?.status === "finished") {
+      if (!battleConfettiFiredRef.current) {
+        battleConfettiFiredRef.current = true;
+        const host = activeSession.isHost;
+        const myScore = host ? (battleRoomState.hostScore ?? 0) : (battleRoomState.guestScore ?? 0);
+        const oppScore = host ? (battleRoomState.guestScore ?? 0) : (battleRoomState.hostScore ?? 0);
+        let effectiveWin = myScore > oppScore;
+        if (myScore === oppScore) {
+           const myTime = host ? (battleRoomState.hostTime ?? Infinity) : (battleRoomState.guestTime ?? Infinity);
+           const oppTime = host ? (battleRoomState.guestTime ?? Infinity) : (battleRoomState.hostTime ?? Infinity);
+           effectiveWin = myTime < oppTime;
+        }
+        if (effectiveWin) {
+          triggerConfettiBurst();
+        }
+      }
+    } else if (!activeSession?.isBattle) {
+      battleConfettiFiredRef.current = false;
+    }
+  }, [activeSession?.isFinished, battleRoomState?.status]);
 
   // Audio configuration to enable play in silent mode
   React.useEffect(() => {
@@ -939,18 +1237,18 @@ export default function HomeScreen() {
         let wrongCount = 0;
         let skippedCount = 0;
         const wrongQsForQuiz: any[] = [];
+        const correctIdsInSession: string[] = [];
 
         questions.forEach((q: any) => {
           const selected = currentSession.answers[q.id] || [];
           if (selected.length === 0) {
             skippedCount++;
-            const correctText = q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.text).join(", ");
-            wrongQsForQuiz.push({ id: q.id, prompt: q.prompt, selected: "Skipped", correct: correctText });
           } else {
             const correctIds = q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.id);
             const isAllCorrect = selected.every((id: string) => correctIds.includes(id)) && selected.length === correctIds.length;
             if (isAllCorrect) {
               correctCount++;
+              correctIdsInSession.push(q.id);
             } else {
               wrongCount++;
               const correctText = q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.text).join(", ");
@@ -960,11 +1258,7 @@ export default function HomeScreen() {
           }
         });
 
-        const answeredCount = correctCount + wrongCount;
-        const scorePct = answeredCount > 0 ? Math.round((correctCount / answeredCount) * 100) : 0;
-        const correctIdsInSession = questions
-          .filter((q: any) => !wrongQsForQuiz.find((wq: any) => wq.id === q.id))
-          .map((q: any) => q.id);
+        const scorePct = questions.length > 0 ? Math.round((correctCount / questions.length) * 100) : 0;
 
         const baseAttemptData = {
           id: String(Date.now()),
@@ -985,10 +1279,27 @@ export default function HomeScreen() {
               const currentUnique = q.uniqueCorrectIds || [];
               const updatedUniqueCorrectIds = Array.from(new Set([...currentUnique, ...correctIdsInSession]));
               const updatedAttempts = [baseAttemptData, ...(q.attempts || [])];
+              
+              const correctSet = new Set(correctIdsInSession);
+              const wrongMap = new Map();
+              
+              (q.wrongQuestions || []).forEach((w: any) => {
+                const wid = w.id || w;
+                if (!correctSet.has(wid)) {
+                  wrongMap.set(wid, w);
+                }
+              });
+              
+              wrongQsForQuiz.forEach((w: any) => {
+                wrongMap.set(w.id, w);
+              });
+              
+              const mergedWrongQuestions = Array.from(wrongMap.values());
+
               return {
                 ...q,
                 attempts: updatedAttempts,
-                wrongQuestions: wrongQsForQuiz,
+                wrongQuestions: mergedWrongQuestions,
                 uniqueCorrectIds: updatedUniqueCorrectIds,
               };
             }
@@ -1017,6 +1328,79 @@ export default function HomeScreen() {
     };
   });
 
+  // ── Per-question countdown timer (Battle mode only) ──────────────────────
+  const battleQuestionTimerRef = React.useRef<any>(null);
+
+  React.useEffect(() => {
+    // Clear any existing interval whenever the question changes or session changes
+    if (battleQuestionTimerRef.current) {
+      clearInterval(battleQuestionTimerRef.current);
+      battleQuestionTimerRef.current = null;
+    }
+
+    const session = activeSession;
+    const tpq = battleTimePerQuestion;
+
+    if (!session || !session.isBattle || !session.questions || session.isFinished) return;
+    if (tpq == null || tpq <= 0) return;
+
+    const currentIdx = session.currentIndex ?? 0;
+
+    // Reset countdown for this question
+    setBattleQuestionTimeLeft(tpq);
+
+    battleQuestionTimerRef.current = setInterval(() => {
+      setBattleQuestionTimeLeft(prev => {
+        if (prev <= 1) {
+          clearInterval(battleQuestionTimerRef.current);
+          battleQuestionTimerRef.current = null;
+
+          // Auto-advance: use latest session state via functional updater
+          setActiveSession((cur: any) => {
+            if (!cur || cur.isFinished) return cur;
+            const totalQs = cur.questions?.length ?? 0;
+            const nextIdx = (cur.currentIndex ?? 0) + 1;
+
+            if (nextIdx >= totalQs) {
+              // Last question — finish the session
+              const totalTimeMs = Date.now() - (cur.startTime || Date.now());
+              if (cur.battleRoomCode) {
+                markPlayerFinished(cur.battleRoomCode, cur.isHost, totalTimeMs).catch(console.error);
+              }
+              const finishedSession = { ...cur, isFinished: true };
+              // Defer save so state update completes first
+              setTimeout(() => saveAndExitQuizSession(false, finishedSession), 0);
+              return finishedSession;
+            }
+
+            // Scroll FlatList to next question
+            setTimeout(() => {
+              quizFlatListRef.current?.scrollToIndex({ index: nextIdx, animated: true });
+              quizNumbersScrollRef.current?.scrollTo({ x: nextIdx * 48, animated: true });
+            }, 50);
+
+            // NOTE: Do NOT create a nested setInterval here.
+            // The useEffect that owns the timer will re-run because currentIndex
+            // changed in state, and it will correctly reset + start a fresh interval.
+            return { ...cur, currentIndex: nextIdx };
+          });
+
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      if (battleQuestionTimerRef.current) {
+        clearInterval(battleQuestionTimerRef.current);
+        battleQuestionTimerRef.current = null;
+      }
+    };
+  // Re-run when the question index changes OR a new battle session starts
+  }, [activeSession?.isBattle, activeSession?.currentIndex, activeSession?.quizId, activeSession?.isFinished, battleTimePerQuestion]);
+
+
   const handleStartQuiz = () => {
     if (!selectedQuiz) return;
     let qsList = selectedQuiz.questionsList;
@@ -1033,6 +1417,14 @@ export default function HomeScreen() {
       const wrongList = selectedQuiz.wrongQuestions || [];
       if (wrongList.length > 0) {
         filteredQuestions = filteredQuestions.filter((q: any) => wrongList.some((w: any) => w.id === q.id));
+      }
+    } else if (selectionMode === "unanswered") {
+      const neverAttemptedIds = new Set<string>(
+        (selectedQuiz.attempts || []).flatMap((a: any) => a.questionIds || [])
+      );
+      const unansweredQs = filteredQuestions.filter((q: any) => !neverAttemptedIds.has(q.id));
+      if (unansweredQs.length > 0) {
+        filteredQuestions = unansweredQs;
       }
     }
 
@@ -1068,8 +1460,132 @@ export default function HomeScreen() {
     setActiveSession(session);
   };
 
+  const saveAndExitQuizSession = (exitSession: boolean = true, sessionToSave: any = activeSession) => {
+    if (!sessionToSave || !sessionToSave.isFinished) {
+      if (exitSession) setActiveSession(null);
+      return;
+    }
+
+    if (sessionToSave.attemptSaved) {
+      if (exitSession) setActiveSession(null);
+      return;
+    }
+
+    const questions = sessionToSave.questions;
+    let correctCount = 0;
+    let wrongCount = 0;
+    let skippedCount = 0;
+    const wrongQsForQuiz: any[] = [];
+    const correctIdsInSession: string[] = [];
+
+    questions.forEach((q: any) => {
+      const selected = sessionToSave.answers[q.id] || [];
+      if (selected.length === 0) {
+        skippedCount++;
+      } else {
+        const correctIds = q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.id);
+        const isAllCorrect = selected.every((id: string) => correctIds.includes(id)) && selected.length === correctIds.length;
+        if (isAllCorrect) {
+          correctCount++;
+          correctIdsInSession.push(q.id);
+        } else {
+          wrongCount++;
+          const correctText = q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.text).join(", ");
+          const selectedText = q.answers.filter((a: any) => selected.includes(a.id)).map((a: any) => a.text).join(", ");
+          wrongQsForQuiz.push({ id: q.id, prompt: q.prompt, selected: selectedText, correct: correctText });
+        }
+      }
+    });
+
+    const scorePct = questions.length > 0 ? Math.round((correctCount / questions.length) * 100) : 0;
+    const targetAttemptId = sessionToSave.targetAttemptId;
+    const retryOfAttemptNum = sessionToSave.retryOfAttemptNum;
+    // Always create a new attempt entry — never modify the original score
+    const baseAttemptData = {
+      id: String(Date.now()),
+      score: scorePct, correct: correctCount, wrong: wrongCount, skipped: skippedCount,
+      timestamp: Date.now(),
+      wrongQuestionIds: wrongQsForQuiz.map(q => q.id),
+      questionIds: sessionToSave.questions.map((q: any) => q.id),
+      // Tag retries so the card can show "Retry of #N" instead of "Attempt #N"
+      ...(targetAttemptId ? { mode: "retry", retryOfAttemptId: targetAttemptId, retryOfAttemptNum } : { mode: "full" }),
+    };
+
+    if (sessionToSave.quizId === "sample_quiz") {
+      const q = sampleQuiz;
+      const currentUnique = q.uniqueCorrectIds || [];
+      const updatedUniqueCorrectIds = Array.from(new Set([...currentUnique, ...correctIdsInSession]));
+      let updatedAttempts = q.attempts || [];
+      updatedAttempts = [baseAttemptData, ...updatedAttempts];
+      const correctSet = new Set(correctIdsInSession);
+      const wrongMap = new Map();
+      (q.wrongQuestions || []).forEach((w: any) => {
+        const wid = w.id || w;
+        if (!correctSet.has(wid)) wrongMap.set(wid, w);
+      });
+      wrongQsForQuiz.forEach((w: any) => { wrongMap.set(w.id, w); });
+      const mergedWrongQuestions = Array.from(wrongMap.values());
+      
+      const updatedSample = { ...q, attempts: updatedAttempts, wrongQuestions: mergedWrongQuestions, uniqueCorrectIds: updatedUniqueCorrectIds };
+      setSampleQuiz(updatedSample);
+      AsyncStorage.setItem("quizforge_sample_data", JSON.stringify(updatedSample));
+      
+      // Update the insights view instantly if we are looking at the sample quiz
+      if (viewingInsightsQuiz && viewingInsightsQuiz.id === "sample_quiz") {
+        setViewingInsightsQuiz(updatedSample);
+      }
+
+      if (exitSession) {
+        setActiveSession(null);
+      } else {
+        setActiveSession((curr: any) => curr ? { ...curr, attemptSaved: true, targetAttemptId: curr.targetAttemptId || baseAttemptData.id, retryOfAttemptNum: curr.retryOfAttemptNum || updatedAttempts.length } : null);
+      }
+      return;
+    }
+
+    const updatedQuizzes = quizzes.map((q: any) => {
+      if (q.id === sessionToSave.quizId) {
+        const currentUnique = q.uniqueCorrectIds || [];
+        const updatedUniqueCorrectIds = Array.from(new Set([...currentUnique, ...correctIdsInSession]));
+        let updatedAttempts = q.attempts || [];
+        // Always prepend as a new entry — original attempt score stays locked
+        updatedAttempts = [baseAttemptData, ...updatedAttempts];
+        const correctSet = new Set(correctIdsInSession);
+        const wrongMap = new Map();
+        (q.wrongQuestions || []).forEach((w: any) => {
+          const wid = w.id || w;
+          if (!correctSet.has(wid)) wrongMap.set(wid, w);
+        });
+        wrongQsForQuiz.forEach((w: any) => { wrongMap.set(w.id, w); });
+        const mergedWrongQuestions = Array.from(wrongMap.values());
+        return { ...q, attempts: updatedAttempts, wrongQuestions: mergedWrongQuestions, uniqueCorrectIds: updatedUniqueCorrectIds };
+      }
+      return q;
+    });
+
+    setQuizzes(updatedQuizzes);
+    setViewingInsightsQuiz(updatedQuizzes.find((q: any) => q.id === sessionToSave.quizId));
+
+    if (exitSession) {
+      setActiveSession(null);
+    } else {
+      const updatedQ = updatedQuizzes.find((q: any) => q.id === sessionToSave.quizId);
+      const attemptLength = updatedQ?.attempts?.length || 1;
+      setActiveSession((curr: any) => curr ? { ...curr, attemptSaved: true, targetAttemptId: curr.targetAttemptId || baseAttemptData.id, retryOfAttemptNum: curr.retryOfAttemptNum || attemptLength } : null);
+    }
+
+    const updatedQ = updatedQuizzes.find((q: any) => q.id === sessionToSave.quizId);
+    const neonId = updatedQ?.neonId ?? updatedQ?.id;
+    if (firebaseUser && neonId && !String(neonId).startsWith("local_")) {
+      updateMobileQuiz({
+        userId: firebaseUser.uid, quizId: neonId,
+        attempts: updatedQ.attempts, wrongQuestions: updatedQ.wrongQuestions, uniqueCorrectIds: updatedQ.uniqueCorrectIds,
+      }).catch((err) => console.warn("[NeonSync] quiz attempt update failed:", err));
+    }
+  };
+
   const playQuizDirectly = (quiz: any, mode: "all" | "random" | "range" | "unanswered" | "wrong") => {
-    let qsList = quiz.questionsList || [];
+    let qsList = quiz.id === "sample_quiz" ? SAMPLE_QUIZ.questionsList : (quiz.questionsList || []);
     if (qsList.length === 0) {
       qsList = generateMockQuestionsForQuiz(quiz.title, quiz.questions);
     }
@@ -1088,6 +1604,18 @@ export default function HomeScreen() {
       
       if (allWrongIds.size > 0) {
         filteredQuestions = filteredQuestions.filter((q: any) => allWrongIds.has(q.id));
+        
+        if (filteredQuestions.length === 0) {
+          if (Platform.OS === "web") {
+            alert("Version Mismatch: Your previous incorrect questions belong to an older version of this quiz. Please clear the quiz history and try again.");
+          } else {
+            Alert.alert(
+              "Version Mismatch", 
+              "Your previous incorrect questions belong to an older version of this quiz. Please clear the quiz history to start fresh."
+            );
+          }
+          return;
+        }
       }
     }
 
@@ -1111,6 +1639,25 @@ export default function HomeScreen() {
   };
 
   const handleDeleteAttemptOnMobile = (quizId: string, attemptId: string) => {
+    if (quizId === "sample_quiz") {
+      const q = sampleQuiz;
+      const nextAttempts = q.attempts.filter((a: any) => a.id !== attemptId);
+      const nextWrong = nextAttempts.length === 0 ? [] : (q.wrongQuestions || []);
+      const nextUnique = nextAttempts.length === 0 ? [] : (q.uniqueCorrectIds || []);
+      const updatedSample = { ...q, attempts: nextAttempts, wrongQuestions: nextWrong, uniqueCorrectIds: nextUnique };
+      setSampleQuiz(updatedSample);
+      AsyncStorage.setItem("quizforge_sample_data", JSON.stringify(updatedSample));
+      if (viewingInsightsQuiz && viewingInsightsQuiz.id === quizId) {
+        setViewingInsightsQuiz(updatedSample);
+      }
+      if (Platform.OS === "web") {
+        alert("Attempt history updated.");
+      } else {
+        Alert.alert("Success", "Attempt deleted successfully.");
+      }
+      return;
+    }
+
     const updatedQuizzes = quizzes.map((q) => {
       if (q.id === quizId) {
         const nextAttempts = q.attempts.filter((a: any) => a.id !== attemptId);
@@ -1132,6 +1679,16 @@ export default function HomeScreen() {
   };
 
   const handleClearHistoryOnMobile = (quizId: string) => {
+    if (quizId === "sample_quiz") {
+      const updatedSample = { ...sampleQuiz, attempts: [], wrongQuestions: [], uniqueCorrectIds: [] };
+      setSampleQuiz(updatedSample);
+      AsyncStorage.setItem("quizforge_sample_data", JSON.stringify(updatedSample));
+      if (viewingInsightsQuiz && viewingInsightsQuiz.id === quizId) {
+        setViewingInsightsQuiz(updatedSample);
+      }
+      return;
+    }
+
     const updatedQuizzes = quizzes.map((q) => {
       if (q.id === quizId) {
         return { ...q, attempts: [], wrongQuestions: [], uniqueCorrectIds: [] };
@@ -1145,6 +1702,24 @@ export default function HomeScreen() {
   };
 
   const handleDeleteQuizOnMobile = (quizId: string) => {
+    if (quizId === "sample_quiz") {
+      setSampleDismissed(true);
+      AsyncStorage.setItem("quizforge_sample_dismissed", "1");
+      setViewingInsightsQuiz(null);
+      setActiveTab("dashboard");
+      return;
+    }
+
+    const quizToDelete = quizzes.find(q => q.id === quizId);
+    if (quizToDelete && firebaseUser) {
+      const neonId = quizToDelete.neonId ?? quizToDelete.id;
+      if (!String(neonId).startsWith("local_")) {
+        deleteMobileQuiz(firebaseUser.uid, neonId).catch((err) =>
+          console.warn("[NeonSync] quiz delete failed:", err)
+        );
+      }
+    }
+
     const updatedQuizzes = quizzes.filter((q) => q.id !== quizId);
     setQuizzes(updatedQuizzes);
     setViewingInsightsQuiz(null);
@@ -1179,7 +1754,7 @@ export default function HomeScreen() {
   };
 
   const renderStudyDirectory = (quiz: any) => {
-    const questionsList = quiz.questionsList || [];
+    const questionsList = quiz.id === "sample_quiz" ? SAMPLE_QUIZ.questionsList : (quiz.questionsList || []);
     if (questionsList.length === 0) return null;
     
     const filtered = questionsList.filter((q: any) => 
@@ -1264,12 +1839,7 @@ export default function HomeScreen() {
     const attempts = quiz.attempts || [];
     const highScore = attempts.length > 0 ? Math.max(...attempts.map((a: any) => a.score)) : 0;
     const avgScore = attempts.length > 0 ? Math.round(attempts.reduce((s: number, a: any) => s + a.score, 0) / attempts.length) : 0;
-    const allWrongQuestionIds = new Set<string>();
-    attempts.forEach((a: any) => {
-      (a.wrongQuestionIds || []).forEach((id: string) => allWrongQuestionIds.add(id));
-    });
-    (quiz.wrongQuestions || []).forEach((w: any) => allWrongQuestionIds.add(w.id));
-    const wrongCount = allWrongQuestionIds.size;
+    const wrongCount = (quiz.wrongQuestions || []).length;
     
     return (
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -1278,8 +1848,10 @@ export default function HomeScreen() {
           onPress={() => setActiveTab(viewingInsightsQuizFromTab as any || "dashboard")}
           style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 15 }}
         >
-          <Feather name="arrow-left" size={16} color="#00e5a0" />
-          <Text style={{ fontSize: 13, fontWeight: "bold", color: "#00e5a0" }}>Back to Dashboard</Text>
+          <Feather name="arrow-left" size={16} color={settingsDarkMode ? "#ccccdd" : "#666677"} />
+          <Text style={{ fontSize: 13, fontWeight: "600", color: settingsDarkMode ? "#ccccdd" : "#666677" }}>
+            {viewingInsightsQuizFromTab === "home" ? "Back to Home" : "Back to Statistics"}
+          </Text>
         </Pressable>
 
         {/* Page Header */}
@@ -1382,34 +1954,121 @@ export default function HomeScreen() {
           )}
         </View>
 
-        {/* Searchable Questions list — collapsible */}
-        {(quiz.questionsList || []).length > 0 && (
-          <Pressable
-            onPress={() => setExpandedQId(expandedQId !== null ? null : "directory")}
-            style={({ pressed }) => [{
-              flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-              paddingHorizontal: 16, paddingVertical: 14, borderRadius: 14, marginBottom: 12,
-              backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)",
-              borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)",
-            }, pressed && styles.opacityPress]}
-          >
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-              <Ionicons name="book-outline" size={18} color={settingsDarkMode ? "#aaaacc" : "#666688"} />
-              <Text style={{ fontSize: 14, fontWeight: "600", color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>
-                {t('insight.quiz_directory') || "Quiz Directory"}
-              </Text>
-              <View style={{ paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8,
-                backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)" }}>
-                <Text style={{ fontSize: 11, fontWeight: "700", color: settingsDarkMode ? "#aaaacc" : "#666688" }}>
-                  {(quiz.questionsList || []).length}
+        {/* Bookmarked Questions + Attempt buttons */}
+        {(() => {
+          const bookmarkedQs = (quiz.id === "sample_quiz" ? SAMPLE_QUIZ.questionsList : (quiz.questionsList || [])).filter((q: any) => starredQuestions.has(q.id));
+          const bookmarkCount = bookmarkedQs.length;
+          return (
+            <View style={{ flexDirection: "row", gap: 10, marginBottom: 12 }}>
+              {/* Bookmarked Questions — collapsible */}
+              <Pressable
+                onPress={() => setExpandedQId(expandedQId === "bookmarked" ? null : "bookmarked")}
+                style={({ pressed }) => [{
+                  flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+                  paddingHorizontal: 14, paddingVertical: 13, borderRadius: 14,
+                  backgroundColor: expandedQId === "bookmarked"
+                    ? (settingsDarkMode ? "rgba(99,102,241,0.12)" : "rgba(99,102,241,0.08)")
+                    : (settingsDarkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"),
+                  borderWidth: 1,
+                  borderColor: expandedQId === "bookmarked"
+                    ? "rgba(99,102,241,0.3)"
+                    : (settingsDarkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)"),
+                }, pressed && styles.opacityPress]}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Ionicons name="bookmark" size={16} color={expandedQId === "bookmarked" ? "#6366f1" : (settingsDarkMode ? "#aaaacc" : "#666688")} />
+                  <Text style={{ fontSize: 13, fontWeight: "600", color: expandedQId === "bookmarked" ? "#6366f1" : (settingsDarkMode ? "#ffffff" : "#0d0f14") }}>
+                    Bookmarked
+                  </Text>
+                  {bookmarkCount > 0 && (
+                    <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6,
+                      backgroundColor: settingsDarkMode ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.1)" }}>
+                      <Text style={{ fontSize: 10, fontWeight: "700", color: "#6366f1" }}>{bookmarkCount}</Text>
+                    </View>
+                  )}
+                </View>
+                <Ionicons name={expandedQId === "bookmarked" ? "chevron-up" : "chevron-down"} size={14}
+                  color={settingsDarkMode ? "#6e727a" : "#999"} />
+              </Pressable>
+
+              {/* Attempt bookmarked questions */}
+              <Pressable
+                disabled={bookmarkCount === 0}
+                onPress={() => {
+                  if (bookmarkCount === 0) return;
+                  const bookmarkedQuiz = { ...quiz, questionsList: bookmarkedQs, title: quiz.title };
+                  playQuizDirectly(bookmarkedQuiz, "all");
+                }}
+                style={({ pressed }) => [{
+                  flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+                  paddingHorizontal: 16, paddingVertical: 13, borderRadius: 14,
+                  backgroundColor: bookmarkCount > 0
+                    ? "#818cf8"
+                    : (settingsDarkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"),
+                  borderWidth: 1,
+                  borderColor: bookmarkCount > 0 ? "#6366f1" : (settingsDarkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)"),
+                  opacity: bookmarkCount === 0 ? 0.4 : 1,
+                }, pressed && bookmarkCount > 0 && styles.pressedScale]}
+              >
+                <Ionicons name="play" size={14} color={bookmarkCount > 0 ? "#ffffff" : (settingsDarkMode ? "#666" : "#999")} />
+                <Text style={{ fontSize: 13, fontWeight: "700", color: bookmarkCount > 0 ? "#ffffff" : (settingsDarkMode ? "#666" : "#999") }}>
+                  Attempt
                 </Text>
-              </View>
+              </Pressable>
             </View>
-            <Ionicons name={expandedQId !== null ? "chevron-up" : "chevron-down"} size={16}
-              color={settingsDarkMode ? "#6e727a" : "#999"} />
-          </Pressable>
-        )}
-        {expandedQId !== null && renderStudyDirectory(quiz)}
+          );
+        })()}
+        {expandedQId === "bookmarked" && (() => {
+          const bookmarkedQs = (quiz.id === "sample_quiz" ? SAMPLE_QUIZ.questionsList : (quiz.questionsList || [])).filter((q: any) => starredQuestions.has(q.id));
+          return (
+            <View style={[styles.panelCard, !settingsDarkMode && styles.lightCard, { marginBottom: 12 }]}>
+              <Text style={[styles.optionsSectionTitle, !settingsDarkMode && styles.lightTextSub, { marginBottom: 12 }]}>Bookmarked Questions</Text>
+              {bookmarkedQs.length === 0 ? (
+                <View style={{ alignItems: "center", paddingVertical: 20 }}>
+                  <Ionicons name="bookmark-outline" size={32} color={settingsDarkMode ? "#333" : "#ccc"} />
+                  <Text style={{ fontSize: 13, color: settingsDarkMode ? "#666" : "#999", marginTop: 8 }}>No bookmarked questions yet.</Text>
+                  <Text style={{ fontSize: 11, color: settingsDarkMode ? "#444" : "#bbb", marginTop: 4, textAlign: "center" }}>Tap the bookmark icon while viewing questions to save them here.</Text>
+                </View>
+              ) : (
+                <View style={{ height: 300, borderRadius: 12, overflow: "hidden" }}>
+                  <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={true} contentContainerStyle={{ gap: 8, paddingBottom: 12 }}>
+                    {bookmarkedQs.map((q: any, i: number) => {
+                      const isExpanded = expandedQId === q.id;
+                      return (
+                        <View key={q.id} style={{ borderRadius: 12, borderWidth: 1, borderColor: settingsDarkMode ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.12)", overflow: "hidden" }}>
+                          <Pressable
+                            onPress={() => setExpandedQId(isExpanded ? "bookmarked" : q.id)}
+                            style={{ flexDirection: "row", alignItems: "flex-start", padding: 10, backgroundColor: settingsDarkMode ? "rgba(99,102,241,0.04)" : "rgba(99,102,241,0.02)" }}
+                          >
+                            <Ionicons name="bookmark" size={11} color="#6366f1" style={{ marginRight: 7, marginTop: 2 }} />
+                            <Text style={{ flex: 1, fontSize: 12, color: settingsDarkMode ? "#dddddd" : "#333333", lineHeight: 16 }} numberOfLines={isExpanded ? undefined : 2}>
+                              {q.prompt}
+                            </Text>
+                            <Feather name={isExpanded ? "chevron-up" : "chevron-down"} size={13} color="#666" style={{ marginLeft: 6 }} />
+                          </Pressable>
+                          {isExpanded && (
+                            <View style={{ padding: 10, borderTopWidth: 1, borderTopColor: settingsDarkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", gap: 6 }}>
+                              {q.answers.map((answer: any, aIdx: number) => (
+                                <View key={aIdx} style={{ flexDirection: "row", alignItems: "center", padding: 8, borderRadius: 8,
+                                  backgroundColor: answer.isCorrect ? "rgba(0,229,160,0.06)" : "rgba(255,255,255,0.01)",
+                                  borderWidth: 1, borderColor: answer.isCorrect ? "rgba(0,229,160,0.15)" : "transparent" }}>
+                                  <View style={{ width: 14, height: 14, borderRadius: 3, backgroundColor: answer.isCorrect ? "rgba(0,229,160,0.15)" : "rgba(255,255,255,0.05)", alignItems: "center", justifyContent: "center", marginRight: 8 }}>
+                                    <Text style={{ fontSize: 9, fontWeight: "bold", color: answer.isCorrect ? "#00e5a0" : "#888" }}>{answer.isCorrect ? "✓" : "-"}</Text>
+                                  </View>
+                                  <Text style={{ flex: 1, fontSize: 11, color: answer.isCorrect ? "#00e5a0" : (settingsDarkMode ? "#bbbbbb" : "#444444") }}>{answer.text}</Text>
+                                </View>
+                              ))}
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              )}
+            </View>
+          );
+        })()}
 
         {/* Attempt Log History */}
         <View style={[styles.panelCard, !settingsDarkMode && styles.lightCard]}>
@@ -1418,25 +2077,43 @@ export default function HomeScreen() {
             <View style={{ gap: 8 }}>
               {attempts.map((attempt: any, index: number) => {
                 const attemptNum = attempts.length - index;
+                const isRetry = attempt.mode === "retry";
+                const label = isRetry
+                  ? `Retry of #${attempt.retryOfAttemptNum}`
+                  : `${t('insight.attempt') || "Attempt"} #${attemptNum}`;
                 return (
                 <Pressable
                   key={attempt.id || String(index)}
                   onPress={() => setSelectedAttemptForModal({ quizId: quiz.id, attempt, attemptNum })}
                   style={({ pressed }) => [
-                    { padding: 12, borderRadius: 12, backgroundColor: "rgba(255, 255, 255, 0.02)", borderWidth: 1, borderColor: "rgba(255, 255, 255, 0.05)", flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-                    !settingsDarkMode && styles.lightCard,
+                    { padding: 12, borderRadius: 12, borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+                      backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)",
+                      borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.06)",
+                    },
                     pressed && styles.opacityPress
                   ]}
                 >
                   <View style={{ flex: 1, paddingRight: 8 }}>
-                    <Text style={[{ fontSize: 12, fontWeight: "bold", color: "#ffffff" }, !settingsDarkMode && styles.lightText]}>
-                      {t('insight.attempt') || "Attempt"} #{attemptNum}
-                    </Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <Text style={{ fontSize: 12, fontWeight: "bold", color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>
+                        {t('insight.attempt') || "Attempt"} #{attemptNum}
+                      </Text>
+                      {isRetry && (
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 3,
+                          paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6,
+                          backgroundColor: settingsDarkMode ? "rgba(245,158,11,0.12)" : "rgba(245,158,11,0.1)" }}>
+                          <Ionicons name="refresh" size={9} color="#f59e0b" />
+                          <Text style={{ fontSize: 9, color: "#f59e0b", fontWeight: "600" }}>
+                            retry of #{attempt.retryOfAttemptNum}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
                     <Text style={[{ fontSize: 10, color: "#888888", marginTop: 2 }, !settingsDarkMode && styles.lightTextSub]}>
                       {attempt.correct} correct · {attempt.wrong} wrong · {attempt.skipped} skipped
                     </Text>
                   </View>
-                  
+
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                     <View style={{ paddingVertical: 4, paddingHorizontal: 8, borderRadius: 8, backgroundColor: attempt.score >= 75 ? "rgba(0, 229, 160, 0.12)" : "rgba(245, 158, 11, 0.12)" }}>
                       <Text style={{ fontSize: 11, fontWeight: "bold", color: attempt.score >= 75 ? "#00e5a0" : "#f59e0b" }}>
@@ -1517,7 +2194,7 @@ export default function HomeScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Back Link */}
         <Pressable 
-          onPress={() => setActiveTab("flashcards")}
+          onPress={() => setActiveTab("home")}
           style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 15 }}
         >
           <Feather name="arrow-left" size={16} color="#00e5a0" />
@@ -1654,7 +2331,7 @@ export default function HomeScreen() {
                 if (firebaseUser && neonId && !String(neonId).startsWith("local_")) {
                   deleteFlashcardDeck(firebaseUser.uid, neonId).catch(err => console.warn("[NeonSync] deck delete failed:", err));
                 }
-                setActiveTab("flashcards");
+                setActiveTab("home");
               }}
               style={({ pressed }) => [
                 { flex: 1, padding: 10, borderRadius: 10, backgroundColor: "rgba(239, 68, 68, 0.15)", alignItems: "center", justifyContent: "center" },
@@ -1676,6 +2353,7 @@ export default function HomeScreen() {
       submitted.push(questionId);
       
       // Determine correctness to play sound
+      let newCorrectCount = activeSession.correctCount || 0;
       const currentQuestion = activeSession.questions.find((q: any) => q.id === questionId);
       if (currentQuestion) {
         const selected = activeSession.answers[questionId] || [];
@@ -1683,6 +2361,10 @@ export default function HomeScreen() {
         const isAllCorrect = selected.length === correctIds.length && selected.every((id: string) => correctIds.includes(id));
         if (isAllCorrect) {
           playCorrectSound();
+          newCorrectCount += 1;
+          if (activeSession.isBattle && activeSession.battleRoomCode) {
+            updateBattleScore(activeSession.battleRoomCode, activeSession.isHost, newCorrectCount);
+          }
         } else {
           playWrongSound();
         }
@@ -1690,7 +2372,8 @@ export default function HomeScreen() {
 
       setActiveSession({
         ...activeSession,
-        submitted
+        submitted,
+        correctCount: newCorrectCount
       });
     }
   };
@@ -1720,7 +2403,9 @@ export default function HomeScreen() {
 
       // Auto-submit single choice questions immediately if showAnswerOnSubmit is enabled
       const submitted = [...(activeSession.submitted || [])];
-      if (activeSession.showAnswerOnSubmit && !submitted.includes(question.id)) {
+      let newCorrectCount = activeSession.correctCount || 0;
+      
+      if ((activeSession.showAnswerOnSubmit || activeSession.isBattle) && !submitted.includes(question.id)) {
         submitted.push(question.id);
         
         // Play correct/wrong sound
@@ -1728,6 +2413,11 @@ export default function HomeScreen() {
         const isAllCorrect = currentAnswers.length === correctIds.length && currentAnswers.every((id: string) => correctIds.includes(id));
         if (isAllCorrect) {
           playCorrectSound();
+          newCorrectCount += 1;
+          
+          if (activeSession.isBattle && activeSession.battleRoomCode) {
+            updateBattleScore(activeSession.battleRoomCode, activeSession.isHost, newCorrectCount);
+          }
         } else {
           playWrongSound();
         }
@@ -1736,7 +2426,8 @@ export default function HomeScreen() {
       setActiveSession({
         ...activeSession,
         answers,
-        submitted
+        submitted,
+        correctCount: newCorrectCount
       });
     }
   };
@@ -1750,6 +2441,51 @@ export default function HomeScreen() {
     quizNumbersScrollRef.current?.scrollTo({ x: Math.max(0, idx * 48 - SCREEN_WIDTH / 2 + 24), animated: true });
   };
 
+  /** Persist a battle result into local history and clear it from pending queue */
+  const saveBattleResult = (roomCode: string, myScore: number, opponentScore: number, opponentName: string, quizTitle: string, effectiveWin: boolean, myTime?: number, opponentTime?: number) => {
+    const entry = {
+      date: Date.now(),
+      quizTitle,
+      myScore,
+      opponentScore,
+      opponentName,
+      won: effectiveWin,
+      myTime,
+      opponentTime
+    };
+    setBattleHistory(prev => {
+      const next = [...prev, entry].slice(-50);
+      AsyncStorage.setItem("battle_history", JSON.stringify(next));
+      return next;
+    });
+
+    if (firebaseUser) {
+      saveBattleHistory({
+        userId: firebaseUser.uid,
+        roomCode,
+        quizTitle,
+        myScore,
+        opponentScore,
+        opponentName,
+        won: effectiveWin,
+        myTime,
+        opponentTime
+      }).catch(console.error);
+    }
+
+    if (roomCode) {
+      AsyncStorage.getItem("pending_battles").then(val => {
+        if (val) {
+          try {
+            const currentPending = JSON.parse(val);
+            const newPending = currentPending.filter((p: any) => p.code !== roomCode);
+            AsyncStorage.setItem("pending_battles", JSON.stringify(newPending));
+          } catch {}
+        }
+      });
+    }
+  };
+
   const handleFinishSession = () => {
     if (!activeSession) return;
     const totalQs = activeSession.questions.length;
@@ -1758,10 +2494,29 @@ export default function HomeScreen() {
 
     const finish = () => {
       playSuccessSound();
-      setActiveSession({
+      const finishedSession = {
         ...activeSession,
         isFinished: true
-      });
+      };
+      if (activeSession.isBattle && activeSession.battleRoomCode) {
+        // Mark this player as finished — pass total elapsed time for tie-breaking
+        const totalTimeMs = Date.now() - (activeSession.startTime || Date.now());
+        const roomCode = activeSession.battleRoomCode;
+        const host = activeSession.isHost;
+        markPlayerFinished(roomCode, host, totalTimeMs).catch(console.error);
+        
+        // Add to pending battles immediately so if the user force-closes on the waiting screen, it is preserved
+        AsyncStorage.getItem("pending_battles").then(val => {
+          let pending = [];
+          try { if (val) pending = JSON.parse(val); } catch {}
+          if (!pending.find((p: any) => p.code === roomCode)) {
+            pending.push({ code: roomCode, isHost: host });
+            AsyncStorage.setItem("pending_battles", JSON.stringify(pending));
+          }
+        });
+      }
+      setActiveSession(finishedSession);
+      saveAndExitQuizSession(false, finishedSession);
     };
 
     if (unanswered > 0) {
@@ -1788,7 +2543,7 @@ export default function HomeScreen() {
     try {
       const parsed = parseQstText(text);
       if (parsed.questions.length === 0) {
-        throw new Error("No questions found. QuizForge format requires questions starting with '?' and answers starting with '+' or '-'.");
+        throw new Error("No questions found. Scorr format requires questions starting with '?' and answers starting with '+' or '-'.");
       }
       const localId = `local_${Date.now()}_${Math.random().toString(36).slice(2)}`;
       const newQuiz: any = {
@@ -1797,35 +2552,44 @@ export default function HomeScreen() {
         questions: parsed.questions.length,
         category: parsed.category || "General",
         time: "Just now",
-        sourceText: text,
         questionsList: parsed.questions,
         attempts: [],
         wrongQuestions: [],
         uniqueCorrectIds: [],
       };
-      setQuizzes([newQuiz, ...quizzes]);
+      setQuizzes([...quizzes, newQuiz]);
       setActiveTab("home");
       setCreationMode("pick");
       handleOpenQuizOptions(newQuiz);
 
       // Push to Neon if user row exists in DB
+      console.log("[NeonSync-Import] Starting upload flow for imported quiz:", newQuiz.title);
+      console.log("[NeonSync-Import] firebaseUser exists:", !!firebaseUser, firebaseUser ? firebaseUser.email : null);
+      console.log("[NeonSync-Import] neonUserReadyRef.current status:", neonUserReadyRef.current);
+
       if (firebaseUser && neonUserReadyRef.current) {
+        console.log("[NeonSync-Import] Calling POST /api/mobile-quizzes...");
         createMobileQuiz({
           userId: firebaseUser.uid,
           title: newQuiz.title,
           category: newQuiz.category,
-          questionCount: newQuiz.questions,
-          sourceText: text,
+          questionCount: newQuiz.questionsList?.length ?? newQuiz.questions,
+          sourceText: text, // store the entire raw TXT file — parseQstText reconstructs questions on login
         }).then(({ quiz: saved, error }) => {
           if (saved && !error) {
+            console.log("[NeonSync-Import] POST request succeeded! Quiz uploaded with DB ID:", saved.id);
             // Store neonId so future updates/deletes can reference it
             setQuizzes((prev: any[]) =>
               prev.map((q) => q.id === localId ? { ...q, id: saved.id, neonId: saved.id } : q)
             );
           } else {
-            console.warn("[NeonSync] quiz create failed:", error);
+            console.error("[NeonSync-Import] POST request failed! Error message from server:", error);
           }
+        }).catch((err) => {
+          console.error("[NeonSync-Import] POST request failed with network error:", err);
         });
+      } else {
+        console.warn("[NeonSync-Import] Upload skipped because user is not logged in OR backend registration is not ready.");
       }
     } catch (err: any) {
       setImportErrorDetails({
@@ -1838,7 +2602,12 @@ export default function HomeScreen() {
 
   const totalQuestions = selectedQuiz?.questions ?? 0;
   const wrongCount = selectedQuiz?.wrongQuestions?.length ?? 0;
-  const unansweredCount = selectedQuiz?.attempts?.length > 0 ? 0 : totalQuestions;
+  const attemptedIds: Set<string> = new Set(
+    (selectedQuiz?.attempts || []).flatMap((a: any) => a.questionIds || [])
+  );
+  const unansweredCount = selectedQuiz
+    ? (selectedQuiz.questionsList || []).filter((q: any) => !attemptedIds.has(q.id)).length
+    : totalQuestions;
 
   // Compute how many questions will be used
   const questionCount = (() => {
@@ -1857,37 +2626,85 @@ export default function HomeScreen() {
   })();
 
   // Add mock quizzes state for dashboard
-  // ── Per-user storage keys (guest slot when not logged in) ────────────────
-  const storageKey = (type: "quizzes" | "decks", uid?: string | null) =>
-    `quizforge_${type}_${uid ?? "guest"}`;
-
-  const [quizzes, setQuizzes] = useState<any[]>([]);
-  const [flashcardDecks, setFlashcardDecks] = useState<any[]>([]);
-  const [dataLoaded, setDataLoaded] = useState(false);
-  // Track which uid slot is currently loaded so we know when to switch
-  const loadedUidRef = React.useRef<string | null | undefined>(undefined); // undefined = not loaded yet
-  // Mirror of quizzes/decks in refs for use inside async callbacks (avoids stale closure)
-  const quizzesRef = React.useRef<any[]>([]);
-  const decksRef   = React.useRef<any[]>([]);
 
   // ── Keep refs in sync + auto-save on every change ───────────────────────
   useEffect(() => {
     quizzesRef.current = quizzes;
-    if (!dataLoaded || loadedUidRef.current === undefined) return;
+    if (!dataLoaded) return;
     AsyncStorage.setItem(
-      storageKey("quizzes", loadedUidRef.current),
+      storageKey("quizzes"),
       JSON.stringify(quizzes)
     ).catch(e => console.warn("[Persist] quiz save failed:", e));
+
+    // Schedule inactivity notifications
+    const scheduleNotifications = async () => {
+      try {
+        const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        
+        if (quizzes.length === 0) {
+          if (existingStatus === 'granted') {
+            await Notifications.cancelAllScheduledNotificationsAsync();
+          }
+          return;
+        }
+
+        let finalStatus = existingStatus;
+        if (existingStatus !== 'granted') {
+          const { status } = await Notifications.requestPermissionsAsync();
+          finalStatus = status;
+        }
+        
+        if (finalStatus !== 'granted') return;
+
+        // Cancel existing notifications to reset the inactivity timer
+        await Notifications.cancelAllScheduledNotificationsAsync();
+
+        let totalQuestions = 0;
+        let masteredQuestions = 0;
+
+        quizzes.forEach((q) => {
+          const qsList = q.questionsList && q.questionsList.length > 0 ? q.questionsList : q.questions;
+          totalQuestions += (qsList?.length || 0);
+          masteredQuestions += (q.uniqueCorrectIds?.length || 0);
+        });
+
+        const unresolvedQuestions = Math.max(0, totalQuestions - masteredQuestions);
+
+        if (unresolvedQuestions > 0 && totalQuestions > 0) {
+          // 24-hour notification
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: "Time to review! 🧠",
+              body: `You have ${unresolvedQuestions} questions waiting to be mastered out of ${totalQuestions} total questions.`,
+            },
+            trigger: {
+              type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+              seconds: 24 * 60 * 60, // 24 hours
+              repeats: false,
+            },
+          });
+
+          // 7-day notification
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: "It's been a while! 👋",
+              body: "Get back to Scorr and practice your quizzes to keep your memory sharp.",
+            },
+            trigger: {
+              type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+              seconds: 7 * 24 * 60 * 60, // 7 days
+              repeats: false,
+            },
+          });
+        }
+      } catch (err) {
+        console.warn("Failed to schedule inactivity notifications", err);
+      }
+    };
+
+    scheduleNotifications();
   }, [quizzes, dataLoaded]);
 
-  useEffect(() => {
-    decksRef.current = flashcardDecks;
-    if (!dataLoaded || loadedUidRef.current === undefined) return;
-    AsyncStorage.setItem(
-      storageKey("decks", loadedUidRef.current),
-      JSON.stringify(flashcardDecks)
-    ).catch(e => console.warn("[Persist] deck save failed:", e));
-  }, [flashcardDecks, dataLoaded]);
 
   // ── Persist starred questions ────────────────────────────────────────────
   useEffect(() => {
@@ -1911,7 +2728,7 @@ export default function HomeScreen() {
   const [newQuestionsCount, setNewQuestionsCount] = useState("");
   const [newQuizLanguage, setNewQuizLanguage] = useState("English");
   const [creationStep, setCreationStep] = useState<"setup" | "drafting">("setup");
-  const [creationMode, setCreationMode] = useState<"pick" | "quiz" | "flashcard">("pick");
+  const [creationMode, setCreationMode] = useState<"pick" | "quiz">("pick");
   const [fcTitle, setFcTitle] = useState("");
   const [fcCategory, setFcCategory] = useState("");
   const [fcCards, setFcCards] = useState<{ front: string; back: string }[]>([{ front: "", back: "" }]);
@@ -1945,7 +2762,6 @@ export default function HomeScreen() {
   const [deckNameInput, setDeckNameInput] = useState("");
   const [nameDeckAction, setNameDeckAction] = useState<"create" | "rename">("create");
   const [showEllipsisMenu, setShowEllipsisMenu] = useState(false);
-  const [showFlashcardOptions, setShowFlashcardOptions] = useState<any>(null);
 
   const handleOpenQuizOptions = (quiz: any) => {
     setSelectedQuiz(quiz);
@@ -2055,14 +2871,13 @@ export default function HomeScreen() {
       category: newCategory.trim() || "General",
       questions: finalQuestions.length,
       time: "Just now",
-      sourceText: generatedSourceText,
       questionsList: finalQuestions,
       attempts: [],
       wrongQuestions: [],
       uniqueCorrectIds: []
     };
 
-    setQuizzes([newQuiz, ...quizzes]);
+    setQuizzes([...quizzes, newQuiz]);
     setNewTitle("");
     setNewCategory("");
     setNewQuestionsCount("");
@@ -2071,22 +2886,32 @@ export default function HomeScreen() {
     setShowQuizCreatedModal({ title: newQuiz.title, count: newQuiz.questions });
     setActiveTab("dashboard");
 
+    console.log("[NeonSync-Manual] Saving manually created quiz:", newQuiz.title);
+    console.log("[NeonSync-Manual] firebaseUser exists:", !!firebaseUser, firebaseUser ? firebaseUser.email : null);
+    console.log("[NeonSync-Manual] neonUserReadyRef.current status:", neonUserReadyRef.current);
+
     if (firebaseUser && neonUserReadyRef.current) {
+      console.log("[NeonSync-Manual] Calling POST /api/mobile-quizzes...");
       createMobileQuiz({
         userId: firebaseUser.uid,
         title: newQuiz.title,
         category: newQuiz.category,
-        questionCount: newQuiz.questions,
+        questionCount: newQuiz.questionsList?.length ?? newQuiz.questions,
         sourceText: generatedSourceText,
       }).then(({ quiz: saved, error }) => {
         if (saved && !error) {
+          console.log("[NeonSync-Manual] POST request succeeded! Quiz uploaded with DB ID:", saved.id);
           setQuizzes((prev: any[]) =>
             prev.map((q) => q.id === localId ? { ...q, id: saved.id, neonId: saved.id } : q)
           );
         } else {
-          console.warn("[NeonSync] quiz create failed:", error);
+          console.error("[NeonSync-Manual] POST request failed! Error message from server:", error);
         }
+      }).catch((err) => {
+        console.error("[NeonSync-Manual] POST request failed with network error:", err);
       });
+    } else {
+      console.warn("[NeonSync-Manual] Upload skipped because user is not logged in OR backend registration is not ready.");
     }
   };
 
@@ -2180,55 +3005,141 @@ export default function HomeScreen() {
 
     const selectedAnswers = activeSession.answers[currentQuestion.id] || [];
     const isAnswered = selectedAnswers.length > 0;
-    const showResult = activeSession.showAnswerOnSubmit && (activeSession.submitted || []).includes(currentQuestion.id);
+    // In battle mode: always show result immediately after selection (locked + colored)
+    const showResult = activeSession.isBattle
+      ? isAnswered
+      : (activeSession.showAnswerOnSubmit && (activeSession.submitted || []).includes(currentQuestion.id));
 
     return (
       <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#0a1020" : "#f4f4f8" }}>
-        {/* Session Header */}
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 52, paddingBottom: 16 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
-            <Pressable onPress={() => setShowQuitConfirm(true)} style={({ pressed }) => [{ padding: 8, marginLeft: -8, marginRight: 8 }, pressed && { opacity: 0.7 }]}>
-              <Ionicons name="chevron-back" size={24} color={settingsDarkMode ? "#e2e8f0" : "#0d0f14"} />
-            </Pressable>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 16, fontWeight: "700", color: settingsDarkMode ? "#f8fafc" : "#0d0f14" }} numberOfLines={1}>
-                {activeSession.quizTitle}
-              </Text>
-              <Text style={{ fontSize: 12, color: settingsDarkMode ? "#64748b" : "#666677", marginTop: 2 }}>
-                {activeSession.category || "Internal Medicine Mix"}
-              </Text>
+        {/* Session Header / Battle Header */}
+        {activeSession.isBattle ? (
+          <View style={{ paddingHorizontal: 20, paddingTop: 52, paddingBottom: 16,
+            backgroundColor: settingsDarkMode ? "#0a1020" : "#f4f4f8", borderBottomWidth: 1, borderBottomColor: settingsDarkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+              <Pressable onPress={() => setShowQuitConfirm(true)} style={({ pressed }) => [{ width: 36, height: 36, borderRadius: 10, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" }, pressed && { opacity: 0.7 }]}>
+                <Ionicons name="close" size={20} color={settingsDarkMode ? "#71717a" : "#64748b"} />
+              </Pressable>
+              <View style={{ alignItems: "center" }}>
+                <Text style={{ fontSize: 11, fontWeight: "800", color: settingsDarkMode ? "#818cf8" : "#6366f1", letterSpacing: 2, textTransform: "uppercase" }}>⚔️  Quiz Clash</Text>
+              </View>
+              <View style={{ width: 36 }} />
             </View>
+            
+            {/* Scoreboard */}
+            {(() => {
+              const hostScore = battleRoomState?.hostScore || 0;
+              const guestScore = battleRoomState?.guestScore || 0;
+              // Always show current player on LEFT, opponent on RIGHT
+              const myScore = activeSession.isHost ? hostScore : guestScore;
+              const opponentScore = activeSession.isHost ? guestScore : hostScore;
+              const myName = activeSession.isHost
+                ? (battleRoomState?.hostName || firebaseUser?.displayName || "You")
+                : (battleRoomState?.guestName || firebaseUser?.displayName || "You");
+              const opponentName = activeSession.isHost
+                ? (battleRoomState?.guestName || "Rival")
+                : (battleRoomState?.hostName || "Host");
+
+              let myFlex = 0.5;
+              if (myScore > 0 || opponentScore > 0) {
+                myFlex = myScore / (myScore + opponentScore);
+              }
+              const qTotal = activeSession.questions?.length || 0;
+              const qCurrent = (activeSession.currentIndex || 0) + 1;
+
+              return (
+                <View>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                    {/* Left — always YOU */}
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <Text style={{ fontSize: 18 }}>🦊</Text>
+                      <View>
+                        <Text style={{ fontSize: 11, color: settingsDarkMode ? "#71717a" : "#64748b", fontWeight: "700" }}>{myName}</Text>
+                        <Text style={{ fontSize: 20, fontWeight: "900", color: settingsDarkMode ? "#fff" : "#0d0f14", letterSpacing: -0.5 }}>{myScore}</Text>
+                      </View>
+                    </View>
+                    <View style={{ alignItems: "center", gap: 4 }}>
+                      <View style={{ backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", paddingHorizontal: 10, paddingVertical: 3, borderRadius: 8 }}>
+                        <Text style={{ fontSize: 10, fontWeight: "800", color: settingsDarkMode ? "#52525b" : "#94a3b8", textTransform: "uppercase", letterSpacing: 1 }}>{qCurrent}/{qTotal}</Text>
+                      </View>
+                      <View style={{ backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", paddingHorizontal: 10, paddingVertical: 3, borderRadius: 8 }}>
+                        <BattleTimer startTime={activeSession.startTime || Date.now()} settingsDarkMode={settingsDarkMode} />
+                      </View>
+                      {battleTimePerQuestion != null && (
+                        <View style={{ backgroundColor: battleQuestionTimeLeft <= 5 ? "rgba(239,68,68,0.15)" : (settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)"),
+                          paddingHorizontal: 10, paddingVertical: 3, borderRadius: 8,
+                          borderWidth: battleQuestionTimeLeft <= 5 ? 1 : 0,
+                          borderColor: "rgba(239,68,68,0.4)" }}>
+                          <Text style={{ fontSize: 13, fontWeight: "900", letterSpacing: -0.5,
+                            color: battleQuestionTimeLeft <= 5 ? "#ef4444" : (settingsDarkMode ? "#94a3b8" : "#64748b") }}>
+                            {battleQuestionTimeLeft}s
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    {/* Right — always OPPONENT */}
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <View style={{ alignItems: "flex-end" }}>
+                        <Text style={{ fontSize: 11, color: settingsDarkMode ? "#71717a" : "#64748b", fontWeight: "700" }}>{opponentName}</Text>
+                        <Text style={{ fontSize: 20, fontWeight: "900", color: settingsDarkMode ? "#fff" : "#0d0f14", letterSpacing: -0.5 }}>{opponentScore}</Text>
+                      </View>
+                      <Text style={{ fontSize: 18 }}>🐺</Text>
+                    </View>
+                  </View>
+                  <View style={{ height: 6, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.08)", borderRadius: 99, overflow: "hidden", flexDirection: "row" }}>
+                    <View style={{ flex: myFlex, backgroundColor: "#6366f1", borderRadius: 99 }} />
+                    <View style={{ flex: 1 - myFlex, backgroundColor: "#ec4899", borderRadius: 99 }} />
+                  </View>
+                </View>
+              );
+            })()}
           </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-            {activeSession.quizTimeLimit != null && (
-              <View style={[styles.sessionTimerBox, sessionTimeLeft <= 30 && { backgroundColor: "rgba(239,68,68,0.12)", borderColor: "rgba(239,68,68,0.35)" }]}>
-                <Ionicons name="time-outline" size={13} color={sessionTimeLeft <= 30 ? "#ef4444" : "#00e5a0"} style={{ marginRight: 4 }} />
-                <Text style={[styles.sessionTimerText, sessionTimeLeft <= 30 && { color: "#ef4444" }]}>
-                  {`${String(Math.floor(sessionTimeLeft / 60)).padStart(2, "0")}:${String(sessionTimeLeft % 60).padStart(2, "0")}`}
+        ) : (
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 52, paddingBottom: 16 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+              <Pressable onPress={() => setShowQuitConfirm(true)} style={({ pressed }) => [{ padding: 8, marginLeft: -8, marginRight: 8 }, pressed && { opacity: 0.7 }]}>
+                <Ionicons name="chevron-back" size={24} color={settingsDarkMode ? "#e2e8f0" : "#0d0f14"} />
+              </Pressable>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 16, fontWeight: "700", color: settingsDarkMode ? "#f8fafc" : "#0d0f14" }} numberOfLines={1}>
+                  {activeSession.quizTitle}
+                </Text>
+                <Text style={{ fontSize: 12, color: settingsDarkMode ? "#64748b" : "#666677", marginTop: 2 }}>
+                  {activeSession.category || "Internal Medicine Mix"}
                 </Text>
               </View>
-            )}
-            <Pressable
-              onPress={() => setShowRestartConfirm(true)}
-              style={({ pressed }) => [{ width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: settingsDarkMode ? "#334155" : "#e1e4e8", alignItems: "center", justifyContent: "center" }, pressed && { opacity: 0.7 }]}
-            >
-              <Ionicons name="refresh" size={18} color={settingsDarkMode ? "#94a3b8" : "#24292f"} />
-            </Pressable>
-            <Pressable
-              onPress={() => {
-                const qId = currentQuestion.id;
-                setStarredQuestions(prev => {
-                  const next = new Set(prev);
-                  if (next.has(qId)) next.delete(qId); else next.add(qId);
-                  return next;
-                });
-              }}
-              style={({ pressed }) => [{ width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: settingsDarkMode ? "#334155" : "#e1e4e8", alignItems: "center", justifyContent: "center" }, pressed && { opacity: 0.7 }]}
-            >
-              <Ionicons name={starredQuestions.has(currentQuestion.id) ? "bookmark" : "bookmark-outline"} size={16} color={starredQuestions.has(currentQuestion.id) ? "#3b82f6" : (settingsDarkMode ? "#94a3b8" : "#24292f")} />
-            </Pressable>
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+              {activeSession.quizTimeLimit != null && (
+                <View style={[styles.sessionTimerBox, sessionTimeLeft <= 30 && { backgroundColor: "rgba(239,68,68,0.12)", borderColor: "rgba(239,68,68,0.35)" }]}>
+                  <Ionicons name="time-outline" size={13} color={sessionTimeLeft <= 30 ? "#ef4444" : "#00e5a0"} style={{ marginRight: 4 }} />
+                  <Text style={[styles.sessionTimerText, sessionTimeLeft <= 30 && { color: "#ef4444" }]}>
+                    {`${String(Math.floor(sessionTimeLeft / 60)).padStart(2, "0")}:${String(sessionTimeLeft % 60).padStart(2, "0")}`}
+                  </Text>
+                </View>
+              )}
+              <Pressable
+                onPress={() => setShowRestartConfirm(true)}
+                style={({ pressed }) => [{ width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: settingsDarkMode ? "#334155" : "#e1e4e8", alignItems: "center", justifyContent: "center" }, pressed && { opacity: 0.7 }]}
+              >
+                <Ionicons name="refresh" size={18} color={settingsDarkMode ? "#94a3b8" : "#24292f"} />
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  const qId = currentQuestion.id;
+                  setStarredQuestions(prev => {
+                    const next = new Set(prev);
+                    if (next.has(qId)) next.delete(qId); else next.add(qId);
+                    return next;
+                  });
+                }}
+                style={({ pressed }) => [{ width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: settingsDarkMode ? "#334155" : "#e1e4e8", alignItems: "center", justifyContent: "center" }, pressed && { opacity: 0.7 }]}
+              >
+                <Ionicons name={starredQuestions.has(currentQuestion.id) ? "bookmark" : "bookmark-outline"} size={16} color={starredQuestions.has(currentQuestion.id) ? "#3b82f6" : (settingsDarkMode ? "#94a3b8" : "#24292f")} />
+              </Pressable>
+            </View>
           </View>
-        </View>
+        )}
 
         {/* Horizontal Number Progress */}
         <View style={{ marginBottom: 20 }}>
@@ -2268,8 +3179,9 @@ export default function HomeScreen() {
                 <Pressable
                   key={q.id}
                   onPress={() => {
+                    if (activeSession.isBattle && battleTimePerQuestion != null) return; // Disable navigation in timed mode
                     handleNavigateSession(i);
-                    quizFlatListRef.current?.scrollToIndex({ index: i, animated: true });
+                    quizFlatListRef.current?.scrollToIndex({ index: i, animated: false });
                   }}
                   style={{ alignItems: "center" }}
                 >
@@ -2296,6 +3208,7 @@ export default function HomeScreen() {
           keyExtractor={(item: any) => item.id}
           horizontal
           pagingEnabled
+          scrollEnabled={!(activeSession.isBattle && battleTimePerQuestion != null)}
           showsHorizontalScrollIndicator={false}
           initialScrollIndex={currentIndex}
           getItemLayout={(data, index) => ({ length: SCREEN_WIDTH, offset: SCREEN_WIDTH * index, index })}
@@ -2311,18 +3224,27 @@ export default function HomeScreen() {
 
             return (
               <View style={{ width: SCREEN_WIDTH, flex: 1 }}>
-                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
+                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 160 }} showsVerticalScrollIndicator={false}>
                   
-                  {/* Category / Subtitle */}
+                  {/* Battle: question label */}
+                  {activeSession.isBattle ? (
+                    <View style={{ marginBottom: 16, marginTop: 4 }}>
+                      <View style={{ backgroundColor: "rgba(99,102,241,0.1)", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6, alignSelf: "flex-start", borderWidth: 1, borderColor: "rgba(99,102,241,0.25)" }}>
+                        <Text style={{ fontSize: 11, fontWeight: "800", color: "#818cf8", letterSpacing: 1 }}>QUESTION {qIdx + 1}</Text>
+                      </View>
+                    </View>
+                  ) : (
                   <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
                     <Text style={{ fontSize: 11, fontWeight: "700", color: "#2dd4bf", letterSpacing: 1 }}>
                       {activeSession.category?.toUpperCase() || "GASTROENTEROLOGY"} <Text style={{ color: settingsDarkMode ? "#64748b" : "#666677" }}>/ {qst.topic?.toUpperCase() || "PEPTIC ULCER DISEASE"}</Text>
                     </Text>
                     <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#fbbf24" }} />
                   </View>
+                  )}
 
-                  {/* Question Text */}
-                  <Text style={{ fontSize: 17, color: settingsDarkMode ? "#f1f5f9" : "#24292f", lineHeight: 28, marginBottom: 32, textAlign: "left", fontWeight: "400" }}>
+                  <Text 
+                    style={{ fontSize: 18, color: activeSession.isBattle ? "#f1f5f9" : (settingsDarkMode ? "#f1f5f9" : "#24292f"), lineHeight: 28, marginBottom: 20, textAlign: "left", fontWeight: activeSession.isBattle ? "600" : "500" }}
+                  >
                     {qst.prompt}
                   </Text>
 
@@ -2330,8 +3252,12 @@ export default function HomeScreen() {
                   <View style={{ gap: 12 }}>
                     {qst.answers.map((answer: any, idx: number) => {
                       const isSelected = itemSelectedAnswers.includes(answer.id);
-                      const correctHighlight = itemShowResult && answer.isCorrect;
-                      const wrongHighlight = itemShowResult && isSelected && !answer.isCorrect;
+                      // In battle: show result immediately after any answer is selected, but DON'T dim others
+                      const effectiveShowResult = activeSession.isBattle
+                        ? itemSelectedAnswers.length > 0
+                        : itemShowResult;
+                      const correctHighlight = effectiveShowResult && answer.isCorrect;
+                      const wrongHighlight = effectiveShowResult && isSelected && !answer.isCorrect;
 
                       // Determine border and background colors
                       let containerBg = settingsDarkMode ? "transparent" : "#ffffff";
@@ -2341,16 +3267,18 @@ export default function HomeScreen() {
                       let textColor = settingsDarkMode ? "#e2e8f0" : "#24292f";
 
                       if (correctHighlight) {
-                        containerBg = settingsDarkMode ? "rgba(16, 185, 129, 0.1)" : "#d1fae5";
-                        containerBorder = "#10b981";
-                        circleBg = "#10b981";
-                        circleBorder = "#10b981";
+                        containerBg = "rgba(34,197,94,0.15)";
+                        containerBorder = "#22c55e";
+                        circleBg = "#22c55e";
+                        circleBorder = "#22c55e";
+                        textColor = "#4ade80";
                       } else if (wrongHighlight) {
-                        containerBg = settingsDarkMode ? "rgba(239, 68, 68, 0.1)" : "#fee2e2";
+                        containerBg = "rgba(239,68,68,0.15)";
                         containerBorder = "#ef4444";
                         circleBg = "#ef4444";
                         circleBorder = "#ef4444";
-                      } else if (isSelected) {
+                        textColor = "#f87171";
+                      } else if (isSelected && !effectiveShowResult) {
                         // Just selected, not checked yet
                         containerBg = settingsDarkMode ? "rgba(255, 255, 255, 0.05)" : "#f1f5f9";
                         containerBorder = settingsDarkMode ? "#ffffff" : "#0d0f14";
@@ -2361,28 +3289,34 @@ export default function HomeScreen() {
                       return (
                         <Pressable
                           key={answer.id}
-                          disabled={itemShowResult}
+                          disabled={effectiveShowResult}
                           onPress={() => handleAnswerSelect(qst, answer.id)}
                           style={({ pressed }) => [{
                             flexDirection: "row", alignItems: "center",
-                            padding: 16, borderRadius: 16,
+                            paddingVertical: 12, paddingHorizontal: 16, borderRadius: 16,
                             backgroundColor: containerBg,
-                            borderWidth: 1, 
+                            borderWidth: 1.5,
                             borderColor: containerBorder,
-                          }, pressed && !itemShowResult && { opacity: 0.7 }]}
+                          }, pressed && !effectiveShowResult && { opacity: 0.7, transform: [{ scale: 0.99 }] }]}
                         >
                           <View style={{
                             width: 34, height: 34, borderRadius: 17, overflow: "hidden",
                             backgroundColor: circleBg, borderWidth: 1, borderColor: circleBorder,
                             alignItems: "center", justifyContent: "center", marginRight: 16,
                           }}>
-                            <Text style={{ fontSize: 14, fontWeight: "700", color: (isSelected || correctHighlight || wrongHighlight) ? (settingsDarkMode && isSelected && !correctHighlight && !wrongHighlight ? "#000000" : "#ffffff") : (settingsDarkMode ? "#94a3b8" : "#666677") }}>
+                            <Text style={{ fontSize: 14, fontWeight: "700",
+                              color: (correctHighlight || wrongHighlight) ? "#fff" :
+                                (isSelected && !effectiveShowResult) ? (settingsDarkMode ? "#000000" : "#ffffff") :
+                                (settingsDarkMode ? "#94a3b8" : "#666677") }}>
                               {String.fromCharCode(65 + idx)}
                             </Text>
                           </View>
-                          <Text style={{ flex: 1, fontSize: 15, color: textColor, lineHeight: 22, fontWeight: "400" }}>
+                          <Text style={{ flex: 1, fontSize: 15, color: textColor, lineHeight: 22,
+                            fontWeight: (correctHighlight || wrongHighlight) ? "700" : "400" }}>
                             {answer.text}
                           </Text>
+                          {correctHighlight && <Text style={{ fontSize: 16, marginLeft: 8 }}>✓</Text>}
+                          {wrongHighlight && <Text style={{ fontSize: 16, marginLeft: 8 }}>✗</Text>}
                         </Pressable>
                       );
                     })}
@@ -2422,7 +3356,7 @@ export default function HomeScreen() {
               }}
               style={({ pressed }) => [{
                 width: 56, height: 56, borderRadius: 28,
-                backgroundColor: settingsDarkMode ? "#6366f1" : "#4f46e5",
+                backgroundColor: activeSession.isBattle ? "#6366f1" : (settingsDarkMode ? "#6366f1" : "#4f46e5"),
                 alignItems: "center", justifyContent: "center",
                 opacity: pressed ? 0.7 : 1,
                 shadowColor: "#6366f1", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 10, elevation: 6
@@ -2439,6 +3373,219 @@ export default function HomeScreen() {
   const renderResultsView = () => {
     if (!activeSession) return null;
 
+    if (activeSession.isBattle) {
+      const hostScore = battleRoomState?.hostScore || 0;
+      const guestScore = battleRoomState?.guestScore || 0;
+      const myScore = activeSession.isHost ? hostScore : guestScore;
+      const opponentScore = activeSession.isHost ? guestScore : hostScore;
+      const opponentName = activeSession.isHost ? (battleRoomState?.guestName || "Rival") : (battleRoomState?.hostName || "Host");
+      const myName = activeSession.isHost ? (battleRoomState?.hostName || "You") : (battleRoomState?.guestName || "You");
+
+      const iFinished = activeSession.isHost ? (battleRoomState?.hostFinished || false) : (battleRoomState?.guestFinished || false);
+      const opponentFinished = activeSession.isHost ? (battleRoomState?.guestFinished || false) : (battleRoomState?.hostFinished || false);
+      const bothFinished = iFinished && opponentFinished;
+
+      // Trigger finishBattle once when both players are done
+      // (done via useEffect-like guard using a ref to avoid calling on every render)
+      if (bothFinished && battleRoomState?.status !== "finished") {
+        // This is in render — use a ref to ensure only called once
+        if (!battleFinishedCalledRef.current) {
+          battleFinishedCalledRef.current = true;
+          finishBattle(activeSession.battleRoomCode || "").catch(console.error);
+        }
+      } else if (!bothFinished) {
+        battleFinishedCalledRef.current = false;
+      }
+
+      const exitBattle = () => {
+        if (battleRoomState && (!battleRoomState.hostFinished || !battleRoomState.guestFinished)) {
+          const code = battleRoomState.id;
+          const host = isHost;
+          const unsubscribe = listenToBattleRoom(code, (data) => {
+            if (data.hostFinished && data.guestFinished) {
+              const myScore = host ? data.hostScore : data.guestScore;
+              const oppScore = host ? data.guestScore : data.hostScore;
+              const oppName = host ? (data.guestName || "Opponent") : data.hostName;
+              let effectiveWin = false;
+              let myTime = host ? (data.hostTime ?? Infinity) : (data.guestTime ?? Infinity);
+              let oppTime = host ? (data.guestTime ?? Infinity) : (data.hostTime ?? Infinity);
+              if (myScore > oppScore) effectiveWin = true;
+              else if (myScore === oppScore) {
+                effectiveWin = myTime < oppTime;
+              }
+              saveBattleResult(code, myScore, oppScore, oppName, data.quizTitle || "", effectiveWin, myTime !== Infinity ? myTime : undefined, oppTime !== Infinity ? oppTime : undefined);
+              setBattlePopup({ myScore, opponentScore: oppScore, opponentName: oppName, won: effectiveWin });
+              if (effectiveWin) triggerConfettiBurst();
+              unsubscribe();
+            }
+          });
+        }
+
+        if (battleUnsubscribeRef.current) battleUnsubscribeRef.current();
+        setBattleRoomCode("");
+        setBattleRoomState(null);
+        setActiveSession(null);
+        setIsHost(false);
+        setJoinCodeInput("");
+        setActiveTab("battle");
+      };
+
+      // ── WAITING FOR OPPONENT ────────────────────────────────────────
+      if (!bothFinished) {
+        const isDark = settingsDarkMode;
+        const bg = isDark ? "#0f172a" : "#f4f4f8";
+        const cardBg = isDark ? "#1e293b" : "#ffffff";
+        const txt = isDark ? "#ffffff" : "#0d0f14";
+        const muted = isDark ? "#94a3b8" : "#64748b";
+        const border = isDark ? "rgba(255,255,255,0.08)" : "#e2e8f0";
+
+        return (
+          <View style={{ flex: 1, backgroundColor: bg, alignItems: "center", justifyContent: "center", padding: 24 }}>
+            {/* My score card */}
+            <View style={{ backgroundColor: cardBg, borderRadius: 20, padding: 24, width: "100%",
+              borderWidth: 1, borderColor: border, alignItems: "center", marginBottom: 28 }}>
+              <Text style={{ fontSize: 12, fontWeight: "700", color: muted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 16 }}>
+                Your Score
+              </Text>
+              <Text style={{ fontSize: 56, fontWeight: "900", color: txt, letterSpacing: -2 }}>{myScore}</Text>
+              <Text style={{ fontSize: 13, color: muted, marginTop: 4 }}>
+                {activeSession.correctCount || 0} correct of {activeSession.questions?.length || 0} questions
+              </Text>
+            </View>
+
+            {/* Waiting indicator */}
+            <View style={{ alignItems: "center", marginBottom: 36, gap: 12 }}>
+              <ActivityIndicator size="large" color={isDark ? "#818cf8" : "#6366f1"} />
+              <Text style={{ fontSize: 16, fontWeight: "700", color: txt }}>
+                Waiting for {opponentName} to finish…
+              </Text>
+              <Text style={{ fontSize: 13, color: muted, textAlign: "center" }}>
+                Results will appear when both players are done.
+              </Text>
+            </View>
+
+            {/* Exit button */}
+            <Pressable
+              onPress={exitBattle}
+              style={({ pressed }) => [{
+                borderWidth: 1.5, borderColor: isDark ? "rgba(255,255,255,0.15)" : "#e2e8f0",
+                paddingVertical: 14, borderRadius: 14, width: "100%", alignItems: "center",
+              }, pressed && { opacity: 0.7 }]}
+            >
+              <Text style={{ color: muted, fontSize: 15, fontWeight: "600" }}>Exit to Library</Text>
+            </Pressable>
+          </View>
+        );
+      }
+
+      // ── FULL RESULTS (both finished) ────────────────────────────────
+      const isWinner = myScore > opponentScore;
+      // Tie-break by speed: lower time wins
+      const myTime = activeSession.isHost ? (battleRoomState?.hostTime ?? Infinity) : (battleRoomState?.guestTime ?? Infinity);
+      const opponentTime = activeSession.isHost ? (battleRoomState?.guestTime ?? Infinity) : (battleRoomState?.hostTime ?? Infinity);
+      const isTie = myScore === opponentScore;
+      const tiebreakerWin = isTie && myTime < opponentTime;
+      const isPerfectDraw = isTie && myTime === opponentTime;
+      const effectiveWin = isWinner || tiebreakerWin;
+      const totalQs = activeSession.questions?.length || 0;
+      const accuracy = totalQs > 0 ? Math.round((activeSession.correctCount || 0) / totalQs * 100) : 0;
+
+      return (
+        <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#0f172a" : "#f4f4f8" }}>
+          <ScrollView contentContainerStyle={{ alignItems: "center", padding: 24, paddingTop: 60, paddingBottom: 80 }}>
+            {/* Trophy badge */}
+            <View style={{
+              width: 110, height: 110, borderRadius: 55,
+              backgroundColor: effectiveWin ? (settingsDarkMode ? "rgba(34,197,94,0.12)" : "rgba(34,197,94,0.08)") : isPerfectDraw ? (settingsDarkMode ? "rgba(99,102,241,0.12)" : "rgba(99,102,241,0.08)") : (settingsDarkMode ? "rgba(239,68,68,0.1)" : "rgba(239,68,68,0.06)"),
+              borderWidth: 1.5,
+              borderColor: effectiveWin ? "rgba(34,197,94,0.35)" : isPerfectDraw ? "rgba(99,102,241,0.35)" : "rgba(239,68,68,0.25)",
+              alignItems: "center", justifyContent: "center", marginBottom: 18
+            }}>
+              <Text style={{ fontSize: 50 }}>{effectiveWin ? "🏆" : isPerfectDraw ? "🤝" : "💀"}</Text>
+            </View>
+
+            <Text style={{ fontSize: 34, fontWeight: "900", letterSpacing: -1, marginBottom: 4,
+              color: effectiveWin ? "#22c55e" : isPerfectDraw ? "#6366f1" : "#ef4444" }}>
+              {effectiveWin ? "VICTORY!" : isPerfectDraw ? "DRAW!" : "DEFEATED"}
+            </Text>
+            {/* Tie-breaker explanation */}
+            {isTie && !isPerfectDraw && (
+              <View style={{ backgroundColor: tiebreakerWin ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.08)",
+                borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6, marginBottom: 6,
+                borderWidth: 1, borderColor: tiebreakerWin ? "rgba(34,197,94,0.25)" : "rgba(239,68,68,0.2)" }}>
+                <Text style={{ fontSize: 12, fontWeight: "700", color: tiebreakerWin ? "#22c55e" : "#ef4444" }}>
+                  {tiebreakerWin ? "⚡ You were faster — tiebreaker win!" : "⚡ Opponent was faster — tiebreaker loss"}
+                </Text>
+              </View>
+            )}
+            <Text style={{ fontSize: 14, color: settingsDarkMode ? "#64748b" : "#64748b", marginBottom: 28, textAlign: "center", fontWeight: "500" }}>
+              {effectiveWin ? "You dominated the quiz!" : isPerfectDraw ? "Perfectly matched!" : "Better luck next time!"}
+            </Text>
+
+            {/* Score card */}
+            <View style={{ flexDirection: "row",
+              backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.04)" : "#ffffff",
+              borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.08)" : "#e2e8f0",
+              borderRadius: 18, padding: 18, width: "100%", marginBottom: 14, alignItems: "center", gap: 12 }}>
+              {/* Me */}
+              <View style={[{ flex: 1, alignItems: "center", padding: 10, borderRadius: 12 },
+                effectiveWin && { backgroundColor: settingsDarkMode ? "rgba(34,197,94,0.1)" : "rgba(34,197,94,0.07)" }]}>
+                <Text style={{ fontSize: 26 }}>🦊</Text>
+                <Text style={{ fontSize: 11, color: settingsDarkMode ? "#71717a" : "#64748b", fontWeight: "700", marginBottom: 2 }}>{myName}</Text>
+                <Text style={{ fontSize: 30, fontWeight: "900", color: settingsDarkMode ? "#fff" : "#0d0f14", letterSpacing: -1 }}>{myScore}</Text>
+                <Text style={{ fontSize: 10, color: settingsDarkMode ? "#52525b" : "#94a3b8", fontWeight: "700", textTransform: "uppercase" }}>pts</Text>
+                {effectiveWin && <View style={{ backgroundColor: "rgba(34,197,94,0.2)", borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2, marginTop: 4 }}>
+                  <Text style={{ fontSize: 9, fontWeight: "800", color: "#22c55e", textTransform: "uppercase", letterSpacing: 0.5 }}>Winner</Text>
+                </View>}
+              </View>
+
+              <Text style={{ fontSize: 14, fontWeight: "900", color: settingsDarkMode ? "#3f3f46" : "#cbd5e1" }}>VS</Text>
+
+              {/* Opponent */}
+              <View style={[{ flex: 1, alignItems: "center", padding: 10, borderRadius: 12 },
+                !effectiveWin && !isPerfectDraw && { backgroundColor: settingsDarkMode ? "rgba(34,197,94,0.1)" : "rgba(34,197,94,0.07)" }]}>
+                <Text style={{ fontSize: 26 }}>🐺</Text>
+                <Text style={{ fontSize: 11, color: settingsDarkMode ? "#71717a" : "#64748b", fontWeight: "700", marginBottom: 2 }}>{opponentName}</Text>
+                <Text style={{ fontSize: 30, fontWeight: "900", color: settingsDarkMode ? "#fff" : "#0d0f14", letterSpacing: -1 }}>{opponentScore}</Text>
+                <Text style={{ fontSize: 10, color: settingsDarkMode ? "#52525b" : "#94a3b8", fontWeight: "700", textTransform: "uppercase" }}>pts</Text>
+                {!effectiveWin && !isPerfectDraw && <View style={{ backgroundColor: "rgba(34,197,94,0.2)", borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2, marginTop: 4 }}>
+                  <Text style={{ fontSize: 9, fontWeight: "800", color: "#22c55e", textTransform: "uppercase", letterSpacing: 0.5 }}>Winner</Text>
+                </View>}
+              </View>
+            </View>
+
+            {/* Stats row */}
+            <View style={{ flexDirection: "row", gap: 10, width: "100%", marginBottom: 32 }}>
+              {[{label: "Questions", value: String(totalQs)}, {label: "Correct", value: String(activeSession.correctCount || 0)}, {label: "Accuracy", value: accuracy + "%"}].map((s) => (
+                <View key={s.label} style={{ flex: 1,
+                  backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.04)" : "#ffffff",
+                  borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.07)" : "#e2e8f0",
+                  borderRadius: 14, padding: 12, alignItems: "center" }}>
+                  <Text style={{ fontSize: 9, color: settingsDarkMode ? "#52525b" : "#94a3b8", fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>{s.label}</Text>
+                  <Text style={{ fontSize: 22, fontWeight: "800", color: settingsDarkMode ? "#fff" : "#0d0f14" }}>{s.value}</Text>
+                </View>
+              ))}
+            </View>
+
+            {/* Exit button */}
+            <Pressable
+              onPress={() => {
+                const myTimeMs = activeSession.isHost ? (battleRoomState?.hostTime ?? Infinity) : (battleRoomState?.guestTime ?? Infinity);
+                const oppTimeMs = activeSession.isHost ? (battleRoomState?.guestTime ?? Infinity) : (battleRoomState?.hostTime ?? Infinity);
+                saveBattleResult(activeSession.battleRoomCode, myScore, opponentScore, opponentName, activeSession.quizTitle || "", effectiveWin, myTimeMs !== Infinity ? myTimeMs : undefined, oppTimeMs !== Infinity ? oppTimeMs : undefined);
+                exitBattle();
+              }}
+              style={({ pressed }) => [{
+                backgroundColor: "#6366f1",
+                paddingVertical: 16, borderRadius: 14, width: "100%", alignItems: "center",
+              }, pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }]}
+            >
+              <Text style={{ color: "#fff", fontSize: 16, fontWeight: "800" }}>⚔️ Back to Battle Lobby</Text>
+            </Pressable>
+          </ScrollView>
+        </View>
+      );
+    }
     const questions = activeSession.questions;
     const totalQs = questions.length;
     let correctCount = 0;
@@ -2450,13 +3597,6 @@ export default function HomeScreen() {
       const selected = activeSession.answers[q.id] || [];
       if (selected.length === 0) {
         skippedCount++;
-        const correctText = q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.text).join(", ");
-        wrongQsForQuiz.push({
-          id: q.id,
-          prompt: q.prompt,
-          selected: "Skipped",
-          correct: correctText,
-        });
       } else {
         const correctIds = q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.id);
         const isAllCorrect = selected.every((id: string) => correctIds.includes(id)) && selected.length === correctIds.length;
@@ -2476,18 +3616,14 @@ export default function HomeScreen() {
       }
     });
 
-    const wrongQuestionObjects = questions.filter((q: any) => {
-      const selected = activeSession.answers[q.id] || [];
-      if (selected.length === 0) return true;
-      const correctIds = q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.id);
-      const isAllCorrect = selected.every((id: string) => correctIds.includes(id)) && selected.length === correctIds.length;
-      return !isAllCorrect;
-    });
+    const wrongQuestionIds = wrongQsForQuiz.map((wq: any) => wq.id);
+    const wrongQuestionObjects = questions.filter((q: any) => wrongQuestionIds.includes(q.id));
 
     const handleReattemptWrong = () => {
       if (wrongQuestionObjects.length === 0) return;
       setActiveSession({
         ...activeSession,
+        attemptSaved: false,
         questions: wrongQuestionObjects,
         currentIndex: 0,
         answers: {},
@@ -2523,6 +3659,9 @@ export default function HomeScreen() {
       setActiveSession({
         quizId: activeSession.quizId,
         quizTitle: title,
+        targetAttemptId: activeSession.targetAttemptId,
+        retryOfAttemptNum: activeSession.retryOfAttemptNum,
+        attemptSaved: false,
         questions: qsList,
         selectionMode: activeSession.selectionMode || "all",
         shuffleQuestions: activeSession.shuffleQuestions || false,
@@ -2539,8 +3678,7 @@ export default function HomeScreen() {
       setShowWrongReview(false);
     };
 
-    const answeredCount = correctCount + wrongCount;
-    const scorePct = answeredCount > 0 ? Math.round((correctCount / answeredCount) * 100) : 0;
+    const scorePct = totalQs > 0 ? Math.round((correctCount / totalQs) * 100) : 0;
     const xpGained = correctCount * 20;
 
     return (
@@ -2646,80 +3784,7 @@ export default function HomeScreen() {
           </Pressable>
 
           <Pressable
-            onPress={() => {
-              const targetAttemptId = activeSession.targetAttemptId;
-              const baseAttemptData = {
-                id: targetAttemptId || String(Date.now()),
-                score: scorePct,
-                correct: correctCount,
-                wrong: wrongCount,
-                skipped: skippedCount,
-                timestamp: Date.now(),
-                wrongQuestionIds: wrongQsForQuiz.map(q => q.id),
-                questionIds: activeSession.questions.map((q: any) => q.id)
-              };
-              
-              const correctIdsInSession = activeSession.questions
-                .filter((q: any) => !wrongQsForQuiz.find((wq) => wq.id === q.id))
-                .map((q: any) => q.id);
-
-              const updatedQuizzes = quizzes.map((q: any) => {
-                if (q.id === activeSession.quizId) {
-                  const currentUnique = q.uniqueCorrectIds || [];
-                  const updatedUniqueCorrectIds = Array.from(new Set([...currentUnique, ...correctIdsInSession]));
-                  
-                  let updatedAttempts = q.attempts || [];
-                  if (targetAttemptId) {
-                    updatedAttempts = updatedAttempts.map((a: any) => {
-                      if (a.id === targetAttemptId) {
-                        const mergedCorrect = (a.correct || 0) + correctCount;
-                        const mergedSkipped = (a.skipped || 0) + skippedCount;
-                        const mergedWrong = Math.max(0, (a.wrong || 0) - correctCount - skippedCount);
-                        const totalQs = mergedCorrect + mergedSkipped + mergedWrong;
-                        const mergedScore = Math.round((mergedCorrect / (totalQs || 1)) * 100);
-                        
-                        return {
-                          ...a,
-                          ...baseAttemptData,
-                          score: mergedScore,
-                          correct: mergedCorrect,
-                          wrong: mergedWrong,
-                          skipped: mergedSkipped
-                        };
-                      }
-                      return a;
-                    });
-                  } else {
-                    updatedAttempts = [baseAttemptData, ...updatedAttempts];
-                  }
-
-                  return {
-                    ...q,
-                    attempts: updatedAttempts,
-                    wrongQuestions: wrongQsForQuiz,
-                    uniqueCorrectIds: updatedUniqueCorrectIds
-                  };
-                }
-                return q;
-              });
-
-              setQuizzes(updatedQuizzes);
-              setViewingInsightsQuiz(updatedQuizzes.find((q: any) => q.id === activeSession.quizId));
-              setActiveSession(null);
-
-              // Push updated attempts to Neon if logged in
-              const updatedQ = updatedQuizzes.find((q: any) => q.id === activeSession.quizId);
-              const neonId = updatedQ?.neonId ?? updatedQ?.id;
-              if (firebaseUser && neonId && !String(neonId).startsWith("local_")) {
-                updateMobileQuiz({
-                  userId: firebaseUser.uid,
-                  quizId: neonId,
-                  attempts: updatedQ.attempts,
-                  wrongQuestions: updatedQ.wrongQuestions,
-                  uniqueCorrectIds: updatedQ.uniqueCorrectIds,
-                }).catch((err) => console.warn("[NeonSync] quiz attempt update failed:", err));
-              }
-            }}
+            onPress={() => saveAndExitQuizSession()}
             style={[styles.startQuizBtn, { backgroundColor: settingsDarkMode ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.06)", shadowOpacity: 0 }]}
           >
             <Text style={[styles.startQuizBtnText, { color: settingsDarkMode ? "#ffffff" : "#0d0f14" }]}>Exit to Library</Text>
@@ -2743,7 +3808,7 @@ export default function HomeScreen() {
   };
 
   const getUserFullName = (user: typeof firebaseUser | null): string => {
-    if (!user) return "QuizForge User";
+    if (!user) return "Scorr User";
     if (user.displayName) return user.displayName;
     if (user.email) {
       const localPart = user.email.split("@")[0];
@@ -2751,7 +3816,7 @@ export default function HomeScreen() {
       const parts = localPart.split(/[._\-+]/).filter(p => p.replace(/\d/g, "").length > 0);
       return parts.map(p => p.replace(/\d+/g, "").charAt(0).toUpperCase() + p.replace(/\d+/g, "").slice(1)).join(" ");
     }
-    return "QuizForge User";
+    return "Scorr User";
   };
 
   const getUserInitial = (user: typeof firebaseUser | null): string => {
@@ -2868,13 +3933,823 @@ export default function HomeScreen() {
     });
   };
 
+  /** Opens battle options sheet – does NOT create room yet */
+  const handleHostBattle = (quizId: string) => {
+    const q = quizzes.find((q) => q.id === quizId);
+    if (!q) return;
+    setBattleOptionsQuiz(q);
+    setBattleSelectionMode("all");
+    setBattleRandomCount(Math.min(10, (q.questionsList?.length || q.questions || 10)));
+    setBattleRangeStart(1);
+    setBattleRangeEnd(Math.min(5, (q.questionsList?.length || q.questions || 5)));
+    setBattleShuffleQ(false);
+    setBattleShuffleA(false);
+    setBattleTimePerQuestion(null);
+    setBattleCreating(false);
+    setShowBattleQuizSelector(false);
+    setShowBattleOptions(true);
+  };
+
+  /** Actually creates the room after options are confirmed */
+  const handleStartBattle = async () => {
+    const q = battleOptionsQuiz;
+    if (!q) return;
+
+    setBattleError("");
+    setBattleConnError("");
+    setBattleCreating(true); // show loading inside modal
+    try {
+      let qsList: any[] = q.questionsList || [];
+      if (!qsList || qsList.length === 0) {
+        qsList = generateMockQuestionsForQuiz(q.title, q.questions || 1);
+      }
+      // Apply selection mode
+      if (battleSelectionMode === "random") {
+        qsList = [...qsList].sort(() => Math.random() - 0.5).slice(0, battleRandomCount);
+      } else if (battleSelectionMode === "range") {
+        qsList = qsList.slice(battleRangeStart - 1, battleRangeEnd);
+      }
+      if (battleShuffleQ) {
+        qsList = [...qsList].sort(() => Math.random() - 0.5);
+      }
+      if (battleShuffleA) {
+        qsList = qsList.map((q: any) => ({ ...q, answers: [...q.answers].sort(() => Math.random() - 0.5) }));
+      }
+      
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Connection timeout. Please check your internet connection.")), 8000));
+      const code = await Promise.race([
+        createBattleRoom(q.id, q.title, qsList.length, qsList, firebaseUser?.uid || "guest", firebaseUser?.displayName || "Player", battleTimePerQuestion),
+        timeoutPromise
+      ]) as string;
+
+      setBattleRoomCode(code);
+      setIsHost(true);
+      battleStartedRef.current = false;
+      setBattleCreating(false);
+      setShowBattleOptions(false); // close AFTER room created so user sees loading
+      if (battleUnsubscribeRef.current) battleUnsubscribeRef.current();
+      battleUnsubscribeRef.current = listenToBattleRoom(code, (data) => {
+        setBattleRoomState(data);
+        if (data.status === "playing" && !battleStartedRef.current) {
+          battleStartedRef.current = true;
+          startBattleSession(data, true);
+        }
+      });
+    } catch (e: any) {
+      setBattleCreating(false);
+      setBattleError(e.message || "Failed to create room. Check your connection and try again.");
+    }
+  };
+
+  const handleJoinBattle = async () => {
+    if (!joinCodeInput.trim()) return;
+
+    setBattleError("");
+    setBattleCreating(true);
+    try {
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Connection timeout. Please check your internet connection.")), 8000));
+      const res = await Promise.race([
+        joinBattleRoom(joinCodeInput, firebaseUser?.uid || "guest2", firebaseUser?.displayName || "Player 2"),
+        timeoutPromise
+      ]) as { success: boolean; error?: string; quizId?: string };
+      setBattleCreating(false);
+      if (res.success) {
+        setBattleRoomCode(joinCodeInput.toUpperCase().trim());
+        setIsHost(false);
+        battleStartedRef.current = false;
+        if (battleUnsubscribeRef.current) battleUnsubscribeRef.current();
+        battleUnsubscribeRef.current = listenToBattleRoom(joinCodeInput.toUpperCase().trim(), (data) => {
+          setBattleRoomState(data);
+          if (data.status === "playing" && !battleStartedRef.current) {
+            battleStartedRef.current = true;
+            startBattleSession(data, false);
+          }
+        });
+      } else {
+        setBattleError(res.error || "Room not found. Check the code and try again.");
+      }
+    } catch (e: any) {
+      setBattleCreating(false);
+      setBattleError(e.message || "Connection error. Please try again.");
+    }
+  };
+
+  const startBattleSession = (data: BattleRoom, isHostFlag: boolean) => {
+    let qsList = data.questions;
+    if (!qsList || qsList.length === 0) {
+      const quiz = quizzesRef.current.find((q: any) => q.id === data.quizId);
+      if (quiz && quiz.questionsList && quiz.questionsList.length > 0) {
+        qsList = [...quiz.questionsList];
+      } else {
+        setBattleError("Could not load questions for this match.");
+        return;
+      }
+    }
+
+    // Read timePerQuestion from Firestore room so both host & guest are in sync
+    const tpq: number | null = (data as any).timePerQuestion ?? null;
+    setBattleTimePerQuestion(tpq);
+    if (tpq != null) setBattleQuestionTimeLeft(tpq);
+
+    setActiveSession({
+       quizId: data.quizId,
+       quizTitle: data.quizTitle,
+       questions: qsList,
+       currentIndex: 0,
+       answers: {},
+       correctCount: 0,
+       wrongCount: 0,
+       startTime: Date.now(),
+       isBattle: true,
+       battleRoomCode: data.id,
+       isHost: isHostFlag,
+       attemptSaved: false,
+       showAnswerOnSubmit: true,
+       // no quizTimeLimit — battle uses per-question timer
+    });
+  };
+
+  const renderBattleLobbyView = () => {
+    const isDark = settingsDarkMode;
+
+    // ── Sign-in gate ────────────────────────────────────────────────
+    if (!firebaseUser) {
+      return (
+        <View style={{ flex: 1, backgroundColor: isDark ? "#0f172a" : "#f4f4f8", alignItems: "center", justifyContent: "center", padding: 32 }}>
+          <View style={{ width: 88, height: 88, borderRadius: 28, backgroundColor: isDark ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.1)",
+            borderWidth: 1.5, borderColor: isDark ? "rgba(99,102,241,0.35)" : "rgba(99,102,241,0.2)",
+            alignItems: "center", justifyContent: "center", marginBottom: 24 }}>
+            <Text style={{ fontSize: 44 }}>⚔️</Text>
+          </View>
+          <Text style={{ fontSize: 26, fontWeight: "900", color: isDark ? "#fff" : "#0d0f14", letterSpacing: -0.5, marginBottom: 10, textAlign: "center" }}>Sign in to Battle</Text>
+          <Text style={{ fontSize: 15, color: isDark ? "#94a3b8" : "#64748b", textAlign: "center", lineHeight: 22, marginBottom: 36 }}>
+            Quiz Clash requires an account so your identity is verified and results are saved fairly.
+          </Text>
+          <Pressable
+            onPress={() => setShowAuthScreen(true)}
+            style={({ pressed }) => [{
+              backgroundColor: "#6366f1", paddingVertical: 16, paddingHorizontal: 40,
+              borderRadius: 16, alignItems: "center", width: "100%",
+            }, pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }]}
+          >
+            <Text style={{ color: "#fff", fontSize: 16, fontWeight: "800" }}>Sign In / Create Account</Text>
+          </Pressable>
+        </View>
+      );
+    }
+
+    const bg      = isDark ? "#0f172a" : "#f4f4f8";
+    const cardBg  = isDark ? "rgba(255,255,255,0.045)" : "#ffffff";
+    const cardBorder = isDark ? "rgba(255,255,255,0.09)" : "#e2e8f0";
+    const txt     = isDark ? "#ffffff" : "#0d0f14";
+    const muted   = isDark ? "#71717a" : "#64748b";
+    const mutedSub = isDark ? "#3f3f46" : "#94a3b8";
+    const sepColor = isDark ? "rgba(255,255,255,0.07)" : "#e2e8f0";
+
+    // ── Dynamic stats from history ────────────────────────────────────
+    const totalWins = battleHistory.filter(h => h.won).length;
+    const totalBattles = battleHistory.length;
+    const winRate = totalBattles > 0 ? Math.round((totalWins / totalBattles) * 100) : 0;
+    // Compute current day streak (consecutive days played)
+    let dayStreak = 0;
+    if (battleHistory.length > 0) {
+      const sortedHistory = [...battleHistory].sort((a, b) => b.date - a.date);
+      const uniqueDays = new Set(sortedHistory.map(h => new Date(h.date).toDateString()));
+      
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      
+      const todayStr = today.toDateString();
+      const yesterdayStr = yesterday.toDateString();
+      
+      if (uniqueDays.has(todayStr) || uniqueDays.has(yesterdayStr)) {
+        let checkDate = uniqueDays.has(todayStr) ? today : yesterday;
+        while (uniqueDays.has(checkDate.toDateString())) {
+          dayStreak++;
+          checkDate.setDate(checkDate.getDate() - 1);
+        }
+      }
+    }
+
+    return (
+      <KeyboardWrapper
+        style={{ flex: 1, backgroundColor: bg }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+      >
+        {/* No orbs - clean background matches rest of app */}
+
+        <ScrollView
+          contentContainerStyle={{ padding: 22, paddingBottom: 120 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Header row with history button */}
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8, marginBottom: 28 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <MaterialCommunityIcons name="sword-cross" size={19} color={isDark ? "#818cf8" : "#6366f1"} />
+              <Text style={{ fontSize: 15, color: isDark ? "#818cf8" : "#6366f1", fontWeight: "700" }}>Battle Arena</Text>
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Pressable
+                onPress={() => setShowBattleHistory(true)}
+                style={({ pressed }) => [{
+                  flexDirection: "row", alignItems: "center", gap: 4,
+                  backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)",
+                  borderRadius: 16, paddingHorizontal: 11, paddingVertical: 6,
+                }, pressed && { opacity: 0.7 }]}
+              >
+                <Ionicons name="time-outline" size={13} color={muted} />
+                <Text style={{ fontSize: 12, fontWeight: "500", color: muted }}>History</Text>
+              </Pressable>
+              
+              <Pressable
+                onPress={() => setActiveTab("menu")}
+                style={({ pressed }) => [{
+                  width: 32, height: 32, borderRadius: 16,
+                  backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
+                  alignItems: "center", justifyContent: "center"
+                }, pressed && { opacity: 0.7 }]}
+              >
+                <Ionicons name="settings-outline" size={15} color={muted} />
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Hero title */}
+          <View style={{ alignItems: "center", marginBottom: 4 }}>
+            <Text style={{ fontSize: 28, fontWeight: "500", color: txt, letterSpacing: -0.5 }}>
+              Quiz<Text style={{ color: isDark ? "#818cf8" : "#6366f1" }}>Clash</Text>
+            </Text>
+          </View>
+          <Text style={{ fontSize: 13, color: muted, fontWeight: "400", textAlign: "center", marginBottom: 20 }}>
+            Challenge friends. Prove your knowledge.
+          </Text>
+
+          {/* Error banner */}
+          {battleError ? (
+            <Pressable
+              onPress={() => setBattleError("")}
+              style={{ backgroundColor: isDark ? "rgba(239,68,68,0.12)" : "rgba(239,68,68,0.08)",
+                borderWidth: 1, borderColor: isDark ? "rgba(239,68,68,0.25)" : "rgba(239,68,68,0.2)",
+                padding: 14, borderRadius: 12, marginBottom: 16, flexDirection: "row", alignItems: "center", gap: 10 }}
+            >
+              <Text style={{ fontSize: 16 }}>⚠️</Text>
+              <Text style={{ color: isDark ? "#f87171" : "#dc2626", fontSize: 14, flex: 1, fontWeight: "500" }}>{battleError}</Text>
+              <Text style={{ fontSize: 12, color: muted }}>Tap to dismiss</Text>
+            </Pressable>
+          ) : null}
+
+          {!battleRoomCode ? (
+            <>
+              {/* HOST CARD */}
+              <Pressable
+                onPress={() => setShowBattleQuizSelector(true)}
+                style={({ pressed }) => [{
+                  backgroundColor: cardBg,
+                  borderRadius: 14,
+                  padding: 14,
+                  marginBottom: 10,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 12,
+                }, pressed && { opacity: 0.8 }]}
+              >
+                <View style={{
+                  width: 40, height: 40, borderRadius: 11,
+                  backgroundColor: isDark ? "#2a2410" : "#fef3c7",
+                  alignItems: "center", justifyContent: "center"
+                }}>
+                  <Ionicons name="trophy" size={19} color={isDark ? "#f0b429" : "#d97706"} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 14, fontWeight: "500", color: txt, marginBottom: 1 }}>Host a battle</Text>
+                  <Text style={{ fontSize: 12, color: muted }}>Pick your quiz & invite opponents</Text>
+                </View>
+                <Feather name="chevron-right" size={17} color={mutedSub} />
+              </Pressable>
+
+              {/* Divider */}
+              <View style={{ flexDirection: "row", alignItems: "center", marginVertical: 14, gap: 10 }}>
+                <View style={{ flex: 1, height: 0.5, backgroundColor: sepColor }} />
+                <Text style={{ color: mutedSub, fontSize: 11 }}>or</Text>
+                <View style={{ flex: 1, height: 0.5, backgroundColor: sepColor }} />
+              </View>
+
+              {/* JOIN CARD */}
+              <View style={{
+                backgroundColor: cardBg,
+                borderRadius: 14, padding: 14, marginBottom: 20,
+              }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 }}>
+                  <View style={{
+                    width: 40, height: 40, borderRadius: 11,
+                    backgroundColor: isDark ? "#0f2620" : "#ccfbf1",
+                    alignItems: "center", justifyContent: "center"
+                  }}>
+                    <Ionicons name="locate" size={19} color={isDark ? "#2dd4a7" : "#0d9488"} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: "500", color: txt, marginBottom: 1 }}>Join a battle</Text>
+                    <Text style={{ fontSize: 12, color: muted }}>Enter your friend's room code</Text>
+                  </View>
+                </View>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  <TextInput
+                    style={{
+                      flex: 1, height: 40,
+                      backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.02)",
+                      borderWidth: 0.5,
+                      borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)",
+                      borderRadius: 10, paddingHorizontal: 12,
+                      fontSize: 13, color: txt, letterSpacing: 2
+                    }}
+                    placeholder="CODE"
+                    placeholderTextColor={mutedSub}
+                    maxLength={5}
+                    value={joinCodeInput}
+                    onChangeText={setJoinCodeInput}
+                    autoCapitalize="characters"
+                  />
+                  <Pressable
+                    onPress={handleJoinBattle}
+                    disabled={joinCodeInput.length !== 5 || battleCreating}
+                    style={({ pressed }) => {
+                      const isReady = joinCodeInput.length === 5 && !battleCreating;
+                      return [{
+                        height: 40, paddingHorizontal: 18, borderRadius: 10,
+                        backgroundColor: isReady ? (isDark ? "#2dd4a7" : "#0d9488") : (isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"),
+                        borderWidth: 0.5,
+                        borderColor: isReady ? (isDark ? "#2dd4a7" : "#0d9488") : (isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)"),
+                        justifyContent: "center", alignItems: "center",
+                      }, pressed && { opacity: 0.7 }];
+                    }}
+                  >
+                    {battleCreating ? (
+                      <ActivityIndicator size="small" color={isDark ? "#ffffff" : "#ffffff"} />
+                    ) : (
+                      <Text style={{ color: (joinCodeInput.length === 5 && !battleCreating) ? "#ffffff" : (isDark ? "#777d99" : "#64748b"), fontSize: 13, fontWeight: (joinCodeInput.length === 5) ? "700" : "500" }}>Join</Text>
+                    )}
+                  </Pressable>
+                </View>
+              </View>
+
+              {/* Dynamic Stats Row 1: Win Rate Circular */}
+              {totalBattles > 0 && (
+                <>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 16, marginBottom: 14 }}>
+                    <View style={{ 
+                      width: 80, height: 80, borderRadius: 40,
+                      borderWidth: 6, borderColor: isDark ? "rgba(139,143,240,0.3)" : "rgba(99,102,241,0.2)",
+                      alignItems: "center", justifyContent: "center"
+                    }}>
+                      <Text style={{ fontSize: 17, fontWeight: "500", color: txt }}>{winRate}%</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 13, fontWeight: "500", color: txt, marginBottom: 2 }}>Win rate</Text>
+                      <Text style={{ fontSize: 11, color: muted }}>{totalWins} win{totalWins !== 1 ? 's' : ''} out of {totalBattles} battle{totalBattles !== 1 ? 's' : ''} played</Text>
+                    </View>
+                  </View>
+
+                  {/* Dynamic Stats Row 2: Streaks & Total */}
+                  <View style={{ flexDirection: "row", gap: 8 }}>
+                    <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: isDark ? "rgba(232,130,90,0.12)" : "rgba(232,130,90,0.08)", borderRadius: 14, padding: 10 }}>
+                      <Ionicons name="flame" size={19} color="#e8825a" />
+                      <View>
+                        <Text style={{ fontSize: 15, fontWeight: "500", color: txt }}>{dayStreak}</Text>
+                        <Text style={{ fontSize: 10, color: isDark ? "#c98e75" : "#e8825a" }}>day streak</Text>
+                      </View>
+                    </View>
+                    <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: isDark ? "rgba(240,180,41,0.12)" : "rgba(240,180,41,0.08)", borderRadius: 14, padding: 10 }}>
+                      <Ionicons name="trophy" size={19} color="#f0b429" />
+                      <View>
+                        <Text style={{ fontSize: 15, fontWeight: "500", color: txt }}>{totalWins}</Text>
+                        <Text style={{ fontSize: 10, color: isDark ? "#cda85f" : "#f0b429" }}>total wins</Text>
+                      </View>
+                    </View>
+                  </View>
+                </>
+              )}
+            </>
+          ) : (
+            /* ── Waiting Room ── */
+            <View style={{ alignItems: "center", paddingTop: 20 }}>
+              {/* Avatar VS layout */}
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 28, marginBottom: 36 }}>
+                <View style={{ alignItems: "center", gap: 10 }}>
+                  <View style={{
+                    width: 80, height: 80, borderRadius: 40,
+                    backgroundColor: isDark ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.1)",
+                    borderWidth: 2, borderColor: isDark ? "rgba(99,102,241,0.4)" : "rgba(99,102,241,0.3)",
+                    alignItems: "center", justifyContent: "center"
+                  }}>
+                    <Text style={{ fontSize: 36 }}>🦊</Text>
+                  </View>
+                  <Text style={{ color: muted, fontSize: 13, fontWeight: "700" }}>{firebaseUser?.displayName?.split(" ")[0] || "You"}</Text>
+                </View>
+                <View style={{ alignItems: "center" }}>
+                  <Text style={{ fontSize: 22, fontWeight: "900", color: "#ec4899" }}>VS</Text>
+                </View>
+                <View style={{ alignItems: "center", gap: 10 }}>
+                  <View style={{
+                    width: 80, height: 80, borderRadius: 40,
+                    backgroundColor: isDark ? "rgba(99,102,241,0.1)" : "rgba(99,102,241,0.07)",
+                    borderWidth: 2, borderColor: isDark ? "rgba(99,102,241,0.25)" : "rgba(99,102,241,0.2)",
+                    alignItems: "center", justifyContent: "center"
+                  }}>
+                    <Text style={{ fontSize: 36, color: isDark ? "#818cf8" : "#6366f1", fontWeight: "900" }}>?</Text>
+                  </View>
+                  <Text style={{ color: muted, fontSize: 13, fontWeight: "700" }}>
+                    {battleRoomState?.status === "playing" ? (isHost ? battleRoomState?.guestName : battleRoomState?.hostName) || "Rival" : "Waiting..."}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Room code display */}
+              {isHost && (
+                <View style={{
+                  backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "#ffffff",
+                  borderWidth: 1, borderColor: cardBorder,
+                  borderRadius: 20, padding: 24, width: "100%", alignItems: "center", marginBottom: 24
+                }}>
+                  <Text style={{ fontSize: 11, color: mutedSub, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 14 }}>Share This Code</Text>
+                  <View style={{ flexDirection: "row", gap: 8, marginBottom: 14 }}>
+                    {battleRoomCode.split("").map((ch, i) => (
+                      <View key={i} style={{
+                        width: 44, height: 54, borderRadius: 12,
+                        backgroundColor: isDark ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.1)",
+                        borderWidth: 2, borderColor: isDark ? "rgba(99,102,241,0.4)" : "rgba(99,102,241,0.3)",
+                        alignItems: "center", justifyContent: "center"
+                      }}>
+                        <Text style={{ fontSize: 22, fontWeight: "900", color: isDark ? "#818cf8" : "#6366f1" }}>{ch}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  <Text style={{ fontSize: 13, color: muted, fontWeight: "500" }}>Waiting for opponent to join...</Text>
+                </View>
+              )}
+
+              {battleRoomState?.status === "playing" ? (
+                <View style={{ alignItems: "center", gap: 10, marginBottom: 28 }}>
+                  <View style={{
+                    width: 56, height: 56, borderRadius: 28,
+                    backgroundColor: isDark ? "rgba(34,197,94,0.15)" : "rgba(34,197,94,0.1)",
+                    borderWidth: 2, borderColor: isDark ? "rgba(34,197,94,0.4)" : "rgba(34,197,94,0.3)",
+                    alignItems: "center", justifyContent: "center"
+                  }}>
+                    <Text style={{ fontSize: 26 }}>✓</Text>
+                  </View>
+                  <Text style={{ fontSize: 18, color: "#22c55e", fontWeight: "800" }}>Opponent joined!</Text>
+                  <Text style={{ fontSize: 14, color: muted }}>Starting match...</Text>
+                </View>
+              ) : (
+                <View style={{ flexDirection: "row", gap: 8, marginBottom: 28 }}>
+                  {[0,1,2].map(i => (
+                    <View key={i} style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: isDark ? "#818cf8" : "#6366f1", opacity: 0.6 }} />
+                  ))}
+                </View>
+              )}
+
+              <Pressable
+                onPress={() => {
+                  if (battleUnsubscribeRef.current) battleUnsubscribeRef.current();
+                  setBattleRoomCode("");
+                  setBattleRoomState(null);
+                }}
+                style={({ pressed }) => [{ paddingVertical: 10, paddingHorizontal: 20 }, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={{ color: "#ef4444", fontSize: 15, fontWeight: "700" }}>✕ Cancel & Leave</Text>
+              </Pressable>
+            </View>
+          )}
+        </ScrollView>
+
+        {/* ── Quiz Selector Modal ── */}
+        <Modal visible={showBattleQuizSelector} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowBattleQuizSelector(false)}>
+          <View style={{ flex: 1, backgroundColor: isDark ? "#0d0f1a" : "#f4f4f8", paddingTop: Platform.OS === 'ios' ? 0 : 40 }}>
+            <View style={{
+              flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+              padding: 20, borderBottomWidth: 1, borderBottomColor: cardBorder
+            }}>
+              <Text style={{ fontSize: 18, fontWeight: "800", color: txt }}>⚔️ Select a Quiz</Text>
+              <Pressable onPress={() => setShowBattleQuizSelector(false)}
+                style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)",
+                  alignItems: "center", justifyContent: "center" }}>
+                <Ionicons name="close" size={20} color={muted} />
+              </Pressable>
+            </View>
+            <FlatList
+              data={quizzes}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={{ padding: 16, gap: 10 }}
+              renderItem={({ item }) => (
+                <Pressable
+                  onPress={() => handleHostBattle(item.id)}
+                  style={({ pressed }) => [{
+                    backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "#ffffff",
+                    borderWidth: 1, borderColor: cardBorder,
+                    borderRadius: 16, padding: 18,
+                    flexDirection: "row", alignItems: "center", gap: 14,
+                    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: isDark ? 0 : 0.04, shadowRadius: 8, elevation: 1,
+                  }, pressed && { opacity: 0.8, borderColor: isDark ? "rgba(99,102,241,0.4)" : "rgba(99,102,241,0.3)" }]}
+                >
+                  <View style={{
+                    width: 46, height: 46, borderRadius: 12,
+                    backgroundColor: isDark ? "rgba(99,102,241,0.12)" : "rgba(99,102,241,0.09)",
+                    alignItems: "center", justifyContent: "center"
+                  }}>
+                    <Text style={{ fontSize: 22 }}>📝</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 15, fontWeight: "700", color: txt, marginBottom: 3 }}>{item.title}</Text>
+                    <Text style={{ fontSize: 12, color: muted, fontWeight: "500" }}>{item.questions} questions · {item.category}</Text>
+                  </View>
+                  <Feather name="chevron-right" size={16} color={mutedSub} />
+                </Pressable>
+              )}
+              ListEmptyComponent={
+                <View style={{ alignItems: "center", marginTop: 60, gap: 12 }}>
+                  <Text style={{ fontSize: 40 }}>📭</Text>
+                  <Text style={{ textAlign: "center", color: muted, fontSize: 15, fontWeight: "500" }}>No quizzes yet.{"\n"}Create one to host a battle!</Text>
+                </View>
+              }
+            />
+          </View>
+        </Modal>
+
+        {/* ── Battle Options Modal ── */}
+        <Modal visible={showBattleOptions} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { if (!battleCreating) setShowBattleOptions(false); }}>
+          <View style={{ flex: 1, backgroundColor: isDark ? "#0f172a" : "#f4f4f8" }}>
+            {/* Header */}
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+              padding: 20, borderBottomWidth: 1, borderBottomColor: cardBorder }}>
+              <Text style={{ fontSize: 18, fontWeight: "800", color: txt }}>⚙️ Battle Options</Text>
+              <Pressable onPress={() => { if (!battleCreating) setShowBattleOptions(false); }}
+                style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)",
+                  alignItems: "center", justifyContent: "center", opacity: battleCreating ? 0.3 : 1 }}>
+                <Ionicons name="close" size={20} color={muted} />
+              </Pressable>
+            </View>
+            <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 140 }} showsVerticalScrollIndicator={false}>
+              {/* Quiz info */}
+              {battleOptionsQuiz && (
+                <View style={{ backgroundColor: isDark ? "rgba(99,102,241,0.1)" : "rgba(99,102,241,0.07)",
+                  borderRadius: 14, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: isDark ? "rgba(99,102,241,0.2)" : "rgba(99,102,241,0.15)" }}>
+                  <Text style={{ fontSize: 16, fontWeight: "800", color: txt, marginBottom: 4 }}>{battleOptionsQuiz.title}</Text>
+                  <Text style={{ fontSize: 13, color: muted }}>{battleOptionsQuiz.questions} questions available</Text>
+                </View>
+              )}
+
+              {/* Question Selection */}
+              <Text style={{ fontSize: 12, fontWeight: "700", color: muted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Question Selection</Text>
+              <View style={{ flexDirection: "row", gap: 10, marginBottom: 16 }}>
+                {([{ value: "all" as const, label: "All" }, { value: "random" as const, label: "Random" }, { value: "range" as const, label: "Range" }]).map(({ value, label }) => {
+                  const isActive = battleSelectionMode === value;
+                  return (
+                    <Pressable key={value} onPress={() => setBattleSelectionMode(value)}
+                      style={[{
+                        flex: 1, paddingVertical: 11, borderRadius: 12, alignItems: "center",
+                        borderWidth: 1.5,
+                        backgroundColor: isActive ? (isDark ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.1)") : cardBg,
+                        borderColor: isActive ? (isDark ? "rgba(99,102,241,0.5)" : "rgba(99,102,241,0.4)") : cardBorder,
+                      }]}
+                    >
+                      <Text style={{ fontSize: 14, fontWeight: "700", color: isActive ? (isDark ? "#818cf8" : "#6366f1") : txt }}>{label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {/* Random count stepper */}
+              {battleSelectionMode === "random" && (
+                <View style={{ backgroundColor: cardBg,
+                  borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: cardBorder,
+                  flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                  <Text style={{ fontSize: 15, fontWeight: "600", color: txt }}>Number of questions</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                    <Pressable onPress={() => setBattleRandomCount(Math.max(1, battleRandomCount - 1))}
+                      style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" }}>
+                      <Text style={{ fontSize: 18, color: txt, fontWeight: "700" }}>−</Text>
+                    </Pressable>
+                    <TextInput 
+                      style={{ fontSize: 18, fontWeight: "800", color: txt, minWidth: 32, textAlign: "center", padding: 0 }}
+                      keyboardType="number-pad"
+                      value={battleRandomCount === 0 ? "" : String(battleRandomCount)}
+                      onChangeText={(text) => {
+                        const cleaned = text.replace(/[^0-9]/g, '');
+                        if (!cleaned) { setBattleRandomCount(0); return; }
+                        const maxQ = battleOptionsQuiz?.questionsList?.length || battleOptionsQuiz?.questions || 50;
+                        setBattleRandomCount(Math.max(1, Math.min(maxQ, parseInt(cleaned, 10))));
+                      }}
+                    />
+                    <Pressable onPress={() => setBattleRandomCount(Math.min((battleOptionsQuiz?.questionsList?.length || battleOptionsQuiz?.questions || 50), battleRandomCount + 1))}
+                      style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" }}>
+                      <Text style={{ fontSize: 18, color: txt, fontWeight: "700" }}>+</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              )}
+
+              {/* Range count steppers */}
+              {battleSelectionMode === "range" && (
+                <View style={{ backgroundColor: cardBg,
+                  borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: cardBorder,
+                  flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                  <Text style={{ fontSize: 15, fontWeight: "600", color: txt }}>Question Range</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center" }}>
+                      <Pressable onPress={() => setBattleRangeStart(Math.max(1, battleRangeStart - 1))}
+                        style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" }}>
+                        <Text style={{ fontSize: 16, color: txt, fontWeight: "700" }}>−</Text>
+                      </Pressable>
+                      <TextInput 
+                        style={{ fontSize: 16, fontWeight: "800", color: txt, minWidth: 32, textAlign: "center", padding: 0 }}
+                        keyboardType="number-pad"
+                        value={battleRangeStart === 0 ? "" : String(battleRangeStart)}
+                        onChangeText={(text) => {
+                          const cleaned = text.replace(/[^0-9]/g, '');
+                          if (!cleaned) { setBattleRangeStart(0); return; }
+                          setBattleRangeStart(Math.max(1, Math.min(battleRangeEnd, parseInt(cleaned, 10))));
+                        }}
+                      />
+                      <Pressable onPress={() => setBattleRangeStart(Math.min(battleRangeEnd, battleRangeStart + 1))}
+                        style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" }}>
+                        <Text style={{ fontSize: 16, color: txt, fontWeight: "700" }}>+</Text>
+                      </Pressable>
+                    </View>
+                    <Text style={{ fontSize: 14, color: muted, marginHorizontal: 2 }}>to</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center" }}>
+                      <Pressable onPress={() => setBattleRangeEnd(Math.max(battleRangeStart, battleRangeEnd - 1))}
+                        style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" }}>
+                        <Text style={{ fontSize: 16, color: txt, fontWeight: "700" }}>−</Text>
+                      </Pressable>
+                      <TextInput 
+                        style={{ fontSize: 16, fontWeight: "800", color: txt, minWidth: 32, textAlign: "center", padding: 0 }}
+                        keyboardType="number-pad"
+                        value={battleRangeEnd === 0 ? "" : String(battleRangeEnd)}
+                        onChangeText={(text) => {
+                          const cleaned = text.replace(/[^0-9]/g, '');
+                          if (!cleaned) { setBattleRangeEnd(0); return; }
+                          const maxQ = battleOptionsQuiz?.questionsList?.length || battleOptionsQuiz?.questions || 100;
+                          setBattleRangeEnd(Math.max(battleRangeStart, Math.min(maxQ, parseInt(cleaned, 10))));
+                        }}
+                      />
+                      <Pressable onPress={() => setBattleRangeEnd(Math.min(battleOptionsQuiz?.questionsList?.length || battleOptionsQuiz?.questions || 100, battleRangeEnd + 1))}
+                        style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" }}>
+                        <Text style={{ fontSize: 16, color: txt, fontWeight: "700" }}>+</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {/* Time per question */}
+              <Text style={{ fontSize: 12, fontWeight: "700", color: muted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10, marginTop: 4 }}>Time per Question</Text>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
+                {([null, 15, 20, 30, 45, 60] as (number | null)[]).map((t) => {
+                  const isActive = battleTimePerQuestion === t;
+                  const label = t === null ? "No Limit" : `${t}s`;
+                  return (
+                    <Pressable key={String(t)} onPress={() => setBattleTimePerQuestion(t)}
+                      style={[{
+                        paddingVertical: 9, paddingHorizontal: 16, borderRadius: 10, borderWidth: 1.5,
+                        backgroundColor: isActive ? (isDark ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.1)") : cardBg,
+                        borderColor: isActive ? (isDark ? "rgba(99,102,241,0.5)" : "rgba(99,102,241,0.4)") : cardBorder,
+                      }]}
+                    >
+                      <Text style={{ fontSize: 13, fontWeight: "700",
+                        color: isActive ? (isDark ? "#818cf8" : "#6366f1") : muted }}>
+                        {label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {/* Toggles */}
+              <Text style={{ fontSize: 12, fontWeight: "700", color: muted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Gameplay Options</Text>
+              <View style={{ backgroundColor: cardBg,
+                borderRadius: 14, borderWidth: 1, borderColor: cardBorder, overflow: "hidden" }}>
+                {[
+                  { label: "Shuffle question order", sub: "Questions appear in random order", value: battleShuffleQ, set: setBattleShuffleQ },
+                  { label: "Shuffle answer options", sub: "Answer choices appear randomized", value: battleShuffleA, set: setBattleShuffleA },
+                ].map((row, i) => (
+                  <View key={row.label}>
+                    {i > 0 && <View style={{ height: 1, backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "#f1f5f9", marginLeft: 16 }} />}
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 16 }}>
+                      <View style={{ flex: 1, marginRight: 12 }}>
+                        <Text style={{ fontSize: 15, fontWeight: "600", color: txt, marginBottom: 2 }}>{row.label}</Text>
+                        <Text style={{ fontSize: 12, color: muted }}>{row.sub}</Text>
+                      </View>
+                      <ToggleSwitch checked={row.value} onChange={row.set} darkMode={isDark} />
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+
+            {/* Sticky Start Button */}
+            <View style={{ position: "absolute", bottom: 0, left: 0, right: 0,
+              padding: 20, paddingBottom: Platform.OS === "ios" ? 36 : 20,
+              backgroundColor: isDark ? "#0f172a" : "#f4f4f8",
+              borderTopWidth: 1, borderTopColor: cardBorder }}>
+              <Pressable
+                onPress={handleStartBattle}
+                disabled={battleCreating}
+                style={({ pressed }) => [{
+                  backgroundColor: "#6366f1",
+                  paddingVertical: 16, borderRadius: 14, alignItems: "center", justifyContent: "center",
+                  flexDirection: "row", gap: 10,
+                  opacity: battleCreating ? 0.85 : 1,
+                }, pressed && !battleCreating && { opacity: 0.8, transform: [{ scale: 0.98 }] }]}
+              >
+                {battleCreating ? (
+                  <>
+                    <ActivityIndicator size="small" color="#fff" />
+                    <Text style={{ color: "#fff", fontSize: 16, fontWeight: "800" }}>Creating Room…</Text>
+                  </>
+                ) : (
+                  <Text style={{ color: "#fff", fontSize: 16, fontWeight: "800" }}>⚔️  Create Battle Room</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+
+        {/* ── Battle History Modal ── */}
+        <Modal visible={showBattleHistory} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowBattleHistory(false)}>
+          <View style={{ flex: 1, backgroundColor: isDark ? "#0d0f1a" : "#f4f4f8", paddingTop: Platform.OS === 'ios' ? 0 : 40 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+              padding: 20, borderBottomWidth: 1, borderBottomColor: cardBorder }}>
+              <Text style={{ fontSize: 18, fontWeight: "800", color: txt }}>📜 Battle History</Text>
+              <Pressable onPress={() => setShowBattleHistory(false)}
+                style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)",
+                  alignItems: "center", justifyContent: "center" }}>
+                <Ionicons name="close" size={20} color={muted} />
+              </Pressable>
+            </View>
+            {battleHistory.length === 0 ? (
+              <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 14 }}>
+                <Text style={{ fontSize: 48 }}>⚔️</Text>
+                <Text style={{ fontSize: 18, fontWeight: "800", color: txt }}>No battles yet</Text>
+                <Text style={{ fontSize: 14, color: muted, textAlign: "center" }}>Complete your first battle{"\n"}to see your history here!</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={battleHistory}
+                keyExtractor={(_, i) => String(i)}
+                contentContainerStyle={{ padding: 16, gap: 10 }}
+                renderItem={({ item }) => {
+                  const d = new Date(item.date);
+                  const dateStr = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                  return (
+                    <View style={{
+                      backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "#ffffff",
+                      borderRadius: 16, padding: 16,
+                      borderWidth: 1, borderColor: item.won ? (isDark ? "rgba(34,197,94,0.2)" : "rgba(34,197,94,0.15)") : cardBorder,
+                      flexDirection: "row", alignItems: "center", gap: 14,
+                    }}>
+                      <Text style={{ fontSize: 28 }}>{item.won ? "🏆" : "💀"}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 14, fontWeight: "700", color: txt, marginBottom: 2 }} numberOfLines={1}>{item.quizTitle}</Text>
+                        <Text style={{ fontSize: 12, color: muted }}>vs {item.opponentName} · {dateStr}</Text>
+                      </View>
+                      <View style={{ alignItems: "flex-end", gap: 4 }}>
+                        <View style={{ backgroundColor: item.won ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.12)",
+                          borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 }}>
+                          <Text style={{ fontSize: 11, fontWeight: "800", color: item.won ? "#22c55e" : "#ef4444" }}>
+                            {item.won ? "WIN" : "LOSS"}
+                          </Text>
+                        </View>
+                        <Text style={{ fontSize: 13, fontWeight: "700", color: muted }}>{item.myScore} – {item.opponentScore}</Text>
+                        {item.myScore === item.opponentScore && item.myTime != null && item.opponentTime != null && (
+                          <Text style={{ fontSize: 10, color: item.won ? "#22c55e" : "#ef4444", fontWeight: "600", marginTop: -2 }}>
+                            {item.won ? "+" : "-"}{(Math.abs(item.opponentTime - item.myTime) / 1000).toFixed(1)}s
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                  );
+                }}
+              />
+            )}
+          </View>
+        </Modal>
+      </KeyboardWrapper>
+    );
+  };
+
   // Render Sub-Views based on activeTab
-  const renderContent = () => {
-    switch (activeTab) {
+  const renderContent = (overrideTab?: string) => {
+    const tabToRender = overrideTab || activeTab;
+    switch (tabToRender) {
       case "insights":
         return renderInsightsView();
-      case "deck-insights":
-        return renderDeckInsightsTab();
+      // case "deck-insights": removed (flashcard feature removed)
+
+      case "battle":
+        return renderBattleLobbyView();
 
       case "dashboard": {
         const isDark = settingsDarkMode;
@@ -2885,22 +4760,24 @@ export default function HomeScreen() {
         const txt    = isDark ? "#ffffff" : "#0d0f14";
         const muted  = isDark ? "#ffffff" : "#666677";
 
-        const totalAttempts  = quizzes.reduce((s, q) => s + (q.attempts || []).length, 0);
-        const totalQuestions = quizzes.reduce((s, q) => s + (q.questions || 0), 0);
-        const allAttempts = quizzes.flatMap(q => q.attempts || []);
+        const combinedQuizzes = (!sampleDismissed && sampleQuiz) ? [...quizzes, sampleQuiz] : quizzes;
+
+        const totalAttempts  = combinedQuizzes.reduce((s, q) => s + (q.attempts || []).length, 0);
+        const totalQuestions = combinedQuizzes.reduce((s, q) => s + (q.questions || 0), 0);
+        const allAttempts = combinedQuizzes.flatMap(q => q.attempts || []);
         const totalCorrectAnswers = allAttempts.reduce((s: number, a: any) => s + (a.correct || 0), 0);
         const totalAttemptedQuestions = allAttempts.reduce((s: number, a: any) => s + ((a.correct || 0) + (a.wrong || 0) + (a.skipped || 0)), 0);
         const avgScore = totalAttemptedQuestions > 0
           ? Math.round((totalCorrectAnswers / totalAttemptedQuestions) * 100)
           : 0;
           
-        const totalUniqueCorrect = quizzes.reduce((acc: number, q: any) => acc + (q.uniqueCorrectIds || []).length, 0);
+        const totalUniqueCorrect = combinedQuizzes.reduce((acc: number, q: any) => acc + (q.uniqueCorrectIds || []).length, 0);
         const overallProgressPct = totalQuestions > 0 
-          ? Math.min(Math.round((totalUniqueCorrect / totalQuestions) * 100), 100) 
+          ? Math.min(Number(((totalUniqueCorrect / totalQuestions) * 100).toFixed(1)), 100) 
           : 0;
 
         // For starred block
-        const starredQList = quizzes.flatMap(q =>
+        const starredQList = combinedQuizzes.flatMap(q =>
           (q.questionsList || []).filter((qs: any) => starredQuestions.has(qs.id)).map((qs: any) => ({ ...qs, quizId: q.id }))
         );
         const starredQuizObj = {
@@ -2922,7 +4799,7 @@ export default function HomeScreen() {
               backgroundColor: "rgba(99,102,241,0.08)" }} pointerEvents="none" />
 
             {/* ── Header ── */}
-            <View style={{ paddingHorizontal: 20, paddingTop: 52, paddingBottom: 4 }}>
+            <View style={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 4 }}>
               <Text style={{ fontSize: 26, fontWeight: "600", letterSpacing: -0.5,
                 color: txt, lineHeight: 30 }}>
                 {getUserFirstName(firebaseUser)}
@@ -2956,7 +4833,7 @@ export default function HomeScreen() {
                 <View style={{ alignItems: "flex-end" }}>
                   <Text style={{ fontSize: 11, color: muted }}>{totalAttempts} {totalAttempts !== 1 ? (t('dashboard.attempts') || "attempts") : (t('dashboard.attempt') || "attempt")}</Text>
                   <Text style={{ fontSize: 11, color: muted, marginTop: 2 }}>
-                    {t('dashboard.across') || "across"} {quizzes.length} {quizzes.length !== 1 ? (t('dashboard.quizzes') || "quizzes") : (t('dashboard.quiz') || "quiz")}
+                    {t('dashboard.across') || "across"} {combinedQuizzes.length} {combinedQuizzes.length !== 1 ? (t('dashboard.quizzes') || "quizzes") : (t('dashboard.quiz') || "quiz")}
                   </Text>
                 </View>
               </View>
@@ -2979,9 +4856,8 @@ export default function HomeScreen() {
             {/* ── Stats grid — 3 cells ── */}
             <View style={{ flexDirection: "row", gap: 8, marginHorizontal: 20, marginTop: 12 }}>
               {[
-                { label: t('dashboard.stats_quizzes') || "QUIZZES",   value: String(quizzes.length),        icon: "layers-outline"      as const },
+                { label: t('dashboard.stats_quizzes') || "QUIZZES",   value: String(combinedQuizzes.length),        icon: "layers-outline"      as const },
                 { label: t('dashboard.stats_questions') || "QUESTIONS", value: String(totalQuestions),         icon: "help-circle-outline" as const },
-                { label: t('dashboard.stats_decks') || "DECKS",     value: String(flashcardDecks.length),  icon: "copy-outline"        as const },
               ].map(s => (
                 <View key={s.label} style={{ flex: 1, backgroundColor: card,
                   borderWidth: 1, borderColor: border, borderRadius: 14,
@@ -2994,45 +4870,7 @@ export default function HomeScreen() {
               ))}
             </View>
 
-            {/* ── Starred ── */}
-            {starredQList.length > 0 && (
-              <>
-                <View style={{ flexDirection: "row", justifyContent: "space-between",
-                  alignItems: "center", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 10 }}>
-                  <Text style={{ fontSize: 10, fontWeight: "700", letterSpacing: 1.2, color: muted, textTransform: "uppercase" }}>
-                    {t('dashboard.starred') || "Starred"}
-                  </Text>
-                </View>
-                <Pressable
-                  onPress={() => playQuizDirectly(starredQuizObj, "all")}
-                  style={({ pressed }) => [{
-                    marginHorizontal: 20,
-                    backgroundColor: isDark ? "#0f0f1a" : "#ffffff",
-                    borderWidth: 1, borderColor: isDark ? "#2a2a4a" : "rgba(0,0,0,0.07)",
-                    borderRadius: 16, padding: 16,
-                    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-                  }, pressed && styles.pressedScale]}
-                >
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                    <View style={{ width: 36, height: 36, borderRadius: 10,
-                      backgroundColor: "rgba(234,179,8,0.1)",
-                      alignItems: "center", justifyContent: "center" }}>
-                      <Ionicons name="star" size={17} color="#eab308" />
-                    </View>
-                    <View>
-                      <Text style={{ fontSize: 13, fontWeight: "500", color: txt }}>{t('dashboard.starred_title') || "Starred Questions"}</Text>
-                      <Text style={{ fontSize: 11, color: muted, marginTop: 2, fontWeight: "300" }}>
-                        {starredQList.length} {t('dashboard.stats_questions')} {t('dashboard.saved') || "saved"}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={{ backgroundColor: "#6366f1", borderRadius: 10,
-                    paddingHorizontal: 14, paddingVertical: 8 }}>
-                    <Text style={{ fontSize: 11, fontWeight: "500", color: "#fff" }}>Attempt</Text>
-                  </View>
-                </Pressable>
-              </>
-            )}
+            {/* Starred Questions removed — now per-quiz via Bookmarked button in quiz insights */}
 
             {/* ── All Quizzes ── */}
             <View style={{ flexDirection: "row", justifyContent: "space-between",
@@ -3042,8 +4880,8 @@ export default function HomeScreen() {
               </Text>
             </View>
 
-            <View style={{ paddingHorizontal: 20, gap: 8 }}>
-              {quizzes.map((quiz) => {
+            <View style={{ paddingHorizontal: 20, gap: 12 }}>
+              {combinedQuizzes.map((quiz) => {
                 const attempts = quiz.attempts || [];
                 const uniqueCount = (quiz.uniqueCorrectIds || []).length;
                 const qCount = quiz.questions || 1;
@@ -3149,7 +4987,7 @@ export default function HomeScreen() {
 
               {/* Flashcards card */}
               <Pressable
-                onPress={() => setCreationMode("flashcard")}
+                onPress={() => setCreationMode("pick")}
                 style={({ pressed }) => [{
                   marginHorizontal: 16, marginBottom: 14, borderRadius: 20, overflow: "hidden",
                   backgroundColor: settingsDarkMode ? "#141625" : "#ffffff",
@@ -3188,8 +5026,9 @@ export default function HomeScreen() {
           );
         }
 
-        // ── Flashcard creation flow ───────────────────────────────
-        if (creationMode === "flashcard") {
+        // ── Flashcard creation flow (dead code — tab removed) ─────────────
+        // @ts-ignore — intentional: this is dead code kept for archive, will never match active tab
+        if (creationMode === "pick" && false) {
           const currentCard = fcCards[fcCurrentIdx] || { front: "", back: "" };
           const updateFront = (t: string) => { const c = [...fcCards]; c[fcCurrentIdx] = { ...c[fcCurrentIdx], front: t }; setFcCards(c); };
           const updateBack  = (t: string) => { const c = [...fcCards]; c[fcCurrentIdx] = { ...c[fcCurrentIdx], back: t };  setFcCards(c); };
@@ -3245,8 +5084,10 @@ export default function HomeScreen() {
                 }).then(({ deck: neonDeck, error }) => {
                   if (neonDeck && !error) {
                     // Replace the local deck with the server-assigned id
+                    // @ts-ignore — dead code, deck is null stub
                     setFlashcardDecks(prev => prev.map(d =>
-                      d.id === localId ? { ...d, id: neonDeck.id, neonId: neonDeck.id } : d
+                      // @ts-ignore
+                      d.id === localId ? { ...d, id: (neonDeck as any).id, neonId: (neonDeck as any).id } : d
                     ));
                   } else {
                     console.warn("[NeonSync] deck create failed:", error);
@@ -3256,7 +5097,7 @@ export default function HomeScreen() {
             }
             setFcTitle(""); setFcCards([{ front: "", back: "" }]); setFcCurrentIdx(0);
             setCreationMode("pick");
-            setActiveTab("flashcards");
+            setActiveTab("home");
           };
 
           const insertFormatting = (type: string) => {
@@ -3302,7 +5143,7 @@ export default function HomeScreen() {
                 backgroundColor: settingsDarkMode ? "#0f172a" : "#f4f4f8",
               }}>
                 <Pressable
-                  onPress={() => { setEditingDeckId(null); setCreationMode("pick"); setActiveTab("flashcards"); }}
+                  onPress={() => { setEditingDeckId(null); setCreationMode("pick"); setActiveTab("home"); }}
                   style={({ pressed }) => [{ padding: 8, borderRadius: 12,
                     backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)"
                   }, pressed && styles.pressedScale]}
@@ -3593,7 +5434,7 @@ export default function HomeScreen() {
 
               {/* Deck Naming Modal */}
               <Modal visible={showNameDeckModal} transparent animationType="fade" onRequestClose={() => setShowNameDeckModal(false)}>
-                <KeyboardAvoidingView
+                <KeyboardWrapper
                   behavior={Platform.OS === "ios" ? "padding" : undefined}
                   style={{ flex: 1 }}
                 >
@@ -3681,7 +5522,7 @@ export default function HomeScreen() {
                       </View>
                     </Pressable>
                   </Pressable>
-                </KeyboardAvoidingView>
+                </KeyboardWrapper>
               </Modal>
 
               {/* Ellipsis Bottom Sheet */}
@@ -3727,7 +5568,7 @@ export default function HomeScreen() {
                             .catch(err => console.warn("[NeonSync] deck delete failed:", err));
                         }
                         setEditingDeckId(null); setFcTitle(""); setFcCards([{ front: "", back: "" }]); setFcCurrentIdx(0);
-                        setCreationMode("pick"); setActiveTab("flashcards"); setShowEllipsisMenu(false);
+                        setCreationMode("pick"); setActiveTab("home"); setShowEllipsisMenu(false);
                       }} style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", gap: 14,
                         paddingHorizontal: 20, paddingVertical: 16,
                         backgroundColor: pressed ? "rgba(239,68,68,0.06)" : "transparent"
@@ -3779,272 +5620,319 @@ export default function HomeScreen() {
         // ── Quiz creation flow ─────────────────────────────────────
         if (creationMode === "quiz" && creationStep === "setup") {
           return (
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-              <View style={styles.tabHeader}>
-                <Text style={[styles.tabTitle, !settingsDarkMode && styles.lightText]}>{t('create.title') || "Create Quiz"}</Text>
-                <Text style={[styles.tabSubtitle, !settingsDarkMode && styles.lightTextSub]}>{t('create.subtitle') || "Setup a new custom MCQ quiz structure"}</Text>
-              </View>
-
-              <View style={styles.formContainer}>
-                <Text style={[styles.formLabel, !settingsDarkMode && styles.lightText]}>{t('create.quiz_title') || "Quiz Title"}</Text>
-                <Pressable style={[styles.webInputDummy, !settingsDarkMode && styles.lightInput]}>
-                  <TextInput
-                    placeholder={t('create.quiz_title_placeholder') || "e.g. Advanced Javascript"}
-                    placeholderTextColor="#666"
-                    style={[styles.formInput, !settingsDarkMode && styles.lightText]}
-                    value={newTitle}
-                    onChangeText={setNewTitle}
-                  />
-                </Pressable>
-
-
-
-                <Text style={[styles.formLabel, !settingsDarkMode && styles.lightText]}>{t('create.num_questions') || "Questions Count"}</Text>
-                <Pressable style={[styles.webInputDummy, !settingsDarkMode && styles.lightInput]}>
-                  <TextInput
-                    placeholder="e.g. 5"
-                    placeholderTextColor="#666"
-                    keyboardType="numeric"
-                    style={[styles.formInput, !settingsDarkMode && styles.lightText]}
-                    value={newQuestionsCount}
-                    onChangeText={setNewQuestionsCount}
-                  />
-                </Pressable>
-
-                <Text style={[styles.formLabel, !settingsDarkMode && styles.lightText]}>{t('create.language')}</Text>
-                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 24 }}>
-                  {["English", "Spanish", "French", "Hindi"].map((lang) => (
-                    <Pressable
-                      key={lang}
-                      onPress={() => setNewQuizLanguage(lang)}
-                      style={[
-                        { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "#f0f0f0" },
-                        newQuizLanguage === lang && { backgroundColor: "rgba(99, 102, 241, 0.15)", borderWidth: 1, borderColor: "#6366f1" }
-                      ]}
-                    >
-                      <Text style={[
-                        { fontSize: 14, color: settingsDarkMode ? "#ccc" : "#666" },
-                        newQuizLanguage === lang && { color: "#6366f1", fontWeight: "bold" }
-                      ]}>{lang}</Text>
-                    </Pressable>
-                  ))}
+            <KeyboardWrapper
+              behavior={Platform.OS === "ios" ? "padding" : "padding"}
+              style={{ flex: 1 }}
+              keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 80}
+            >
+              <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(60, insets.bottom + 40) }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                <View style={styles.tabHeader}>
+                  <Text style={[styles.tabTitle, !settingsDarkMode && styles.lightText]}>{t('create.title') || "Create Quiz"}</Text>
+                  <Text style={[styles.tabSubtitle, !settingsDarkMode && styles.lightTextSub]}>{t('create.subtitle') || "Setup a new custom MCQ quiz structure"}</Text>
                 </View>
-
-                <Pressable onPress={handleProceedToDrafting} style={styles.createButton}>
-                  <Text style={styles.createButtonText}>{t('create.next_btn') || "Next: Draft Questions"}</Text>
-                </Pressable>
-              </View>
-            </ScrollView>
+  
+                <View style={styles.formContainer}>
+                  <Text style={[styles.formLabel, !settingsDarkMode && styles.lightText]}>{t('create.quiz_title') || "Quiz Title"}</Text>
+                  <Pressable style={[styles.webInputDummy, !settingsDarkMode && styles.lightInput]}>
+                    <TextInput
+                      placeholder={t('create.quiz_title_placeholder') || "e.g. Advanced Javascript"}
+                      placeholderTextColor="#666"
+                      style={[styles.formInput, !settingsDarkMode && styles.lightText]}
+                      value={newTitle}
+                      onChangeText={setNewTitle}
+                    />
+                  </Pressable>
+  
+  
+  
+                  <Text style={[styles.formLabel, !settingsDarkMode && styles.lightText]}>{t('create.num_questions') || "Questions Count"}</Text>
+                  <Pressable style={[styles.webInputDummy, !settingsDarkMode && styles.lightInput]}>
+                    <TextInput
+                      placeholder="e.g. 5"
+                      placeholderTextColor="#666"
+                      keyboardType="numeric"
+                      style={[styles.formInput, !settingsDarkMode && styles.lightText]}
+                      value={newQuestionsCount}
+                      onChangeText={setNewQuestionsCount}
+                    />
+                  </Pressable>
+  
+                  <Text style={[styles.formLabel, !settingsDarkMode && styles.lightText]}>{t('create.language')}</Text>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 24 }}>
+                    {["English", "Spanish", "French", "Hindi"].map((lang) => (
+                      <Pressable
+                        key={lang}
+                        onPress={() => setNewQuizLanguage(lang)}
+                        style={[
+                          { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "#f0f0f0" },
+                          newQuizLanguage === lang && { backgroundColor: "rgba(99, 102, 241, 0.15)", borderWidth: 1, borderColor: "#6366f1" }
+                        ]}
+                      >
+                        <Text style={[
+                          { fontSize: 14, color: settingsDarkMode ? "#ccc" : "#666" },
+                          newQuizLanguage === lang && { color: "#6366f1", fontWeight: "bold" }
+                        ]}>{lang}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+  
+                  <Pressable onPress={handleProceedToDrafting} style={styles.createButton}>
+                    <Text style={styles.createButtonText}>{t('create.next_btn') || "Next: Draft Questions"}</Text>
+                  </Pressable>
+                </View>
+              </ScrollView>
+            </KeyboardWrapper>
           );
         }
 
         if (creationMode === "quiz" && creationStep === "drafting") {
         const currentDraftQuestion = draftQuestions[draftCurrentIndex];
         const totalDraftCount = parseInt(newQuestionsCount) || 0;
+        // Layout tracking refs for precise scroll-to-option behaviour
+        const draftFormContainerY = (globalThis as any)._draftFormContainerY ?? 0;
+        const draftOptionsContainerY = (globalThis as any)._draftOptionsContainerY ?? 0;
+        const draftOptionRowYs: number[] = (globalThis as any)._draftOptionRowYs ?? [];
 
         return (
-          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-            <View style={styles.tabHeader}>
-              <Text style={[styles.tabTitle, !settingsDarkMode && styles.lightText]}>{t('create.draft_title') || "Draft Questions"}</Text>
-              <Text style={[styles.tabSubtitle, !settingsDarkMode && styles.lightTextSub]}>
-                Question {draftCurrentIndex + 1} of {totalDraftCount}
-              </Text>
-            </View>
-
-            {currentDraftQuestion && (
-              <View style={styles.formContainer}>
-                {/* Visual Progress Bar */}
-                <View style={{ width: "100%", height: 6, backgroundColor: "rgba(255, 255, 255, 0.08)", borderRadius: 3, marginBottom: 20, overflow: "hidden" }}>
-                  <View style={{ width: `${((draftCurrentIndex + 1) / totalDraftCount) * 100}%`, height: "100%", backgroundColor: "#00e5a0" }} />
-                </View>
-
-                {/* Question Prompt */}
-                <Text style={[styles.formLabel, !settingsDarkMode && styles.lightText]}>{t('create.question_prompt') || "Question Prompt"}</Text>
-                <View style={[styles.webInputDummy, !settingsDarkMode && styles.lightInput, { height: 100, paddingVertical: 8 }]}>
-                  <TextInput
-                    placeholder={t('create.question_placeholder') || "Enter your question prompt here..."}
-                    placeholderTextColor="#666"
-                    multiline
-                    style={[styles.formInput, !settingsDarkMode && styles.lightText, { height: "100%", textAlignVertical: "top" }]}
-                    value={currentDraftQuestion.prompt}
-                    onChangeText={updateDraftPrompt}
-                  />
-                </View>
-
-                {/* Question Options/Answers */}
-                <Text style={[styles.formLabel, !settingsDarkMode && styles.lightText, { marginTop: 15, marginBottom: 4 }]}>
-                  {t('create.options') || "Options / Choices"}
+          <KeyboardWrapper
+            behavior={Platform.OS === "ios" ? "padding" : "padding"}
+            style={{ flex: 1 }}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 80}
+          >
+            <ScrollView
+              ref={(ref) => { (globalThis as any)._draftScrollRef = ref; }}
+              contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(80, insets.bottom + 60) }]}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.tabHeader}>
+                <Text style={[styles.tabTitle, !settingsDarkMode && styles.lightText]}>{t('create.draft_title') || "Draft Questions"}</Text>
+                <Text style={[styles.tabSubtitle, !settingsDarkMode && styles.lightTextSub]}>
+                  Question {draftCurrentIndex + 1} of {totalDraftCount}
                 </Text>
-                <Text style={{ fontSize: 10, color: "#888888", marginBottom: 12 }}>
-                  {t('create.options_desc') || "Type answer texts below and select the correct answer amongst them."}
-                </Text>
+              </View>
 
-                <View style={{ gap: 10, marginBottom: 15 }}>
-                  {currentDraftQuestion.answers.map((ans: any, optIdx: number) => {
-                    const isOptionCorrect = ans.isCorrect;
-                    return (
-                      <View key={ans.id || String(optIdx)} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                        {/* Radio selection indicator */}
-                        <Pressable 
-                          onPress={() => selectDraftOptionCorrect(optIdx)}
-                          style={({ pressed }) => [
-                            {
-                              width: 22,
-                              height: 22,
-                              borderRadius: 11,
-                              borderWidth: 2,
-                              borderColor: isOptionCorrect ? "#00e5a0" : (settingsDarkMode ? "rgba(255, 255, 255, 0.3)" : "rgba(0, 0, 0, 0.3)"),
-                              alignItems: "center",
-                              justifyContent: "center",
-                              backgroundColor: isOptionCorrect ? "rgba(0, 229, 160, 0.1)" : "transparent"
-                            },
-                            pressed && styles.opacityPress
-                          ]}
+              {currentDraftQuestion && (
+                <View
+                style={styles.formContainer}
+                onLayout={(e) => { (globalThis as any)._draftFormContainerY = e.nativeEvent.layout.y; }}
+              >
+                  {/* Visual Progress Bar */}
+                  <View style={{ width: "100%", height: 6, backgroundColor: "rgba(255, 255, 255, 0.08)", borderRadius: 3, marginBottom: 20, overflow: "hidden" }}>
+                    <View style={{ width: `${((draftCurrentIndex + 1) / totalDraftCount) * 100}%`, height: "100%", backgroundColor: "#00e5a0" }} />
+                  </View>
+
+                  {/* Question Prompt */}
+                  <Text style={[styles.formLabel, !settingsDarkMode && styles.lightText]}>{t('create.question_prompt') || "Question Prompt"}</Text>
+                  <View style={[styles.webInputDummy, !settingsDarkMode && styles.lightInput, { height: 100, paddingVertical: 8 }]}>
+                    <TextInput
+                      placeholder={t('create.question_placeholder') || "Enter your question prompt here..."}
+                      placeholderTextColor="#666"
+                      multiline
+                      style={[styles.formInput, !settingsDarkMode && styles.lightText, { height: "100%", textAlignVertical: "top" }]}
+                      value={currentDraftQuestion.prompt}
+                      onChangeText={updateDraftPrompt}
+                    />
+                  </View>
+
+                  {/* Question Options/Answers */}
+                  <Text style={[styles.formLabel, !settingsDarkMode && styles.lightText, { marginTop: 15, marginBottom: 4 }]}>
+                    {t('create.options') || "Options / Choices"}
+                  </Text>
+                  <Text style={{ fontSize: 10, color: "#888888", marginBottom: 12 }}>
+                    {t('create.options_desc') || "Type answer texts below and select the correct answer amongst them."}
+                  </Text>
+
+                  <View
+                    style={{ gap: 10, marginBottom: 15 }}
+                    onLayout={(e) => { (globalThis as any)._draftOptionsContainerY = e.nativeEvent.layout.y; }}
+                  >
+                    {currentDraftQuestion.answers.map((ans: any, optIdx: number) => {
+                      const isOptionCorrect = ans.isCorrect;
+                      return (
+                        <View
+                          key={ans.id || String(optIdx)}
+                          style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+                          onLayout={(e) => {
+                            if (!(globalThis as any)._draftOptionRowYs) (globalThis as any)._draftOptionRowYs = [];
+                            (globalThis as any)._draftOptionRowYs[optIdx] = e.nativeEvent.layout.y;
+                          }}
                         >
-                          {isOptionCorrect && (
-                            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: "#00e5a0" }} />
-                          )}
-                        </Pressable>
-
-                        {/* Text input for option */}
-                        <View style={[{ flex: 1, height: 44, borderRadius: 10, backgroundColor: "rgba(255, 255, 255, 0.05)", borderWidth: 1, borderColor: "rgba(255, 255, 255, 0.08)", paddingHorizontal: 12, justifyContent: "center" }, !settingsDarkMode && styles.lightInput]}>
-                          <TextInput
-                            placeholder={`Option ${optIdx + 1}`}
-                            placeholderTextColor="#666"
-                            style={[styles.formInput, !settingsDarkMode && styles.lightText, { fontSize: 13 }]}
-                            value={ans.text}
-                            onChangeText={(text) => updateDraftOptionText(optIdx, text)}
-                          />
-                        </View>
-
-                        {/* Delete option button */}
-                        {currentDraftQuestion.answers.length > 2 && (
+                          {/* Radio selection indicator */}
                           <Pressable 
-                            onPress={() => deleteDraftOption(optIdx)}
+                            onPress={() => selectDraftOptionCorrect(optIdx)}
                             style={({ pressed }) => [
-                              { padding: 8 },
+                              {
+                                width: 22,
+                                height: 22,
+                                borderRadius: 11,
+                                borderWidth: 2,
+                                borderColor: isOptionCorrect ? "#00e5a0" : (settingsDarkMode ? "rgba(255, 255, 255, 0.3)" : "rgba(0, 0, 0, 0.3)"),
+                                alignItems: "center",
+                                justifyContent: "center",
+                                backgroundColor: isOptionCorrect ? "rgba(0, 229, 160, 0.1)" : "transparent"
+                              },
                               pressed && styles.opacityPress
                             ]}
                           >
-                            <Feather name="trash-2" size={16} color="#ef4444" />
+                            {isOptionCorrect && (
+                              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: "#00e5a0" }} />
+                            )}
                           </Pressable>
-                        )}
-                      </View>
-                    );
-                  })}
-                </View>
 
-                {/* Add Option button */}
-                <Pressable
-                  onPress={addDraftOption}
-                  style={({ pressed }) => [
-                    {
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 6,
-                      alignSelf: "flex-start",
-                      paddingVertical: 6,
-                      paddingHorizontal: 12,
-                      borderRadius: 8,
-                      borderWidth: 1,
-                      borderColor: "rgba(255, 255, 255, 0.15)",
-                      marginBottom: 20
-                    },
-                    !settingsDarkMode && { borderColor: "rgba(0, 0, 0, 0.15)" },
-                    pressed && styles.opacityPress
-                  ]}
-                >
-                  <Feather name="plus" size={14} color="#00e5a0" />
-                  <Text style={[{ fontSize: 12, fontWeight: "bold", color: "#00e5a0" }]}>{t('create.add_option') || "Add Option"}</Text>
-                </Pressable>
+                          {/* Text input for option */}
+                          <View style={[{ flex: 1, height: 44, borderRadius: 10, backgroundColor: "rgba(255, 255, 255, 0.05)", borderWidth: 1, borderColor: "rgba(255, 255, 255, 0.08)", paddingHorizontal: 12, justifyContent: "center" }, !settingsDarkMode && styles.lightInput]}>
+                            <TextInput
+                              placeholder={`Option ${optIdx + 1}`}
+                              placeholderTextColor="#666"
+                              style={[styles.formInput, !settingsDarkMode && styles.lightText, { fontSize: 13 }]}
+                              value={ans.text}
+                              onChangeText={(text) => updateDraftOptionText(optIdx, text)}
+                              onFocus={() => {
+                                if (optIdx >= 2) {
+                                  setTimeout(() => {
+                                    const rowY =
+                                      ((globalThis as any)._draftFormContainerY ?? 0) +
+                                      ((globalThis as any)._draftOptionsContainerY ?? 0) +
+                                      (((globalThis as any)._draftOptionRowYs ?? [])[optIdx] ?? 0);
+                                    // Scroll so the focused option sits ~80px below the top — not all the way down
+                                    (globalThis as any)._draftScrollRef?.scrollTo({ y: Math.max(0, rowY - 80), animated: true });
+                                  }, 300);
+                                }
+                              }}
+                            />
+                          </View>
 
-                {/* Navigation Footer Row */}
-                <View style={{ flexDirection: "row", gap: 12, marginTop: 10 }}>
-                  <Pressable 
-                    onPress={handleDraftBack}
+                          {/* Delete option button */}
+                          {currentDraftQuestion.answers.length > 2 && (
+                            <Pressable 
+                              onPress={() => deleteDraftOption(optIdx)}
+                              style={({ pressed }) => [
+                                { padding: 8 },
+                                pressed && styles.opacityPress
+                              ]}
+                            >
+                              <Feather name="trash-2" size={16} color="#ef4444" />
+                            </Pressable>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
+
+                  {/* Add Option button */}
+                  <Pressable
+                    onPress={addDraftOption}
                     style={({ pressed }) => [
                       {
-                        flex: 1,
-                        height: 48,
-                        borderRadius: 12,
-                        borderWidth: 1,
-                        borderColor: settingsDarkMode ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.15)",
+                        flexDirection: "row",
                         alignItems: "center",
-                        justifyContent: "center"
+                        gap: 6,
+                        alignSelf: "flex-start",
+                        paddingVertical: 6,
+                        paddingHorizontal: 12,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: "rgba(255, 255, 255, 0.15)",
+                        marginBottom: 20
                       },
+                      !settingsDarkMode && { borderColor: "rgba(0, 0, 0, 0.15)" },
                       pressed && styles.opacityPress
                     ]}
                   >
-                    <Text style={[{ fontSize: 14, fontWeight: "bold", color: settingsDarkMode ? "#ffffff" : "#0d0f14" }]}>
-                      {draftCurrentIndex === 0 ? "Back to Setup" : "Previous Q"}
-                    </Text>
+                    <Feather name="plus" size={14} color="#00e5a0" />
+                    <Text style={[{ fontSize: 12, fontWeight: "bold", color: "#00e5a0" }]}>{t('create.add_option') || "Add Option"}</Text>
                   </Pressable>
 
-                  {draftCurrentIndex < totalDraftCount - 1 ? (
+                  {/* Navigation Footer Row */}
+                  <View style={{ flexDirection: "row", gap: 12, marginTop: 10 }}>
                     <Pressable 
-                      onPress={() => {
-                        // Validate current question prompt before moving on
-                        if (!currentDraftQuestion.prompt.trim()) {
-                          if (Platform.OS === "web") alert("Please enter a question prompt.");
-                          else Alert.alert("Error", "Please enter a question prompt.");
-                          return;
-                        }
-                        const filledOpts = currentDraftQuestion.answers.filter((a: any) => a.text.trim());
-                        if (filledOpts.length < 2) {
-                          if (Platform.OS === "web") alert("Please enter at least 2 non-empty options.");
-                          else Alert.alert("Error", "Please enter at least 2 non-empty options.");
-                          return;
-                        }
-                        const correctFilled = filledOpts.find((a: any) => a.isCorrect);
-                        if (!correctFilled) {
-                          if (Platform.OS === "web") alert("Please select a correct answer amongst non-empty options.");
-                          else Alert.alert("Error", "Please select a correct answer amongst non-empty options.");
-                          return;
-                        }
-                        setDraftCurrentIndex(draftCurrentIndex + 1);
-                      }}
+                      onPress={handleDraftBack}
                       style={({ pressed }) => [
                         {
                           flex: 1,
                           height: 48,
                           borderRadius: 12,
-                          backgroundColor: "#00e5a0",
+                          borderWidth: 1,
+                          borderColor: settingsDarkMode ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.15)",
                           alignItems: "center",
                           justifyContent: "center"
                         },
                         pressed && styles.opacityPress
                       ]}
                     >
-                      <Text style={{ fontSize: 14, fontWeight: "bold", color: "#000000" }}>Next Question</Text>
+                      <Text style={[{ fontSize: 14, fontWeight: "bold", color: settingsDarkMode ? "#ffffff" : "#0d0f14" }]}>
+                        {draftCurrentIndex === 0 ? "Back to Setup" : "Previous Q"}
+                      </Text>
                     </Pressable>
-                  ) : (
-                    <Pressable 
-                      onPress={handleSaveDraftedQuiz}
-                      style={({ pressed }) => [
-                        {
-                          flex: 1,
-                          height: 48,
-                          borderRadius: 12,
-                          backgroundColor: "#00e5a0",
-                          alignItems: "center",
-                          justifyContent: "center"
-                        },
-                        pressed && styles.opacityPress
-                      ]}
-                    >
-                      <Text style={{ fontSize: 14, fontWeight: "bold", color: "#000000" }}>Save & Create Quiz</Text>
-                    </Pressable>
-                  )}
+
+                    {draftCurrentIndex < totalDraftCount - 1 ? (
+                      <Pressable 
+                        onPress={() => {
+                          // Validate current question prompt before moving on
+                          if (!currentDraftQuestion.prompt.trim()) {
+                            if (Platform.OS === "web") alert("Please enter a question prompt.");
+                            else Alert.alert("Error", "Please enter a question prompt.");
+                            return;
+                          }
+                          const filledOpts = currentDraftQuestion.answers.filter((a: any) => a.text.trim());
+                          if (filledOpts.length < 2) {
+                            if (Platform.OS === "web") alert("Please enter at least 2 non-empty options.");
+                            else Alert.alert("Error", "Please enter at least 2 non-empty options.");
+                            return;
+                          }
+                          const correctFilled = filledOpts.find((a: any) => a.isCorrect);
+                          if (!correctFilled) {
+                            if (Platform.OS === "web") alert("Please select a correct answer amongst non-empty options.");
+                            else Alert.alert("Error", "Please select a correct answer amongst non-empty options.");
+                            return;
+                          }
+                          setDraftCurrentIndex(draftCurrentIndex + 1);
+                        }}
+                        style={({ pressed }) => [
+                          {
+                            flex: 1,
+                            height: 48,
+                            borderRadius: 12,
+                            backgroundColor: "#00e5a0",
+                            alignItems: "center",
+                            justifyContent: "center"
+                          },
+                          pressed && styles.opacityPress
+                        ]}
+                      >
+                        <Text style={{ fontSize: 14, fontWeight: "bold", color: "#000000" }}>Next Question</Text>
+                      </Pressable>
+                    ) : (
+                      <Pressable 
+                        onPress={handleSaveDraftedQuiz}
+                        style={({ pressed }) => [
+                          {
+                            flex: 1,
+                            height: 48,
+                            borderRadius: 12,
+                            backgroundColor: "#00e5a0",
+                            alignItems: "center",
+                            justifyContent: "center"
+                          },
+                          pressed && styles.opacityPress
+                        ]}
+                      >
+                        <Text style={{ fontSize: 14, fontWeight: "bold", color: "#000000" }}>Save & Create Quiz</Text>
+                      </Pressable>
+                    )}
+                  </View>
                 </View>
-              </View>
-            )}
-          </ScrollView>
+              )}
+            </ScrollView>
+          </KeyboardWrapper>
         );
         }
         return null;
       }
 
-      case "flashcards": {
+      // @ts-ignore — dead code, flashcard tab removed
+      case "flashcards" as any: {
         // ── Flashcard study mode ─────────────────────────────────────
         if (studyingDeck) {
           const isDark  = settingsDarkMode;
@@ -4280,7 +6168,7 @@ export default function HomeScreen() {
         const isDark = settingsDarkMode;
 
         const openNewDeck = () => {
-          setCreationMode("flashcard");
+          setCreationMode("pick");
           setFcTitle("");
           setFcCategory("General");
           setFcCards([{ front: "", back: "" }]);
@@ -4465,28 +6353,28 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            {/* Embedded Local Video Tutorial */}
+            {/* Tutorial Video — react-native-youtube-iframe handles IFrame API properly */}
             <Text style={[styles.sectionHeading, !settingsDarkMode && styles.lightText]}>Watch Tutorial Video</Text>
-            <View style={[styles.videoPlayerCard, !settingsDarkMode && styles.lightCard, { height: 220, overflow: "hidden", position: "relative", justifyContent: "center", alignItems: "center" }]}>
-              <VideoView
-                style={{ width: "100%", height: "100%" }}
-                player={localVideoPlayer}
-                allowsPictureInPicture={true}
-                fullscreenOptions={{ enable: true }}
-                contentFit="contain"
+            <View style={{ borderRadius: 16, overflow: "hidden", marginBottom: 20, backgroundColor: "#000" }}>
+              <YoutubeIframe
+                videoId="jLiU-vW5EuA"
+                height={220}
+                play={false}
+                webViewStyle={{ backgroundColor: "#000" }}
+                initialPlayerParams={{
+                  modestbranding: true,
+                  rel: false,
+                  controls: true,
+                }}
+                onError={() => Linking.openURL("https://youtu.be/jLiU-vW5EuA")}
               />
-              {!isVideoPlaying && (
-                <View style={{ position: "absolute", pointerEvents: "none", opacity: 0.8 }}>
-                  <Ionicons name="play-circle" size={64} color="#ffffff" />
-                </View>
-              )}
             </View>
 
             {/* Format Instructions */}
             <Text style={[styles.sectionHeading, !settingsDarkMode && styles.lightText]}>Step 1: Format Your Text File (.qst)</Text>
             <View style={[styles.guideStepCard, !settingsDarkMode && styles.lightCard]}>
               <Text style={[styles.guideStepText, !settingsDarkMode && styles.lightTextSub]}>
-                Recall reads custom quizzes written in a simple text format. Create a plain text file ending in <Text style={{ color: "#00e5a0", fontWeight: "bold" }}>.qst</Text> and follow this layout:
+                Scorr reads custom quizzes written in a simple text format. Create a plain text file ending in <Text style={{ color: "#00e5a0", fontWeight: "bold" }}>.qst</Text> and follow this layout:
               </Text>
 
               <View style={[styles.codeBlockContainer, !settingsDarkMode && styles.lightCodeBlock]}>
@@ -4600,15 +6488,10 @@ export default function HomeScreen() {
                 contentContainerStyle={{ paddingBottom: 120 }}>
 
                 {/* ── Top bar ── */}
-                <View style={{ flexDirection: "row", justifyContent: "space-between",
-                  alignItems: "center", paddingHorizontal: 20, paddingTop: 52 }}>
+                <View style={{ paddingHorizontal: 20, paddingTop: 16 }}>
                   <Text style={{ fontSize: 18, fontWeight: "600", color: txt, letterSpacing: -0.3 }}>
                     Profile
                   </Text>
-                  <View style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: cardBg,
-                    borderWidth: 1, borderColor: border, alignItems: "center", justifyContent: "center" }}>
-                    <Ionicons name="ellipsis-horizontal" size={16} color={muted} />
-                  </View>
                 </View>
 
                 {/* ── Identity card ── */}
@@ -4649,7 +6532,7 @@ export default function HomeScreen() {
                       <Text style={{ fontSize: 10, color: "#6366f1", fontWeight: "600", letterSpacing: 0.5 }}>SYNCED</Text>
                     </View>
                   ) : (
-                    <Pressable onPress={() => { setAuthView("landing"); setAuthError(null); setShowAuthScreen(true); }}
+                    <Pressable onPress={openAuthScreen}
                       style={({ pressed }) => [{ backgroundColor: "#6366f1", borderRadius: 10,
                         paddingHorizontal: 14, paddingVertical: 8 }, pressed && styles.pressedScale]}>
                       <Text style={{ fontSize: 11, fontWeight: "500", color: "#fff" }}>Sign in</Text>
@@ -4714,7 +6597,7 @@ export default function HomeScreen() {
                     title={t('profile.guide') || "How to format quiz (.txt)"} sub={t('profile.guide_sub') || "Formatting guide"}
                     onPress={() => setActiveTab("guide")} right={<Chevron />} />
                   <Row icon="chatbubble-ellipses-outline" iconBg="rgba(99,102,241,0.1)" iconColor="#6366f1"
-                    title={t('profile.feedback') || "Feedback"} sub={t('profile.feedback_sub') || "Help improve QuizForge"}
+                    title={t('profile.feedback') || "Feedback"} sub={t('profile.feedback_sub') || "Help improve Scorr"}
                     onPress={() => setShowFeedbackPage(true)} right={<Chevron />} />
                 </View>
 
@@ -4738,6 +6621,13 @@ export default function HomeScreen() {
                       onPress={async () => {
                         setSignOutLoading(true);
                         await new Promise(r => setTimeout(r, 800));
+                        
+                        // Clear local quizzes state and storage to prevent cross-account merges
+                        setQuizzes([]);
+                        quizzesRef.current = [];
+                        await AsyncStorage.removeItem("quizforge_quizzes_global");
+                        await AsyncStorage.removeItem("quizforge_starred_global");
+                        
                         await signOutUser();
                         setSignOutLoading(false);
                         setActiveTab("home");
@@ -4792,7 +6682,7 @@ export default function HomeScreen() {
           const totalQuestionsInAllQuizzes = quizzes.reduce((acc: number, q: any) => acc + (q.questions || 1), 0);
           const totalCorrectInAllQuizzes = quizzes.reduce((acc: number, q: any) => acc + (q.uniqueCorrectIds || []).length, 0);
           const overallProgressPct = totalQuestionsInAllQuizzes > 0 
-            ? Math.min(Math.round((totalCorrectInAllQuizzes / totalQuestionsInAllQuizzes) * 100), 100) 
+            ? Math.min(Number(((totalCorrectInAllQuizzes / totalQuestionsInAllQuizzes) * 100).toFixed(1)), 100) 
             : 0;
 
           const filtered = quizzes.filter(q => {
@@ -4807,11 +6697,50 @@ export default function HomeScreen() {
             return true;
           });
 
-          const chips: { key: "all"|"progress"|"notstarted"|"done"; label: string }[] = [
-            { key: "all",        label: t('home.filter_all') || "All" },
-            { key: "progress",   label: t('home.filter_progress') || "In progress" },
-            { key: "notstarted", label: t('home.filter_notstarted') || "Not started" },
-            { key: "done",       label: t('home.filter_completed') || "Completed" },
+          if (!sampleDismissed) {
+            const attempts = sampleQuiz.attempts || [];
+            const uniqueCount = (sampleQuiz.uniqueCorrectIds || []).length;
+            const qCount = sampleQuiz.questions || 1;
+            const isCompleted = uniqueCount >= qCount;
+            let showSample = true;
+            if (homeSearch && !sampleQuiz.title.toLowerCase().includes(homeSearch.toLowerCase())) showSample = false;
+            if (homeFilter === "progress" && (attempts.length === 0 || isCompleted)) showSample = false;
+            if (homeFilter === "notstarted" && attempts.length > 0) showSample = false;
+            if (homeFilter === "done" && (!isCompleted || attempts.length === 0)) showSample = false;
+            if (showSample) {
+              filtered.unshift(sampleQuiz);
+            }
+          }
+
+          let combinedQuizzes = (!sampleDismissed && sampleQuiz) ? [sampleQuiz, ...quizzes] : quizzes;
+          
+          // Apply search filter before counting
+          if (homeSearch) {
+            const lowerSearch = homeSearch.toLowerCase();
+            combinedQuizzes = combinedQuizzes.filter(q => q.title.toLowerCase().includes(lowerSearch));
+          }
+
+          const allCount = combinedQuizzes.length;
+          let progressCount = 0;
+          let notStartedCount = 0;
+          let doneCount = 0;
+
+          combinedQuizzes.forEach(q => {
+            const attempts = q.attempts || [];
+            const uniqueCount = (q.uniqueCorrectIds || []).length;
+            const qCount = q.questions || 1;
+            const isCompleted = uniqueCount >= qCount;
+            
+            if (attempts.length === 0) notStartedCount++;
+            else if (isCompleted && attempts.length > 0) doneCount++;
+            else progressCount++;
+          });
+
+          const chips: { key: "all"|"progress"|"notstarted"|"done"; label: string; count: number }[] = [
+            { key: "all",        label: t('home.filter_all') || "All", count: allCount },
+            { key: "progress",   label: t('home.filter_progress') || "In progress", count: progressCount },
+            { key: "notstarted", label: t('home.filter_notstarted') || "Not started", count: notStartedCount },
+            { key: "done",       label: t('home.filter_completed') || "Completed", count: doneCount },
           ];
 
           return (
@@ -4820,197 +6749,244 @@ export default function HomeScreen() {
               <View style={{ position: "absolute", top: -60, right: -60, width: 220, height: 220,
                 borderRadius: 110, backgroundColor: "rgba(99,102,241,0.08)" }} pointerEvents="none" />
 
-              {/* ── Top bar ── */}
-              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center",
-                paddingHorizontal: 20, paddingTop: 52 }}>
-                <View style={{ flex: 1, paddingRight: 10 }}>
-                  <Text style={{ fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 4 }}>
-                    {`// OVERALL PROGRESS: ${overallProgressPct}%`}
-                  </Text>
-                  <Text style={{ fontSize: 20, fontWeight: "600", color: txt, letterSpacing: -0.5 }}>
-                    {t('home.active_quizzes') || "Your Active Quizzes"}
-                  </Text>
+              {/* ── Search & Profile ── */}
+              <View style={{ marginHorizontal: 20, marginTop: 24, marginBottom: 12, flexDirection: "row", alignItems: "center", gap: 20 }}>
+                {/* Search */}
+                <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10,
+                  backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.04)", 
+                  borderRadius: 16,
+                  paddingHorizontal: 12, paddingVertical: 6 }}>
+                  <Ionicons name="search-outline" size={18} color={muted} />
+                  <TextInput
+                    placeholder="Search"
+                    placeholderTextColor={muted}
+                    value={homeSearch}
+                    onChangeText={setHomeSearch}
+                    style={{ flex: 1, fontSize: 15, color: txt, fontWeight: "400" }}
+                  />
+                  {homeSearch.length > 0 && (
+                    <Pressable onPress={() => setHomeSearch("")}>
+                      <Ionicons name="close-circle" size={18} color={muted} />
+                    </Pressable>
+                  )}
                 </View>
+                
+                {/* Profile */}
                 <Pressable
                   onPress={() => setActiveTab("menu")}
-                  style={({ pressed }) => [{ width: 36, height: 36, borderRadius: 12,
+                  style={({ pressed }) => [{ width: 48, height: 48, borderRadius: 24,
                     backgroundColor: "rgba(99,102,241,0.12)",
                     borderWidth: 1, borderColor: isDark ? "#2a2a4a" : "rgba(99,102,241,0.2)",
-                    alignItems: "center", justifyContent: "center" },
+                    alignItems: "center", justifyContent: "center", overflow: "hidden" },
                     pressed && styles.pressedScale]}
                 >
                   {firebaseUser?.photoURL ? (
                     <Image source={{ uri: firebaseUser.photoURL }}
-                      style={{ width: 36, height: 36, borderRadius: 12 }} />
+                      style={{ width: 48, height: 48, borderRadius: 24 }} />
                   ) : firebaseUser ? (
-                    <Text style={{ fontSize: 14, fontWeight: "700", color: "#6366f1" }}>
+                    <Text style={{ fontSize: 18, fontWeight: "700", color: "#6366f1" }}>
                       {getUserInitial(firebaseUser)}
                     </Text>
                   ) : (
-                    <Ionicons name="person-outline" size={18} color="#6366f1" />
+                    <Ionicons name="person-outline" size={24} color="#6366f1" />
                   )}
                 </Pressable>
-              </View>
-
-              {/* ── Search ── */}
-              <View style={{ marginHorizontal: 20, marginTop: 16, flexDirection: "row",
-                alignItems: "center", gap: 10, backgroundColor: cardBg,
-                borderWidth: 1, borderColor: border, borderRadius: 14,
-                paddingHorizontal: 14, paddingVertical: 8 }}>
-                <Ionicons name="search-outline" size={16} color={muted} />
-                <TextInput
-                  placeholder={t('home.search_placeholder') || "Search quizzes..."}
-                  placeholderTextColor={muted}
-                  value={homeSearch}
-                  onChangeText={setHomeSearch}
-                  style={{ flex: 1, fontSize: 13, color: txt, fontWeight: "300" }}
-                />
-                {homeSearch.length > 0 && (
-                  <Pressable onPress={() => setHomeSearch("")}>
-                    <Ionicons name="close-circle" size={16} color={muted} />
-                  </Pressable>
-                )}
               </View>
 
               {/* ── Filter chips ── */}
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                style={{ flexGrow: 0, flexShrink: 0 }}
+                style={{ flexGrow: 0, flexShrink: 0, marginBottom: 16 }}
                 contentContainerStyle={{ gap: 8, paddingHorizontal: 20, paddingTop: 14, alignItems: "center" }}
               >
-                {chips.map(c => (
-                  <Pressable key={c.key} onPress={() => setHomeFilter(c.key)}
-                    style={({ pressed }) => [{
-                      paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20,
-                      backgroundColor: homeFilter === c.key ? "#6366f1" : "transparent",
-                      borderWidth: 1, borderColor: homeFilter === c.key ? "#6366f1" : border,
-                      alignSelf: "flex-start",
-                    }, pressed && styles.pressedScale]}>
-                    <Text style={{ fontSize: 11, letterSpacing: 0.5,
-                      color: homeFilter === c.key ? "#fff" : muted }}>
-                      {c.label}
-                    </Text>
-                  </Pressable>
-                ))}
+                {chips.map(c => {
+                  const isActive = homeFilter === c.key;
+                  return (
+                    <Pressable key={c.key} onPress={() => setHomeFilter(c.key)}
+                      style={({ pressed }) => [{
+                        flexDirection: "row", alignItems: "center", gap: 4,
+                        paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
+                        backgroundColor: isActive ? "#6366f1" : "transparent",
+                        borderWidth: 1, borderColor: isActive ? "#6366f1" : border,
+                        alignSelf: "flex-start",
+                      }, pressed && styles.pressedScale]}>
+                      <Text style={{ fontSize: 11, letterSpacing: 0.5,
+                        color: isActive ? "#fff" : muted }}>
+                        {c.label}
+                      </Text>
+                      <View style={{
+                        paddingHorizontal: 4, paddingVertical: 1, borderRadius: 8,
+                        backgroundColor: isActive ? "rgba(255,255,255,0.2)" : (isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)")
+                      }}>
+                        <Text style={{ fontSize: 9, fontWeight: "700", color: isActive ? "#fff" : muted }}>
+                          {c.count}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
               </ScrollView>
 
-              {/* ── List header ── */}
-              <View style={{ flexDirection: "row", justifyContent: "space-between",
-                alignItems: "center", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 12 }}>
-                <Text style={{ fontSize: 11, color: muted, letterSpacing: 1.2, textTransform: "uppercase" }}>
-                  {t('home.quizzes_label') || "Quizzes"}
-                </Text>
-                <Text style={{ fontSize: 11, color: "#6366f1", letterSpacing: 0.5 }}>
-                  {filtered.length} {t('home.active_label') || "active"}
-                </Text>
-              </View>
 
               {/* ── Quiz list ── */}
               <ScrollView showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 20, gap: 8, paddingBottom: 40 }}>
-                {filtered.length > 0 ? filtered.map((quiz) => {
-                  const attempts = quiz.attempts || [];
-                  const uniqueCount = (quiz.uniqueCorrectIds || []).length;
-                  const qCount = quiz.questions || 1;
-                  const completionPct = attempts.length > 0 ? Math.min(Math.round((uniqueCount / qCount) * 100), 100) : null;
-                  const multiplier = quiz.multiplier;
-                  return (
-                    <AnimatedPressable
-                      key={quiz.id}
-                      onPress={() => setShowQuizActions(quiz)}
-                      style={{
-                        backgroundColor: cardBg,
-                        borderWidth: 1, borderColor: border,
-                        borderRadius: 18, overflow: "hidden",
-                      }}
-                      scaleTo={0.97}
-                    >
-                      <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, backgroundColor: "#6366f1" }} />
-                      
-                      <View style={{ padding: 18, paddingLeft: 20 }}>
-                        {/* Title row */}
-                        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
-                          <Text style={{ fontSize: 15, fontWeight: "500", color: txt, letterSpacing: -0.2, flex: 1 }}
-                            numberOfLines={1}>
-                            {quiz.title}
-                          </Text>
-                          <Feather name="chevron-right" size={16} color={muted} style={{ marginTop: 2 }} />
-                        </View>
-
-                        {/* Meta tags */}
-                        <View style={{ flexDirection: "row", gap: 12, marginTop: 8, flexWrap: "wrap" }}>
-                          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                            <Ionicons name="help-circle-outline" size={12} color={muted} />
-                            <Text style={{ fontSize: 10, color: muted }}>{quiz.questions} {t('actions.questions') || "questions"}</Text>
-                          </View>
-                          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                            <Ionicons name="refresh-outline" size={12} color={muted} />
-                            <Text style={{ fontSize: 10, color: muted }}>{attempts.length} {t('actions.attempts') || "attempts"}</Text>
-                          </View>
-                          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                            <Ionicons name="checkmark-circle-outline" size={12} color={muted} />
-                            <Text style={{ fontSize: 10, color: muted }}>{uniqueCount} correct</Text>
-                          </View>
-                          {multiplier && multiplier > 1 && (
-                            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                              <Ionicons name="flash-outline" size={12} color={muted} />
-                              <Text style={{ fontSize: 10, color: muted }}>{multiplier}× streak</Text>
-                            </View>
-                          )}
-                        </View>
-
-                        {/* Bottom: score + bar */}
-                        <View style={{ flexDirection: "row", alignItems: "center",
-                          marginTop: 14, paddingTop: 4 }}>
-                          <Text style={{ fontSize: 11, color: completionPct !== null ? "#6366f1" : muted, minWidth: 30 }}>
-                            {completionPct !== null ? `${completionPct}%` : "0%"}
-                          </Text>
-                          <View style={{ flex: 1, height: 2, backgroundColor: isDark ? "#1e1e2e" : "rgba(0,0,0,0.07)",
-                            borderRadius: 2, marginHorizontal: 12 }}>
-                            {completionPct !== null && (
-                              <View style={{ height: 2, borderRadius: 2, width: `${completionPct}%` as any,
-                                backgroundColor: "#6366f1" }} />
-                            )}
-                          </View>
-                        </View>
-                      </View>
-                    </AnimatedPressable>
-                  );
-                }) : (
-                  homeSearch ? (
-                    <View style={{ alignItems: "center", paddingTop: 60, gap: 12 }}>
-                      <Ionicons name="search-outline" size={36} color={muted} />
-                      <Text style={{ fontSize: 14, color: muted, textAlign: "center" }}>
-                        {t('home.empty_search') || "No quizzes match your search"}
-                      </Text>
-                    </View>
-                  ) : quizzes.length === 0 ? (
-                    <View style={{ alignItems: "center", paddingTop: 48, paddingHorizontal: 24, gap: 10 }}>
-                      <Ionicons name="document-text-outline" size={32} color={muted} style={{ opacity: 0.5 }} />
-                      <Text style={{ fontSize: 13, color: muted, textAlign: "center", lineHeight: 19, opacity: 0.8 }}>
-                        {"Create a .txt file → tap + to import → start practicing"}
-                      </Text>
+                contentContainerStyle={{ paddingHorizontal: 20, gap: 12, paddingTop: 4, paddingBottom: 120 }}>
+                {!dataLoaded ? (
+                  // ── Skeleton cards while AsyncStorage / Firebase loads ──
+                  [0, 1, 2].map((i) => (
+                    <View key={i} style={{
+                      backgroundColor: cardBg, borderWidth: 1, borderColor: border,
+                      borderRadius: 18, overflow: "hidden", padding: 18, paddingLeft: 20, gap: 10,
+                      opacity: 1 - i * 0.2,
+                    }}>
+                      <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, backgroundColor: isDark ? "#2a2a4a" : "#e0e0f0" }} />
+                      <View style={{ height: 14, width: "60%", borderRadius: 7, backgroundColor: isDark ? "#1e293b" : "#ebebf0" }} />
                       <View style={{ flexDirection: "row", gap: 12, marginTop: 4 }}>
-                        <Pressable onPress={() => setActiveTab("guide")} style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}>
-                          <Text style={{ fontSize: 13, color: "#6366f1", fontWeight: "600" }}>Watch tutorial</Text>
-                        </Pressable>
-                        <Text style={{ fontSize: 13, color: muted, opacity: 0.4 }}>·</Text>
-                        <Pressable onPress={() => setShowAddMenu(true)} style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}>
-                          <Text style={{ fontSize: 13, color: "#6366f1", fontWeight: "600" }}>Import file</Text>
-                        </Pressable>
+                        <View style={{ height: 10, width: 60, borderRadius: 5, backgroundColor: isDark ? "#1e293b" : "#ebebf0" }} />
+                        <View style={{ height: 10, width: 50, borderRadius: 5, backgroundColor: isDark ? "#1e293b" : "#ebebf0" }} />
+                        <View style={{ height: 10, width: 55, borderRadius: 5, backgroundColor: isDark ? "#1e293b" : "#ebebf0" }} />
+                      </View>
+                      <View style={{ flexDirection: "row", alignItems: "center", marginTop: 6, gap: 12 }}>
+                        <View style={{ height: 10, width: 28, borderRadius: 5, backgroundColor: isDark ? "#1e293b" : "#ebebf0" }} />
+                        <View style={{ flex: 1, height: 2, borderRadius: 2, backgroundColor: isDark ? "#1e293b" : "#ebebf0" }} />
                       </View>
                     </View>
-                  ) : (
-                    <View style={{ alignItems: "center", paddingTop: 60, gap: 12 }}>
-                      <Ionicons name="document-text-outline" size={36} color={muted} />
-                      <Text style={{ fontSize: 14, color: muted, textAlign: "center" }}>
-                        {t('home.empty_active') || "No active quizzes"}
-                      </Text>
-                    </View>
-                  )
+                  ))
+                ) : (
+                  <>
+                    {filtered.map((quiz) => {
+                      const attempts = quiz.attempts || [];
+                      const uniqueCount = (quiz.uniqueCorrectIds || []).length;
+                      const qCount = quiz.questions || 1;
+                      const completionPct = attempts.length > 0 ? Math.min(Math.round((uniqueCount / qCount) * 100), 100) : null;
+                      const multiplier = quiz.multiplier;
+                      return (
+                        <AnimatedPressable
+                          key={quiz.id}
+                          onPress={() => setShowQuizActions(quiz)}
+                          style={{
+                            backgroundColor: cardBg,
+                            borderWidth: 1, borderColor: border,
+                            borderRadius: 18, overflow: "hidden",
+                          }}
+                          scaleTo={0.97}
+                        >
+                          <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, backgroundColor: "#6366f1" }} />
+                          
+                          <View style={{ padding: 18, paddingLeft: 20 }}>
+                            {/* Title row */}
+                            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+                              <Text style={{ fontSize: 15, fontWeight: "500", color: txt, letterSpacing: -0.2, flex: 1 }}
+                                numberOfLines={1}>
+                                {quiz.title}
+                              </Text>
+                              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                                {quiz.isSample && (
+                                  <View style={{ backgroundColor: isDark ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.1)", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 }}>
+                                    <Text style={{ fontSize: 9, fontWeight: "700", color: "#6366f1", letterSpacing: 0.5 }}>SAMPLE</Text>
+                                  </View>
+                                )}
+                                <Feather name="chevron-right" size={16} color={muted} style={{ marginTop: 2 }} />
+                              </View>
+                            </View>
+
+                            {/* Meta tags */}
+                            <View style={{ flexDirection: "row", gap: 12, marginTop: 8, flexWrap: "wrap" }}>
+                              <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                                <Ionicons name="help-circle-outline" size={12} color={muted} />
+                                <Text style={{ fontSize: 10, color: muted }}>{quiz.questions} {t('actions.questions') || "questions"}</Text>
+                              </View>
+                              <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                                <Ionicons name="refresh-outline" size={12} color={muted} />
+                                <Text style={{ fontSize: 10, color: muted }}>{attempts.length} {t('actions.attempts') || "attempts"}</Text>
+                              </View>
+                              <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                                <Ionicons name="checkmark-circle-outline" size={12} color={muted} />
+                                <Text style={{ fontSize: 10, color: muted }}>{uniqueCount} correct</Text>
+                              </View>
+                              {multiplier && multiplier > 1 && (
+                                <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                                  <Ionicons name="flash-outline" size={12} color={muted} />
+                                  <Text style={{ fontSize: 10, color: muted }}>{multiplier}× streak</Text>
+                                </View>
+                              )}
+                            </View>
+
+                            {/* Bottom: score + bar */}
+                            <View style={{ flexDirection: "row", alignItems: "center",
+                              marginTop: 14, paddingTop: 4 }}>
+                              <Text style={{ fontSize: 11, color: completionPct !== null ? "#6366f1" : muted, minWidth: 30 }}>
+                                {completionPct !== null ? `${completionPct}%` : "0%"}
+                              </Text>
+                              <View style={{ flex: 1, height: 2, backgroundColor: isDark ? "#1e1e2e" : "rgba(0,0,0,0.07)",
+                                borderRadius: 2, marginHorizontal: 12 }}>
+                                {completionPct !== null && (
+                                  <View style={{ height: 2, borderRadius: 2, width: `${completionPct}%` as any,
+                                    backgroundColor: "#6366f1" }} />
+                                )}
+                              </View>
+                            </View>
+                          </View>
+                        </AnimatedPressable>
+                      );
+                    })}
+
+                    {quizzes.length === 0 && !homeSearch && (
+                      <View style={{ alignItems: "center", paddingTop: 48, paddingHorizontal: 24, gap: 10 }}>
+                        <Ionicons name="document-text-outline" size={32} color={muted} style={{ opacity: 0.5 }} />
+                        <Text style={{ fontSize: 13, color: muted, textAlign: "center", lineHeight: 19, opacity: 0.8 }}>
+                          {"Create a .txt file → tap + to import → start practicing"}
+                        </Text>
+                        <View style={{ flexDirection: "row", gap: 12, marginTop: 4 }}>
+                          <Pressable onPress={() => setActiveTab("guide")} style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}>
+                            <Text style={{ fontSize: 13, color: "#6366f1", fontWeight: "600" }}>Watch tutorial</Text>
+                          </Pressable>
+                          <Text style={{ fontSize: 13, color: muted, opacity: 0.4 }}>·</Text>
+                          <Pressable onPress={() => setShowAddMenu(true)} style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}>
+                            <Text style={{ fontSize: 13, color: "#6366f1", fontWeight: "600" }}>Import file</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    )}
+
+                    {filtered.length === 0 && homeSearch ? (
+                      <View style={{ alignItems: "center", paddingTop: 60, gap: 12 }}>
+                        <Ionicons name="search-outline" size={36} color={muted} />
+                        <Text style={{ fontSize: 14, color: muted, textAlign: "center" }}>
+                          {t('home.empty_search') || "No quizzes match your search"}
+                        </Text>
+                      </View>
+                    ) : null}
+
+                    {filtered.length === 0 && !homeSearch && quizzes.length > 0 && (
+                      <View style={{ alignItems: "center", paddingTop: 60, gap: 12 }}>
+                        <Ionicons name="document-text-outline" size={36} color={muted} />
+                        <Text style={{ fontSize: 14, color: muted, textAlign: "center" }}>
+                          {t('home.empty_active') || "No active quizzes"}
+                        </Text>
+                      </View>
+                    )}
+                  </>
                 )}
               </ScrollView>
+
+              {/* Floating Action Button for Create Quiz */}
+              <AnimatedPressable
+                onPress={() => setShowAddMenu(true)}
+                style={{
+                  position: "absolute", right: 24, bottom: 24,
+                  width: 56, height: 56, borderRadius: 28,
+                  backgroundColor: "#6366f1",
+                  alignItems: "center", justifyContent: "center",
+                  shadowColor: "#6366f1", shadowOffset: { width: 0, height: 8 },
+                  shadowOpacity: 0.3, shadowRadius: 12, elevation: 8,
+                }}
+                scaleTo={0.9}
+              >
+                <Feather name="plus" size={28} color="#ffffff" />
+              </AnimatedPressable>
+
             </View>
           );
         })();
@@ -5035,6 +7011,13 @@ export default function HomeScreen() {
     setAuthView(view); // update state immediately so content renders
   };
 
+  const openAuthScreen = () => {
+    setAuthView("landing");
+    authViewAnim.setValue(0);
+    setAuthError(null);
+    setShowAuthScreen(true);
+  };
+
   const handleAuthSubmit = async () => {
     setAuthError(null);
     setAuthLoading(true);
@@ -5048,6 +7031,22 @@ export default function HomeScreen() {
       if (error) { setAuthError(error); return; }
     }
     setShowAuthScreen(false);
+  };
+
+  const handleResetPassword = async () => {
+    if (!authEmail.trim()) {
+      setAuthError("Please enter your email address to reset password.");
+      return;
+    }
+    setAuthError(null);
+    setAuthLoading(true);
+    const { error } = await resetPassword(authEmail.trim());
+    setAuthLoading(false);
+    if (error) {
+      setAuthError(error);
+    } else {
+      Alert.alert("Check your email", "A password reset link has been sent to " + authEmail);
+    }
   };
 
   const renderAuthScreen = () => {
@@ -5134,6 +7133,12 @@ export default function HomeScreen() {
                 <Ionicons name={showAuthPassword ? "eye-off-outline" : "eye-outline"} size={16} color="#8888aa" />
               </Pressable>
             </View>
+
+            {authMode === "signin" && (
+              <Pressable onPress={handleResetPassword} style={{ alignSelf: "flex-end", marginTop: -4, marginBottom: 12, marginRight: 4 }}>
+                <Text style={{ color: "#6366f1", fontSize: 13, fontWeight: "600" }}>Forgot Password?</Text>
+              </Pressable>
+            )}
 
             {authError ? (
               <View style={styles.authErrBox}>
@@ -5232,16 +7237,32 @@ export default function HomeScreen() {
   };
 
 
+  const SWIPE_TABS = ["home", "battle", "dashboard", "menu"];
+  const swipeScrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    if (SWIPE_TABS.includes(activeTab) && swipeScrollRef.current) {
+      const idx = SWIPE_TABS.indexOf(activeTab);
+      swipeScrollRef.current.scrollTo({ x: idx * Dimensions.get("window").width, animated: false });
+    }
+  }, [activeTab]);
+
   if (showAuthScreen) {
     return (
       <SafeAreaView style={[styles.landingSafeArea]} edges={["top", "left", "right", "bottom"]}>
-        <ScrollView
-          contentContainerStyle={{ flexGrow: 1 }}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+        <KeyboardWrapper
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={0}
         >
-          {renderAuthScreen()}
-        </ScrollView>
+          <ScrollView
+            contentContainerStyle={{ flexGrow: 1 }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {renderAuthScreen()}
+          </ScrollView>
+        </KeyboardWrapper>
       </SafeAreaView>
     );
   }
@@ -5254,10 +7275,40 @@ export default function HomeScreen() {
       ) : (
         <>
           {/* Dynamic Screen Area */}
-          <View style={styles.screenContainer}>{renderContent()}</View>
+          <View style={styles.screenContainer}>
+            {SWIPE_TABS.includes(activeTab) ? (
+              <ScrollView
+                ref={swipeScrollRef}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                bounces={false}
+                contentOffset={{ x: SWIPE_TABS.includes(activeTab) ? SWIPE_TABS.indexOf(activeTab) * Dimensions.get("window").width : 0, y: 0 }}
+                scrollEventThrottle={16}
+                onMomentumScrollEnd={(e) => {
+                  const screenWidth = Dimensions.get("window").width;
+                  const pageIndex = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
+                  const newTab = SWIPE_TABS[pageIndex];
+                  if (newTab && newTab !== activeTab) {
+                    setActiveTab(newTab as any);
+                  }
+                }}
+              >
+                {SWIPE_TABS.map((tab) => (
+                  <View key={tab} style={{ width: Dimensions.get("window").width }}>
+                    {renderContent(tab)}
+                  </View>
+                ))}
+              </ScrollView>
+            ) : (
+              renderContent()
+            )}
+          </View>
 
           {/* Bottom Tab Bar — Quizlet-style (hidden during focused editing and study sessions to maximize screen real estate and prevent keyboard overlaps) */}
-          {!( (activeTab === "add" && creationMode !== "pick") || (activeTab === "flashcards" && studyingDeck) ) && (
+          {!( (activeTab === "add" && creationMode !== "pick") ) && (() => {
+            const effectiveTab = activeTab === "insights" ? viewingInsightsQuizFromTab : activeTab;
+            return (
             <View style={[
               styles.bottomTabBar,
               !settingsDarkMode && styles.lightTabBar,
@@ -5268,46 +7319,39 @@ export default function HomeScreen() {
 
               {/* Home */}
               <AnimatedPressable onPress={() => setActiveTab("home")} style={styles.tabItem} scaleTo={0.88}>
-                <Ionicons name={activeTab === "home" ? "home" : "home-outline"} size={22}
-                  color={activeTab === "home" ? "#6366f1" : settingsDarkMode ? "#6e727a" : "#999"} />
-                <Text style={[styles.tabLabel, activeTab === "home" && styles.tabLabelActive]}>{t('tabs.home')}</Text>
+                <Feather name="home" size={24}
+                  color={effectiveTab === "home" ? "#818cf8" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"} />
+                <Text style={[styles.tabLabel, effectiveTab === "home" && styles.tabLabelActive, { color: effectiveTab === "home" ? "#818cf8" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)" }]}>{t('tabs.home')}</Text>
               </AnimatedPressable>
 
-              {/* Flashcards */}
-              <AnimatedPressable onPress={() => { setActiveTab("flashcards"); setStudyingDeck(null); }} style={styles.tabItem} scaleTo={0.88}>
-                <Ionicons name={activeTab === "flashcards" ? "copy" : "copy-outline"} size={22}
-                  color={activeTab === "flashcards" ? "#6366f1" : settingsDarkMode ? "#6e727a" : "#999"} />
-                <Text style={[styles.tabLabel, activeTab === "flashcards" && styles.tabLabelActive]}>{t('tabs.flashcards')}</Text>
-              </AnimatedPressable>
 
-              {/* Centre Create */}
-              <View style={styles.centerTabContainer}>
-                <AnimatedPressable
-                  onPress={() => setShowAddMenu(true)}
-                  style={styles.qCreateBtn}
-                  scaleTo={0.92}
-                >
-                  <Feather name="plus" size={26} color="#ffffff" />
-                </AnimatedPressable>
-                <Text style={[styles.tabLabel, { color: settingsDarkMode ? "#6e727a" : "#999", marginTop: 2 }]}>{t('tabs.create')}</Text>
-              </View>
+              {/* Centre Battle */}
+              <AnimatedPressable
+                onPress={() => setActiveTab("battle")}
+                style={styles.tabItem}
+                scaleTo={0.88}
+              >
+                <MaterialCommunityIcons name="sword-cross" size={24} color={effectiveTab === "battle" ? "#818cf8" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"} />
+                <Text style={[styles.tabLabel, effectiveTab === "battle" && styles.tabLabelActive, { color: effectiveTab === "battle" ? "#818cf8" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)" }]}>Battle</Text>
+              </AnimatedPressable>
 
               {/* Statistics */}
               <AnimatedPressable onPress={() => setActiveTab("dashboard")} style={styles.tabItem} scaleTo={0.88}>
-                <Ionicons name={activeTab === "dashboard" ? "bar-chart" : "bar-chart-outline"} size={22}
-                  color={activeTab === "dashboard" ? "#6366f1" : settingsDarkMode ? "#6e727a" : "#999"} />
-                <Text style={[styles.tabLabel, activeTab === "dashboard" && styles.tabLabelActive]}>{t('tabs.statistics')}</Text>
+                <Feather name="bar-chart-2" size={24}
+                  color={effectiveTab === "dashboard" ? "#818cf8" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"} />
+                <Text style={[styles.tabLabel, effectiveTab === "dashboard" && styles.tabLabelActive, { color: effectiveTab === "dashboard" ? "#818cf8" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)" }]}>{t('tabs.statistics')}</Text>
               </AnimatedPressable>
 
               {/* Profile (replaces menu) */}
               <AnimatedPressable onPress={() => setActiveTab("menu")} style={styles.tabItem} scaleTo={0.88}>
-                <Ionicons name={activeTab === "menu" ? "person-circle" : "person-circle-outline"} size={24}
-                  color={activeTab === "menu" ? "#6366f1" : settingsDarkMode ? "#6e727a" : "#999"} />
-                <Text style={[styles.tabLabel, activeTab === "menu" && styles.tabLabelActive]}>{t('tabs.profile')}</Text>
+                <Feather name="user" size={24}
+                  color={effectiveTab === "menu" ? "#818cf8" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"} />
+                <Text style={[styles.tabLabel, effectiveTab === "menu" && styles.tabLabelActive, { color: effectiveTab === "menu" ? "#818cf8" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)" }]}>{t('tabs.profile')}</Text>
               </AnimatedPressable>
 
             </View>
-          )}
+            );
+          })()}
 
           {Platform.OS === "web" && (
             <input
@@ -5402,7 +7446,7 @@ export default function HomeScreen() {
             >
               <View style={{ width: 44, height: 44, borderRadius: 12,
                 backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)", alignItems: "center", justifyContent: "center" }}>
-                <Ionicons name="document-text-outline" size={22} color={settingsDarkMode ? "#ffffff" : "#0d0f14"} />
+                <Ionicons name="eye-outline" size={22} color={settingsDarkMode ? "#ffffff" : "#0d0f14"} />
               </View>
               <Text style={{ fontSize: 16, fontWeight: "700", flex: 1,
                 color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>View</Text>
@@ -5486,10 +7530,10 @@ export default function HomeScreen() {
         visible={renamingQuiz !== null}
         animationType="fade"
         transparent={true}
-        onRequestClose={() => setRenamingQuiz(null)}
+        onRequestClose={() => handleModalCloseRequest(() => setRenamingQuiz(null))}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        <KeyboardWrapper
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
           style={{ flex: 1 }}
         >
           <Pressable 
@@ -5549,7 +7593,18 @@ export default function HomeScreen() {
               </View>
             </View>
           </Pressable>
-        </KeyboardAvoidingView>
+        </KeyboardWrapper>
+      </Modal>
+
+      {/* Importing Loading Overlay */}
+      <Modal visible={isImporting} animationType="fade" transparent={true}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ backgroundColor: '#1a1b2e', borderRadius: 20, padding: 32, alignItems: 'center', gap: 16, minWidth: 200 }}>
+            <ActivityIndicator size="large" color="#6366f1" />
+            <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '600' }}>Importing Quiz...</Text>
+            <Text style={{ color: '#888', fontSize: 13, textAlign: 'center' }}>Parsing your questions</Text>
+          </View>
+        </View>
       </Modal>
 
       {/* Import Error Modal */}
@@ -5632,11 +7687,18 @@ export default function HomeScreen() {
               <Pressable
                 onPress={() => {
                   if (deletingQuizConfirm) {
+                    if (deletingQuizConfirm.id === "sample_quiz") {
+                      setSampleDismissed(true);
+                      AsyncStorage.setItem("quizforge_sample_dismissed", "1");
+                      setDeletingQuizConfirm(null);
+                      return;
+                    }
+
                     setQuizzes(quizzes.filter(q => q.id !== deletingQuizConfirm.id));
                     setDeletingQuizConfirm(null);
                     // Delete from Neon if logged in and quiz is synced
                     const neonId = deletingQuizConfirm.neonId ?? deletingQuizConfirm.id;
-                    if (firebaseUser && neonId && !neonId.startsWith("local_")) {
+                    if (firebaseUser && neonId && !String(neonId).startsWith("local_")) {
                       deleteMobileQuiz(firebaseUser.uid, neonId).catch((err) =>
                         console.warn("[NeonSync] quiz delete failed:", err)
                       );
@@ -5843,59 +7905,13 @@ export default function HomeScreen() {
               </View>
               
               <View style={{ gap: 12, width: "100%" }}>
-                {/* Re-attempt All Action */}
-                <Pressable
-                  onPress={() => {
-                    const quiz = quizzes.find(q => q.id === selectedAttemptForModal.quizId);
-                    if (quiz) {
-                      let qsList = quiz.questionsList && quiz.questionsList.length > 0 ? [...quiz.questionsList] : [];
-                      if (qsList.length === 0) {
-                        qsList = generateMockQuestionsForQuiz(quiz.title, quiz.questions);
-                      }
-                      const attemptQuestionIds = selectedAttemptForModal.attempt.questionIds;
-                      if (attemptQuestionIds && attemptQuestionIds.length > 0) {
-                        qsList = qsList.filter(q => attemptQuestionIds.includes(q.id));
-                      }
-                      setActiveSession({
-                        quizId: quiz.id,
-                        quizTitle: quiz.title,
-                        questions: qsList,
-                        selectionMode: "all",
-                        shuffleQuestions: false,
-                        shuffleAnswers: false,
-                        showAnswerOnSubmit: true,
-                        timePerQuestion: null,
-                        currentIndex: 0,
-                        answers: {},
-                        submitted: [] as string[],
-                        isFinished: false,
-                        startedAt: Date.now()
-                      });
-                      setSelectedAttemptForModal(null);
-                    }
-                  }}
-                  style={({ pressed }) => [
-                    { flexDirection: "row", alignItems: "center", padding: 16, borderRadius: 20, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.03)" : "#f8fafc", borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "#e2e8f0" },
-                    pressed && { opacity: 0.7, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.06)" : "#f1f5f9" }
-                  ]}
-                >
-                  <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(99, 102, 241, 0.12)", alignItems: "center", justifyContent: "center", marginRight: 14 }}>
-                    <Ionicons name="play" size={20} color="#6366f1" />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 16, fontWeight: "600", color: settingsDarkMode ? "#ffffff" : "#0f172a" }}>Re-attempt</Text>
-                    <Text style={{ fontSize: 12, color: settingsDarkMode ? "#94a3b8" : "#64748b", marginTop: 2 }}>Start fresh with these questions</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={18} color={settingsDarkMode ? "#6e727a" : "#94a3b8"} />
-                </Pressable>
-
                 {/* Re-attempt Incorrect Action */}
                 {(selectedAttemptForModal.attempt.wrongQuestionIds || []).length > 0 && (
                   <Pressable
                     onPress={() => {
-                      const quiz = quizzes.find(q => q.id === selectedAttemptForModal.quizId);
+                      const quiz = selectedAttemptForModal.quizId === "sample_quiz" ? sampleQuiz : quizzes.find(q => q.id === selectedAttemptForModal.quizId);
                       if (quiz) {
-                        let qsList = quiz.questionsList && quiz.questionsList.length > 0 ? [...quiz.questionsList] : [];
+                        let qsList = quiz.id === "sample_quiz" ? SAMPLE_QUIZ.questionsList : (quiz.questionsList && quiz.questionsList.length > 0 ? [...quiz.questionsList] : []);
                         if (qsList.length === 0) {
                           qsList = generateMockQuestionsForQuiz(quiz.title, quiz.questions);
                         }
@@ -5916,7 +7932,8 @@ export default function HomeScreen() {
                             submitted: [] as string[],
                             isFinished: false,
                             startedAt: Date.now(),
-                            targetAttemptId: selectedAttemptForModal.attempt.id
+                            targetAttemptId: selectedAttemptForModal.attempt.id,
+                            retryOfAttemptNum: selectedAttemptForModal.attemptNum
                           });
                           setSelectedAttemptForModal(null);
                         }
@@ -5963,8 +7980,12 @@ export default function HomeScreen() {
       </Modal>
 
       {/* ── Feedback — full-screen slide-up page ── */}
-      <Modal visible={showFeedbackPage} animationType="slide" transparent={false} onRequestClose={() => setShowFeedbackPage(false)}>
-        <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#000000" : "#f4f4f8" }}>
+      <Modal visible={showFeedbackPage} animationType="slide" transparent={false} onRequestClose={() => handleModalCloseRequest(() => setShowFeedbackPage(false))}>
+        <KeyboardWrapper
+          style={{ flex: 1, backgroundColor: settingsDarkMode ? "#000000" : "#f4f4f8" }}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={0}
+        >
           {/* Header */}
           <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingTop: 56, paddingBottom: 20 }}>
             <Pressable
@@ -5977,7 +7998,7 @@ export default function HomeScreen() {
             <Text style={{ fontSize: 18, fontWeight: "700", color: settingsDarkMode ? "#fff" : "#0d0f14", marginLeft: 14 }}>Feedback</Text>
           </View>
 
-          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 60 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 100 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             <View style={{
               borderRadius: 24, padding: 24, marginBottom: 20,
               backgroundColor: settingsDarkMode ? "#121212" : "#ffffff",
@@ -6047,7 +8068,7 @@ export default function HomeScreen() {
               )}
             </Pressable>
           </ScrollView>
-        </View>
+        </KeyboardWrapper>
       </Modal>
 
       {/* ── Privacy Policy Modal ── */}
@@ -6082,7 +8103,7 @@ export default function HomeScreen() {
               <Text style={{ fontSize: 26, fontWeight: "900", color: settingsDarkMode ? "#fff" : "#0d0f14",
                 letterSpacing: -0.5, textAlign: "center", marginBottom: 10 }}>Privacy Policy</Text>
               <Text style={{ fontSize: 13, color: settingsDarkMode ? "#818cf8" : "#6366f1", fontWeight: "600",
-                textAlign: "center", marginBottom: 12 }}>Recall App · Last updated June 2025</Text>
+                textAlign: "center", marginBottom: 12 }}>Scorr App · Last updated June 2025</Text>
               <Text style={{ fontSize: 14, color: settingsDarkMode ? "#94a3b8" : "#555577",
                 textAlign: "center", lineHeight: 22, maxWidth: 300 }}>
                 We believe your data belongs to you. Here's exactly what we collect, why, and how we keep it safe.
@@ -6092,13 +8113,13 @@ export default function HomeScreen() {
             <View style={{ paddingHorizontal: 20, paddingTop: 28 }}>
               {[
                 { num: "01", icon: "person-outline" as const, accent: "#6366f1", title: "Information We Collect",
-                  body: "When you sign in with Google or Email, we collect your name, email address, and profile photo solely to create your Recall account. If you use the app without signing in, we collect no personal data whatsoever." },
+                  body: "When you sign in with Google or Email, we collect your name, email address, and profile photo solely to create your Scorr account. If you use the app without signing in, we collect no personal data whatsoever." },
                 { num: "02", icon: "school-outline" as const, accent: "#8b5cf6", title: "Quiz & Flashcard Data",
                   body: "Your quizzes, flashcard decks, attempt history, correct/wrong answers, and study streaks are stored in our secure Neon (PostgreSQL) database and linked to your account. This enables your progress to sync seamlessly across devices." },
                 { num: "03", icon: "phone-portrait-outline" as const, accent: "#06b6d4", title: "Local Storage",
                   body: "Your device uses AsyncStorage to cache quizzes and session data for offline access. This data lives only on your device and is never transmitted to or shared with any third party." },
                 { num: "04", icon: "analytics-outline" as const, accent: "#10b981", title: "How We Use Your Data",
-                  body: "Your data is used exclusively to power the Recall experience — syncing your progress, displaying your stats, and personalising your study sessions. We do not sell, rent, or share your data with advertisers or any third parties, ever." },
+                  body: "Your data is used exclusively to power the Scorr experience — syncing your progress, displaying your stats, and personalising your study sessions. We do not sell, rent, or share your data with advertisers or any third parties, ever." },
                 { num: "05", icon: "shield-checkmark-outline" as const, accent: "#f59e0b", title: "Data Security",
                   body: "All data in transit is protected by HTTPS/TLS encryption. Our Neon database sits behind authenticated API endpoints. Firebase Authentication handles all sign-in security. We never store raw passwords." },
                 { num: "06", icon: "trash-outline" as const, accent: "#ef4444", title: "Deleting Your Data",
@@ -6141,7 +8162,7 @@ export default function HomeScreen() {
                 alignItems: "center" }}>
                 <Ionicons name="shield-checkmark" size={24} color="#6366f1" style={{ marginBottom: 8 }} />
                 <Text style={{ fontSize: 13, fontWeight: "600", color: settingsDarkMode ? "#818cf8" : "#4f46e5",
-                  textAlign: "center", lineHeight: 20 }}>Your privacy is our priority.{"\n"}Recall will never misuse your data.</Text>
+                  textAlign: "center", lineHeight: 20 }}>Your privacy is our priority.{"\n"}Scorr will never misuse your data.</Text>
               </View>
               <View style={{ height: 40 }} />
             </View>
@@ -6181,31 +8202,31 @@ export default function HomeScreen() {
               <Text style={{ fontSize: 26, fontWeight: "900", color: settingsDarkMode ? "#fff" : "#0d0f14",
                 letterSpacing: -0.5, textAlign: "center", marginBottom: 10 }}>Terms of Service</Text>
               <Text style={{ fontSize: 13, color: settingsDarkMode ? "#34d399" : "#059669", fontWeight: "600",
-                textAlign: "center", marginBottom: 12 }}>Recall App · Last updated June 2025</Text>
+                textAlign: "center", marginBottom: 12 }}>Scorr App · Last updated June 2025</Text>
               <Text style={{ fontSize: 14, color: settingsDarkMode ? "#94a3b8" : "#555577",
                 textAlign: "center", lineHeight: 22, maxWidth: 300 }}>
-                Simple, fair terms for using Recall. By using the app, you agree to these.
+                Simple, fair terms for using Scorr. By using the app, you agree to these.
               </Text>
             </LinearGradient>
 
             <View style={{ paddingHorizontal: 20, paddingTop: 28 }}>
               {[
                 { num: "01", icon: "checkmark-circle-outline" as const, accent: "#00e5a0", title: "Acceptance of Terms",
-                  body: "By downloading or using Recall, you agree to be bound by these Terms of Service. If you do not agree with any part of these terms, please uninstall the app and discontinue use." },
+                  body: "By downloading or using Scorr, you agree to be bound by these Terms of Service. If you do not agree with any part of these terms, please uninstall the app and discontinue use." },
                 { num: "02", icon: "phone-portrait-outline" as const, accent: "#06b6d4", title: "Use of the App",
-                  body: "Recall is a personal study tool for creating quizzes, studying flashcards, and tracking learning progress. You may not use Recall for any unlawful purpose or to distribute harmful, abusive, or infringing content." },
+                  body: "Scorr is a personal study tool for creating quizzes, studying flashcards, and tracking learning progress. You may not use Scorr for any unlawful purpose or to distribute harmful, abusive, or infringing content." },
                 { num: "03", icon: "person-outline" as const, accent: "#6366f1", title: "User Accounts",
                   body: "You are responsible for maintaining the security of your account credentials. Notify us immediately of any unauthorised use. We are not liable for losses resulting from unauthorised access due to your negligence." },
                 { num: "04", icon: "document-outline" as const, accent: "#8b5cf6", title: "Your Content",
-                  body: "You own all quiz content, notes, and flashcards you create in Recall. By using the app, you grant us a limited licence to store and process your content solely to provide the Recall service back to you." },
+                  body: "You own all quiz content, notes, and flashcards you create in Scorr. By using the app, you grant us a limited licence to store and process your content solely to provide the Scorr service back to you." },
                 { num: "05", icon: "cloud-outline" as const, accent: "#3b82f6", title: "Cloud Sync & Data",
                   body: "When signed in, your quizzes and progress sync to our servers on a best-effort basis. While we work hard to ensure reliability, we cannot guarantee 100% uninterrupted access to cloud-synced data." },
                 { num: "06", icon: "ban-outline" as const, accent: "#ef4444", title: "Prohibited Activities",
-                  body: "You agree not to: reverse-engineer or decompile the app, attempt to gain unauthorised access to our servers or databases, use automated tools to scrape or abuse the service, or impersonate other users or Recall staff." },
+                  body: "You agree not to: reverse-engineer or decompile the app, attempt to gain unauthorised access to our servers or databases, use automated tools to scrape or abuse the service, or impersonate other users or Scorr staff." },
                 { num: "07", icon: "construct-outline" as const, accent: "#f59e0b", title: "Modifications & Availability",
-                  body: "We reserve the right to update, modify, or discontinue any features of Recall at any time. We will notify users of significant changes where possible. Continued use after changes constitutes acceptance of the new terms." },
+                  body: "We reserve the right to update, modify, or discontinue any features of Scorr at any time. We will notify users of significant changes where possible. Continued use after changes constitutes acceptance of the new terms." },
                 { num: "08", icon: "shield-outline" as const, accent: "#94a3b8", title: "Disclaimer of Warranties",
-                  body: "Recall is provided \"as is\" without warranties of any kind. We do not guarantee that the app will be error-free or that AI-generated quiz content will always be 100% accurate. Always verify critical information from authoritative sources." },
+                  body: "Scorr is provided \"as is\" without warranties of any kind. We do not guarantee that the app will be error-free or that AI-generated quiz content will always be 100% accurate. Always verify critical information from authoritative sources." },
                 { num: "09", icon: "mail-outline" as const, accent: "#00e5a0", title: "Contact",
                   body: "Questions about these terms? Contact us at recall.support@example.com and we will respond within 48 hours." },
               ].map((s, i, arr) => (
@@ -6244,7 +8265,7 @@ export default function HomeScreen() {
                 alignItems: "center" }}>
                 <Ionicons name="document-text" size={24} color="#00e5a0" style={{ marginBottom: 8 }} />
                 <Text style={{ fontSize: 13, fontWeight: "600", color: settingsDarkMode ? "#34d399" : "#059669",
-                  textAlign: "center", lineHeight: 20 }}>These terms are designed to be fair and transparent.{"\n"}Thank you for using Recall.</Text>
+                  textAlign: "center", lineHeight: 20 }}>These terms are designed to be fair and transparent.{"\n"}Thank you for using Scorr.</Text>
               </View>
               <View style={{ height: 40 }} />
             </View>
@@ -6281,20 +8302,24 @@ export default function HomeScreen() {
         visible={selectedQuiz !== null}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => setSelectedQuiz(null)}
+        onRequestClose={() => handleModalCloseRequest(() => setSelectedQuiz(null))}
       >
-        <Pressable style={styles.modalBackdrop} onPress={() => setSelectedQuiz(null)}>
-          <View style={[{
-            backgroundColor: settingsDarkMode ? "#1E293B" : "#ffffff",
-            borderTopLeftRadius: 28, borderTopRightRadius: 28,
-            paddingBottom: Platform.OS === "ios" ? 36 : 24,
-            paddingHorizontal: 20,
-            paddingTop: 12,
-            width: "100%",
-            maxHeight: "85%",
-            overflow: "hidden",
-            marginTop: "auto"
-          }, !settingsDarkMode && styles.lightModal]} onStartShouldSetResponder={() => true}>
+        <KeyboardWrapper
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <Pressable style={styles.modalBackdrop} onPress={() => setSelectedQuiz(null)}>
+            <View style={[{
+              backgroundColor: settingsDarkMode ? "#1E293B" : "#ffffff",
+              borderTopLeftRadius: 28, borderTopRightRadius: 28,
+              paddingBottom: Platform.OS === "ios" ? 36 : 24,
+              paddingHorizontal: 20,
+              paddingTop: 12,
+              width: "100%",
+              maxHeight: "85%",
+              overflow: "hidden",
+              marginTop: "auto"
+            }, !settingsDarkMode && styles.lightModal]} onStartShouldSetResponder={() => true}>
             {/* Drag handle */}
             <View style={{ alignItems: "center", paddingBottom: 16 }}>
               <View style={{ width: 36, height: 4, borderRadius: 2,
@@ -6323,6 +8348,7 @@ export default function HomeScreen() {
               style={styles.optionsScroll}
               contentContainerStyle={{ paddingBottom: 20 }}
               showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
             >
               {/* Question Selection Section */}
               <Text style={[styles.optionsSectionTitle, !settingsDarkMode && styles.lightTextSub]}>Question Selection</Text>
@@ -6336,13 +8362,13 @@ export default function HomeScreen() {
                     label: "Wrong",
                     disabled: wrongCount === 0,
                   },
+                  { value: "range" as const, label: "Range" },
                   {
                     value: "unanswered" as const,
                     label: "Unanswered",
                     disabled: unansweredCount === 0,
                   },
                   { value: "random" as const, label: "Random" },
-                  { value: "range" as const, label: "Range" },
                 ].map(({ value, label, disabled }) => {
                   const isActive = selectionMode === value;
                   return (
@@ -6428,7 +8454,7 @@ export default function HomeScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.switchLabelCompact, !settingsDarkMode && styles.lightText]}>Quiz time limit</Text>
                     <Text style={[styles.switchSubCompact, !settingsDarkMode && styles.lightTextSub]}>
-                      {quizTimeLimit !== null ? `Auto-submits after ${quizTimeLimit} min` : "No time limit"}
+                      {timeLimitText ? `Auto-submits after ${timeLimitText} min` : (quizTimeLimit !== null ? `Auto-submits after ${quizTimeLimit} min` : "No time limit")}
                     </Text>
                   </View>
 
@@ -6440,37 +8466,44 @@ export default function HomeScreen() {
                       gap: 3,
                       backgroundColor: settingsDarkMode ? "#1c2235" : "#ffffff",
                       borderWidth: 1,
-                      borderColor: quizTimeLimit !== null
+                      borderColor: (timeLimitText || quizTimeLimit !== null)
                         ? (settingsDarkMode ? "#4f52a0" : "#c7c9f5")
                         : (settingsDarkMode ? "#252d40" : "#e8eaee"),
                       borderRadius: 10,
                       paddingHorizontal: 11,
                       paddingVertical: 7,
-                      shadowColor: quizTimeLimit !== null ? "#6366f1" : "#000000",
+                      shadowColor: (timeLimitText || quizTimeLimit !== null) ? "#6366f1" : "#000000",
                       shadowOffset: { width: 0, height: 2 },
-                      shadowOpacity: quizTimeLimit !== null ? 0.25 : 0.08,
-                      shadowRadius: quizTimeLimit !== null ? 6 : 3,
-                      elevation: quizTimeLimit !== null ? 4 : 2,
+                      shadowOpacity: (timeLimitText || quizTimeLimit !== null) ? 0.25 : 0.08,
+                      shadowRadius: (timeLimitText || quizTimeLimit !== null) ? 6 : 3,
+                      elevation: (timeLimitText || quizTimeLimit !== null) ? 4 : 2,
                     }}>
                       <TextInput
-                        value={quizTimeLimit !== null ? String(quizTimeLimit) : ""}
+                        value={timeLimitText}
                         onChangeText={(t) => {
-                          const clean = t.replace(/[^0-9]/g, "");
-                          if (clean === "") {
+                          // Allow free typing — only digits, max 3 chars
+                          const clean = t.replace(/[^0-9]/g, "").slice(0, 3);
+                          setTimeLimitText(clean);
+                        }}
+                        onBlur={() => {
+                          // Commit to quizTimeLimit on blur
+                          const n = parseInt(timeLimitText, 10);
+                          if (!timeLimitText || isNaN(n) || n < 1) {
                             setQuizTimeLimit(null);
+                            setTimeLimitText("");
+                          } else if (n > 180) {
+                            setQuizTimeLimit(180);
+                            setTimeLimitText("180");
                           } else {
-                            const n = parseInt(clean, 10);
-                            if (n >= 1 && n <= 180) setQuizTimeLimit(n);
+                            setQuizTimeLimit(n);
                           }
                         }}
                         placeholder="—"
                         placeholderTextColor={settingsDarkMode ? "#3a4260" : "#bbbec8"}
                         keyboardType="number-pad"
                         maxLength={3}
-                        selectTextOnFocus
-                        selection={quizTimeLimit === null ? { start: 0, end: 0 } : undefined}
                         style={{
-                          color: quizTimeLimit !== null
+                          color: timeLimitText
                             ? (settingsDarkMode ? "#a5b4fc" : "#4f46e5")
                             : (settingsDarkMode ? "#3a4260" : "#bbbec8"),
                           fontSize: 14,
@@ -6561,6 +8594,8 @@ export default function HomeScreen() {
                                 key={String(preset)}
                                 onPress={() => {
                                   setQuizTimeLimit(preset);
+                                  // Sync local text state with preset value
+                                  setTimeLimitText(preset !== null ? String(preset) : "");
                                   setShowTimeLimitDropdown(false);
                                 }}
                                 style={({ pressed }) => ({
@@ -6634,27 +8669,35 @@ export default function HomeScreen() {
                 <Text style={styles.startQuizBtnText}>Start Quiz ({questionCount} Qs)</Text>
               </Pressable>
             </View>
-          </View>
-        </Pressable>
+            </View>
+          </Pressable>
+        </KeyboardWrapper>
       </Modal>
 
-      {/* ── PDF / View Mode Modal ── */}
+      {/* ── View Mode Modal ── */}
       <Modal visible={!!pdfViewQuiz} animationType="slide" transparent={false} onRequestClose={() => setPdfViewQuiz(null)}>
-        <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#0a1020" : "#f4f4f8" }}>
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingTop: 52, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
+        <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#0f172a" : "#f4f4f8" }}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingTop: 52, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: settingsDarkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)", backgroundColor: settingsDarkMode ? "#0f172a" : "#ffffff" }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flex: 1 }}>
-              <Pressable onPress={() => setPdfViewQuiz(null)} style={({ pressed }) => [{ padding: 4 }, pressed && styles.opacityPress]}>
-                <Ionicons name="arrow-back" size={24} color={settingsDarkMode ? "#ffffff" : "#0d0f14"} />
+              <Pressable onPress={() => setPdfViewQuiz(null)} style={({ pressed }) => [{ padding: 8, borderRadius: 10, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)" }, pressed && styles.opacityPress]}>
+                <Ionicons name="arrow-back" size={20} color={settingsDarkMode ? "#ffffff" : "#0d0f14"} />
               </Pressable>
-              <View>
-                <Text style={{ color: settingsDarkMode ? "#888888" : "#666677", fontSize: 12, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5 }}>View</Text>
-                <Text style={{ color: settingsDarkMode ? "#ffffff" : "#0d0f14", fontSize: 18, fontWeight: "700" }} numberOfLines={1}>{pdfViewQuiz?.title}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: settingsDarkMode ? "#6366f1" : "#6366f1", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8 }}>Questions</Text>
+                <Text style={{ color: settingsDarkMode ? "#ffffff" : "#0d0f14", fontSize: 17, fontWeight: "700" }} numberOfLines={1}>{pdfViewQuiz?.title}</Text>
               </View>
             </View>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
-              <Ionicons name="filter" size={22} color={settingsDarkMode ? "#ffffff" : "#0d0f14"} />
-              <Ionicons name="information-circle-outline" size={24} color={settingsDarkMode ? "#ffffff" : "#0d0f14"} />
-              <Ionicons name="search" size={22} color={settingsDarkMode ? "#ffffff" : "#0d0f14"} />
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              {(() => {
+                const bookmarkCount = (pdfViewQuiz?.questionsList || []).filter((q: any) => starredQuestions.has(q.id)).length;
+                return bookmarkCount > 0 ? (
+                  <View style={{ backgroundColor: "rgba(99,102,241,0.12)", borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5, flexDirection: "row", alignItems: "center", gap: 5 }}>
+                    <Ionicons name="bookmark" size={13} color="#6366f1" />
+                    <Text style={{ fontSize: 12, fontWeight: "700", color: "#6366f1" }}>{bookmarkCount}</Text>
+                  </View>
+                ) : null;
+              })()}
+              <Text style={{ color: settingsDarkMode ? "#6e727a" : "#999", fontSize: 12 }}>{(pdfViewQuiz?.questionsList || []).length} Qs</Text>
             </View>
           </View>
 
@@ -6664,18 +8707,18 @@ export default function HomeScreen() {
               return pdfViewQuiz.questionsList || [];
             })()}
             keyExtractor={(item, index) => String(item.id || index)}
-            contentContainerStyle={{ padding: 16, paddingBottom: 60, gap: 16 }}
+            contentContainerStyle={{ padding: 16, paddingBottom: 80, gap: 12, backgroundColor: settingsDarkMode ? "#0f172a" : "#f4f4f8" }}
             renderItem={({ item, index }) => (
               <View style={{
-                backgroundColor: settingsDarkMode ? "#121622" : "#ffffff",
+                backgroundColor: settingsDarkMode ? "#1e293b" : "#ffffff",
                 borderRadius: 16,
                 padding: 16,
                 borderWidth: 1,
-                borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)",
+                borderColor: settingsDarkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)",
                 shadowColor: "#000",
                 shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: settingsDarkMode ? 0.2 : 0.05,
-                shadowRadius: 8,
+                shadowOpacity: settingsDarkMode ? 0.15 : 0.04,
+                shadowRadius: 6,
                 elevation: 2,
               }}>
                 <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
@@ -6683,7 +8726,25 @@ export default function HomeScreen() {
                     <Text style={{ color: settingsDarkMode ? "#888888" : "#888888" }}>#{index + 1} </Text>
                     {item.prompt}
                   </Text>
-                  <Ionicons name="heart-outline" size={20} color={settingsDarkMode ? "#b91c1c" : "#ef4444"} style={{ marginLeft: 12, marginTop: 2 }} />
+                  <Pressable
+                    onPress={() => {
+                      const qId = item.id;
+                      if (!qId) return;
+                      setStarredQuestions(prev => {
+                        const next = new Set(prev);
+                        if (next.has(qId)) next.delete(qId);
+                        else next.add(qId);
+                        return next;
+                      });
+                    }}
+                    style={({ pressed }) => [{ padding: 6, marginLeft: 8, marginTop: -2, borderRadius: 8 }, pressed && styles.opacityPress]}
+                  >
+                    <Ionicons
+                      name={starredQuestions.has(item.id) ? "bookmark" : "bookmark-outline"}
+                      size={20}
+                      color={starredQuestions.has(item.id) ? "#6366f1" : (settingsDarkMode ? "#6e727a" : "#aaaaaa")}
+                    />
+                  </Pressable>
                 </View>
 
                 <View style={{ gap: 4 }}>
@@ -6749,25 +8810,55 @@ export default function HomeScreen() {
 
             {/* Import from File */}
             <AnimatedPressable
-              onPress={async () => {
+              onPress={() => {
                 setShowAddMenu(false);
                 if (Platform.OS === "web") {
                   if (fileInputRef.current) { fileInputRef.current.click(); }
                 } else {
-                  try {
-                    const result = await DocumentPicker.getDocumentAsync({
-                      type: "*/*",
-                      copyToCacheDirectory: true,
-                    });
-                    if (!result.canceled && result.assets && result.assets[0]) {
-                      const fileUri = result.assets[0].uri;
-                      const fileName = result.assets[0].name;
-                      const text = await FileSystem.readAsStringAsync(fileUri);
-                      handleImportQst(text, fileName);
+                  // Wait for bottom sheet close animation before launching picker.
+                  // Without this, Android swallows/delays the intent on most ROMs.
+                  setTimeout(async () => {
+                    try {
+                      const result = await DocumentPicker.getDocumentAsync({
+                        type: "*/*",
+                        copyToCacheDirectory: true,
+                      });
+                      if (!result.canceled && result.assets && result.assets[0]) {
+                        const fileUri = result.assets[0].uri;
+                        const fileName = result.assets[0].name;
+                        const ext = fileName.split('.').pop()?.toLowerCase();
+                        if (ext && !['txt', 'qst', 'md'].includes(ext)) {
+                          Alert.alert(
+                            "Unsupported File",
+                            `Only .txt files are supported. You selected a .${ext} file.\n\nMake sure your quiz is saved as a plain text (.txt) file.`
+                          );
+                          return;
+                        }
+                        setIsImporting(true);
+                        setTimeout(async () => {
+                          try {
+                            const text = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.UTF8 });
+                            // Close the overlay FIRST, wait for it to fully dismiss,
+                            // THEN show the quiz — otherwise the quiz options panel
+                            // gets swallowed by the still-animating loading Modal on Android.
+                            setIsImporting(false);
+                            setTimeout(() => handleImportQst(text, fileName), 150);
+                          } catch {
+                            try {
+                              const text = await FileSystem.readAsStringAsync(fileUri);
+                              setIsImporting(false);
+                              setTimeout(() => handleImportQst(text, fileName), 150);
+                            } catch (err: any) {
+                              setIsImporting(false);
+                              Alert.alert("Error", "Could not read the file. Make sure it is a valid .txt file.\n\n" + err.message);
+                            }
+                          }
+                        }, 50);
+                      }
+                    } catch (err: any) {
+                      Alert.alert("Error", "Failed to open file picker: " + err.message);
                     }
-                  } catch (err: any) {
-                    Alert.alert("Error", "Failed to read the selected file: " + err.message);
-                  }
+                  }, 350);
                 }
               }}
               style={{
@@ -6783,31 +8874,6 @@ export default function HomeScreen() {
                 </View>
                 <Text style={{ fontSize: 15, fontWeight: "600",
                   color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('create_menu.import_txt') || "Import quiz from file (.txt)"}</Text>
-              </View>
-            </AnimatedPressable>
-
-            <View style={{ height: 1, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)", marginHorizontal: 20 }} />
-
-            {/* Flashcard set */}
-            <AnimatedPressable
-              onPress={() => {
-                setShowAddMenu(false);
-                setCreationMode("flashcard");
-                setFcTitle(""); setFcCategory(""); setFcCards([{ front: "", back: "" }]); setFcCurrentIdx(0);
-                setActiveTab("add");
-              }}
-              style={{
-                paddingVertical: 13, paddingHorizontal: 20,
-              }}
-              scaleTo={0.97}
-            >
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
-                <View style={{ width: 40, height: 40, borderRadius: 12,
-                  backgroundColor: "rgba(99,102,241,0.12)", alignItems: "center", justifyContent: "center" }}>
-                  <Ionicons name="copy-outline" size={20} color="#6366f1" />
-                </View>
-                <Text style={{ fontSize: 15, fontWeight: "600",
-                  color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('create_menu.flashcard_set') || "Flashcard set"}</Text>
               </View>
             </AnimatedPressable>
 
@@ -6929,7 +8995,7 @@ export default function HomeScreen() {
               setFcCards(deck.cards?.length > 0 ? JSON.parse(JSON.stringify(deck.cards)) : [{ front: "", back: "" }]);
               setFcCurrentIdx(0);
               setCardType(deck.cardType || "Basic");
-              setCreationMode("flashcard");
+              setCreationMode("pick");
               setActiveTab("add");
               setShowFlashcardOptions(null);
             }} style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 20, paddingVertical: 16, backgroundColor: pressed ? (settingsDarkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)") : "transparent" }]}>
@@ -6941,7 +9007,7 @@ export default function HomeScreen() {
 
             <Pressable onPress={() => {
               setViewingInsightsDeck(showFlashcardOptions);
-              setActiveTab("deck-insights");
+              setActiveTab("dashboard");
               setShowFlashcardOptions(null);
             }} style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 20, paddingVertical: 16, backgroundColor: pressed ? (settingsDarkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)") : "transparent" }]}>
               <View style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)", alignItems: "center", justifyContent: "center" }}>
@@ -7050,6 +9116,61 @@ export default function HomeScreen() {
               </Text>
             </View>
           </SafeAreaView>
+        </View>
+      </Modal>
+
+      {/* ── Battle Result Modal ── */}
+      <Modal visible={!!battlePopup} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.65)", justifyContent: "center", alignItems: "center", padding: 24 }}>
+          {battlePopup && (
+            <View style={{
+              width: "100%", maxWidth: 360,
+              backgroundColor: settingsDarkMode ? "#1e1e2e" : "#ffffff",
+              borderRadius: 24, padding: 32, alignItems: "center",
+              borderWidth: 1, borderColor: battlePopup.won ? "rgba(34,197,94,0.4)" : (settingsDarkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)")
+            }}>
+              <View style={{
+                width: 80, height: 80, borderRadius: 40,
+                backgroundColor: battlePopup.won ? "rgba(34,197,94,0.15)" : (battlePopup.myScore === battlePopup.opponentScore ? "rgba(99,102,241,0.15)" : "rgba(239,68,68,0.15)"),
+                alignItems: "center", justifyContent: "center", marginBottom: 20
+              }}>
+                <Text style={{ fontSize: 40 }}>{battlePopup.won ? "🏆" : (battlePopup.myScore === battlePopup.opponentScore ? "🤝" : "💀")}</Text>
+              </View>
+              
+              <Text style={{ fontSize: 28, fontWeight: "900", letterSpacing: -0.5, marginBottom: 8,
+                color: battlePopup.won ? "#22c55e" : (battlePopup.myScore === battlePopup.opponentScore ? "#6366f1" : "#ef4444") }}>
+                {battlePopup.won ? "VICTORY!" : (battlePopup.myScore === battlePopup.opponentScore ? "DRAW!" : "DEFEATED")}
+              </Text>
+              
+              <Text style={{ fontSize: 16, color: settingsDarkMode ? "#94a3b8" : "#64748b", marginBottom: 24, textAlign: "center" }}>
+                Battle against <Text style={{ fontWeight: "700", color: settingsDarkMode ? "#f8fafc" : "#0f172a" }}>{battlePopup.opponentName}</Text>
+              </Text>
+              
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", width: "100%", marginBottom: 32 }}>
+                <View style={{ alignItems: "center", flex: 1 }}>
+                  <Text style={{ fontSize: 12, color: settingsDarkMode ? "#94a3b8" : "#64748b", fontWeight: "700", marginBottom: 4, textTransform: "uppercase" }}>You</Text>
+                  <Text style={{ fontSize: 36, fontWeight: "900", color: settingsDarkMode ? "#fff" : "#0d0f14" }}>{battlePopup.myScore}</Text>
+                </View>
+                <View style={{ paddingHorizontal: 16 }}>
+                  <Text style={{ fontSize: 16, fontWeight: "800", color: settingsDarkMode ? "#475569" : "#cbd5e1" }}>VS</Text>
+                </View>
+                <View style={{ alignItems: "center", flex: 1 }}>
+                  <Text style={{ fontSize: 12, color: settingsDarkMode ? "#94a3b8" : "#64748b", fontWeight: "700", marginBottom: 4, textTransform: "uppercase" }}>Opponent</Text>
+                  <Text style={{ fontSize: 36, fontWeight: "900", color: settingsDarkMode ? "#fff" : "#0d0f14" }}>{battlePopup.opponentScore}</Text>
+                </View>
+              </View>
+              
+              <Pressable
+                onPress={() => setBattlePopup(null)}
+                style={({ pressed }) => [{
+                  backgroundColor: battlePopup.won ? "#22c55e" : (settingsDarkMode ? "#334155" : "#e2e8f0"),
+                  paddingVertical: 14, borderRadius: 14, width: "100%", alignItems: "center"
+                }, pressed && { opacity: 0.8 }]}
+              >
+                <Text style={{ fontSize: 16, fontWeight: "700", color: battlePopup.won ? "#fff" : (settingsDarkMode ? "#fff" : "#0f172a") }}>Awesome!</Text>
+              </Pressable>
+            </View>
+          )}
         </View>
       </Modal>
 
@@ -7483,32 +9604,21 @@ const styles = StyleSheet.create({
   tabLabel: {
     fontSize: 10,
     color: "#6e727a",
-    marginTop: 3,
-    fontWeight: "500",
-    letterSpacing: 0.1,
+    marginTop: 2,
+    fontWeight: "600",
+    letterSpacing: -0.1,
   },
   tabLabelActive: {
     color: "#6366f1",
-    fontWeight: "700",
   },
   qCreateBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    backgroundColor: "#6366f1",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#6366f1",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
+    // unused — Create button now uses plain tabItem style
   },
   bottomTabBar: {
     flexDirection: "row",
     backgroundColor: "#0f172a",
     borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.06)",
+    borderTopColor: "rgba(255,255,255,0.02)",
     paddingTop: 10,
     alignItems: "center",
   },
@@ -7516,8 +9626,8 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 6,
-    gap: 2,
+    paddingVertical: 10,
+    gap: 3,
   },
   centerTabContainer: {
     flex: 1.2,
@@ -8330,9 +10440,9 @@ const styles = StyleSheet.create({
   },
   questionPromptText: {
     color: "#ffffff",
-    fontSize: 15,
-    lineHeight: 22,
-    fontWeight: "500",
+    fontSize: 17,
+    lineHeight: 24,
+    fontWeight: "600",
   },
   sessionOptionsContainer: {
     gap: 8,
@@ -8344,7 +10454,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255, 255, 255, 0.06)",
     borderWidth: 1,
     borderRadius: 14,
-    padding: 12,
+    padding: 10,
     gap: 10,
   },
   sessionOptionBtnSelected: {
@@ -8678,7 +10788,7 @@ const styles = StyleSheet.create({
   },
   lightTabBar: {
     backgroundColor: "#ffffff",
-    borderTopColor: "rgba(0, 0, 0, 0.05)",
+    borderTopColor: "rgba(0, 0, 0, 0.02)",
   },
   lightModal: {
     backgroundColor: "#ffffff",
