@@ -12,9 +12,7 @@
 // In production, set to your deployed URL.
 import { Platform } from "react-native";
 
-const BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL ?? 
-  (Platform.OS === "android" ? "http://10.0.2.2:3001" : "http://localhost:3001");
+const BASE_URL = "https://recall-backend-wheat.vercel.app";
 
 // ── Helpers ────────────────────────────────────────────────────────────
 async function apiFetch<T>(
@@ -313,27 +311,21 @@ export async function fetchVersionConfig(): Promise<{ config: VersionConfig | nu
   return { config: data ?? null, error };
 }
 
+import * as FileSystem from "expo-file-system/legacy";
+
 export async function parsePdfFromBackend(fileUri: string, fileName: string): Promise<{ text: string; error?: string }> {
   try {
-    const formData = new FormData();
-    // @ts-ignore
-    formData.append("file", {
-      uri: fileUri,
-      name: fileName,
-      type: "application/pdf"
+    const uploadResult = await FileSystem.uploadAsync(`${BASE_URL}/api/parse-pdf`, fileUri, {
+      httpMethod: 'POST',
+      uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+      fieldName: 'file',
     });
 
-    const res = await fetch(`${BASE_URL}/api/parse-pdf`, {
-      method: 'POST',
-      body: formData,
-    });
-    
-    if (!res.ok) {
-      const errorText = await res.text();
-      return { text: "", error: `Server returned ${res.status}: ${errorText}` };
+    if (uploadResult.status !== 200) {
+      return { text: "", error: `Server returned ${uploadResult.status}: ${uploadResult.body}` };
     }
     
-    const data = await res.json();
+    const data = JSON.parse(uploadResult.body);
     if (data.error) return { text: "", error: data.error };
     return { text: data.text || "" };
   } catch (err: any) {
