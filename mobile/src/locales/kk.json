@@ -46,7 +46,7 @@
     "disabled": "Өшірілген",
     "language": "Тіл",
     "support": "Қолдау",
-    "guide": "Тестті қалай пішімдеу керек (.txt)",
+    "guide": "Тестті қалай пішімдеу керек (.txt, .docx, .pdf)",
     "guide_sub": "Пішімдеу нұсқаулығы",
     "feedback": "Кері байланыс",
     "feedback_sub": "QuizForge-ті жақсартуға көмектесіңіз",
@@ -108,7 +108,7 @@
     "attempts": "әрекет"
   },
   "create_menu": {
-    "import_txt": "Файлдан импорттау (.txt)",
+    "import_txt": "Файлдан импорттау (.txt, .docx, .pdf)",
     "create_manual": "Қолмен жасау"
   }
 }

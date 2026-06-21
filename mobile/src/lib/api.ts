@@ -312,3 +312,31 @@ export async function fetchVersionConfig(): Promise<{ config: VersionConfig | nu
   const { data, error } = await apiFetch<VersionConfig>("/api/version-config");
   return { config: data ?? null, error };
 }
+
+export async function parsePdfFromBackend(fileUri: string, fileName: string): Promise<{ text: string; error?: string }> {
+  try {
+    const formData = new FormData();
+    // @ts-ignore
+    formData.append("file", {
+      uri: fileUri,
+      name: fileName,
+      type: "application/pdf"
+    });
+
+    const res = await fetch(`${BASE_URL}/api/parse-pdf`, {
+      method: 'POST',
+      body: formData,
+    });
+    
+    if (!res.ok) {
+      const errorText = await res.text();
+      return { text: "", error: `Server returned ${res.status}: ${errorText}` };
+    }
+    
+    const data = await res.json();
+    if (data.error) return { text: "", error: data.error };
+    return { text: data.text || "" };
+  } catch (err: any) {
+    return { text: "", error: err.message };
+  }
+}

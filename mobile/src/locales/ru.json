@@ -46,7 +46,7 @@
     "disabled": "Выключено",
     "language": "Язык",
     "support": "Поддержка",
-    "guide": "Как форматировать тест (.txt)",
+    "guide": "Как форматировать тест (.txt, .docx, .pdf)",
     "guide_sub": "Руководство по форматированию",
     "feedback": "Обратная связь",
     "feedback_sub": "Помогите улучшить QuizForge",
@@ -108,7 +108,7 @@
     "attempts": "попыток"
   },
   "create_menu": {
-    "import_txt": "Импорт из файла (.txt)",
+    "import_txt": "Импорт из файла (.txt, .docx, .pdf)",
     "create_manual": "Создать вручную"
   }
 }

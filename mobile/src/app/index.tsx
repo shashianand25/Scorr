@@ -23,14 +23,27 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons, FontAwesome6, MaterialCommunityIcons } from "@expo/vector-icons";
+import IconHome from "tabler-icons-react-native/icons-js/IconHome";
+import IconSwords from "tabler-icons-react-native/icons-js/IconSwords";
+import IconUser from "tabler-icons-react-native/icons-js/IconUser";
+import Svg, { Path } from "react-native-svg";
+
+const CustomChartIcon = ({ size = 24, color = "#000" }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <Path d="M6 14v6 M12 6v14 M18 10v10" />
+  </Svg>
+);
+
 import { GestureHandlerRootView, FlingGestureHandler, Directions, State } from "react-native-gesture-handler";
 import YoutubeIframe from "react-native-youtube-iframe";
 import { useAudioPlayer, setAudioModeAsync } from "expo-audio";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import { LinearGradient } from "expo-linear-gradient";
+import { Buffer } from "buffer";
+import * as mammoth from "mammoth/mammoth.browser.js";
 import { signInWithGoogle, signInWithEmail, signUpWithEmail, signOutUser, onAuth, deleteAccount, resetPassword, type User } from "../lib/firebase";
-import { syncUserToNeon, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz, deleteUserFromNeon, sendFeedback, saveBattleHistory, fetchBattleHistory } from "../lib/api";
+import { syncUserToNeon, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz, deleteUserFromNeon, sendFeedback, saveBattleHistory, fetchBattleHistory, parsePdfFromBackend } from "../lib/api";
 import { createBattleRoom, joinBattleRoom, updateBattleScore, finishBattle, markPlayerFinished, listenToBattleRoom, getBattleRoom, type BattleRoom } from "../lib/multiplayer";
 // expo-speech requires a native rebuild — guarded so app doesn't crash before rebuild
 const Speech = (() => {
@@ -634,8 +647,18 @@ export default function HomeScreen() {
               });
               setQuizzes((local: any[]) => {
                 // Exclude sample_quiz — it lives in its own sampleQuiz state, not the main quizzes array
-                const cleanLocal = local.filter((l) => l.id !== "sample_quiz" && !normalizedQuizzes.find((n) => n.id === l.id));
-                return [...normalizedQuizzes, ...cleanLocal];
+                const cleanLocal = local.filter((l) => l.id !== "sample_quiz");
+                
+                // Preserve local ordering
+                const updatedLocal = cleanLocal.map(l => {
+                  const synced = normalizedQuizzes.find((n) => n.id === l.id);
+                  return synced || l;
+                });
+
+                // Append any completely new quizzes from the server
+                const newFromServer = normalizedQuizzes.filter(n => !cleanLocal.find(l => l.id === n.id));
+
+                return [...updatedLocal, ...newFromServer];
               });
 
               // Backfill local-only quizzes that aren't in Neon yet (exclude sample_quiz — it must never be uploaded)
@@ -3374,14 +3397,14 @@ export default function HomeScreen() {
     if (!activeSession) return null;
 
     if (activeSession.isBattle) {
-      const hostScore = battleRoomState?.hostScore || 0;
-      const guestScore = battleRoomState?.guestScore || 0;
-      const myScore = activeSession.isHost ? hostScore : guestScore;
+      const hostScore = activeSession.isHost ? (activeSession.correctCount || 0) : (battleRoomState?.hostScore || 0);
+      const guestScore = activeSession.isHost ? (battleRoomState?.guestScore || 0) : (activeSession.correctCount || 0);
+      const myScore = activeSession.correctCount || 0;
       const opponentScore = activeSession.isHost ? guestScore : hostScore;
       const opponentName = activeSession.isHost ? (battleRoomState?.guestName || "Rival") : (battleRoomState?.hostName || "Host");
       const myName = activeSession.isHost ? (battleRoomState?.hostName || "You") : (battleRoomState?.guestName || "You");
 
-      const iFinished = activeSession.isHost ? (battleRoomState?.hostFinished || false) : (battleRoomState?.guestFinished || false);
+      const iFinished = activeSession.isFinished || false;
       const opponentFinished = activeSession.isHost ? (battleRoomState?.guestFinished || false) : (battleRoomState?.hostFinished || false);
       const bothFinished = iFinished && opponentFinished;
 
@@ -3481,7 +3504,8 @@ export default function HomeScreen() {
       // ── FULL RESULTS (both finished) ────────────────────────────────
       const isWinner = myScore > opponentScore;
       // Tie-break by speed: lower time wins
-      const myTime = activeSession.isHost ? (battleRoomState?.hostTime ?? Infinity) : (battleRoomState?.guestTime ?? Infinity);
+      const myTimeState = activeSession.isHost ? battleRoomState?.hostTime : battleRoomState?.guestTime;
+      const myTime = myTimeState ?? (Date.now() - (activeSession.startTime || Date.now()));
       const opponentTime = activeSession.isHost ? (battleRoomState?.guestTime ?? Infinity) : (battleRoomState?.hostTime ?? Infinity);
       const isTie = myScore === opponentScore;
       const tiebreakerWin = isTie && myTime < opponentTime;
@@ -4793,11 +4817,6 @@ export default function HomeScreen() {
             contentContainerStyle={{ paddingBottom: 40 }}
             showsVerticalScrollIndicator={false}
           >
-            {/* ── Subtle top glow ── */}
-            <View style={{ position: "absolute", top: -60, left: "50%", marginLeft: -120,
-              width: 240, height: 240, borderRadius: 120,
-              backgroundColor: "rgba(99,102,241,0.08)" }} pointerEvents="none" />
-
             {/* ── Header ── */}
             <View style={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 4 }}>
               <Text style={{ fontSize: 26, fontWeight: "600", letterSpacing: -0.5,
@@ -4886,6 +4905,21 @@ export default function HomeScreen() {
                 const uniqueCount = (quiz.uniqueCorrectIds || []).length;
                 const qCount = quiz.questions || 1;
                 const completionPct = attempts.length > 0 ? Math.min(Math.round((uniqueCount / qCount) * 100), 100) : null;
+                
+                let cardColor = "#5b6080";
+                if (completionPct !== null) {
+                  if (completionPct >= 75) cardColor = "#2dd4a7";
+                  else if (completionPct >= 25) cardColor = "#8b8ff0";
+                  else cardColor = "#f0a13c";
+                }
+                
+                let badgeBg = "rgba(91,96,128,0.15)";
+                if (completionPct !== null) {
+                  if (completionPct >= 75) badgeBg = "rgba(45,212,167,0.15)";
+                  else if (completionPct >= 25) badgeBg = "rgba(139,143,240,0.15)";
+                  else badgeBg = "rgba(240,161,60,0.15)";
+                }
+
                 return (
                   <Pressable
                     key={quiz.id}
@@ -4897,7 +4931,7 @@ export default function HomeScreen() {
                       overflow: "hidden",
                     }, pressed && styles.pressedScale]}
                   >
-                    <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, backgroundColor: "#6366f1" }} />
+                    <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, backgroundColor: cardColor }} />
                     <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
                       <View style={{ flex: 1, marginRight: 10 }}>
                         <Text style={{ fontSize: 14, fontWeight: "500", color: txt }} numberOfLines={1}>
@@ -4905,28 +4939,28 @@ export default function HomeScreen() {
                         </Text>
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 5, flexWrap: "wrap" }}>
                           <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                            <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: "#6366f1" }} />
+                            <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: muted }} />
                             <Text style={{ fontSize: 10, color: muted }}>{quiz.questions} questions</Text>
                           </View>
                           <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                            <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: "#6366f1" }} />
+                            <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: muted }} />
                             <Text style={{ fontSize: 10, color: muted }}>
                               {attempts.length} attempt{attempts.length !== 1 ? "s" : ""}
                             </Text>
                           </View>
                         </View>
                       </View>
-                      {completionPct !== null && (
-                        <View style={{ backgroundColor: "rgba(99,102,241,0.1)", borderRadius: 6,
-                          paddingHorizontal: 8, paddingVertical: 3 }}>
-                          <Text style={{ fontSize: 12, color: "#6366f1" }}>{completionPct}%</Text>
-                        </View>
-                      )}
+                      <View style={{ backgroundColor: completionPct !== null ? badgeBg : "rgba(91,96,128,0.15)", borderRadius: 6,
+                        paddingHorizontal: 8, paddingVertical: 3 }}>
+                        <Text style={{ fontSize: 12, fontWeight: "500", color: cardColor }}>
+                          {completionPct !== null ? `${completionPct}%` : "Not started"}
+                        </Text>
+                      </View>
                     </View>
                     {/* Mini progress bar */}
                     <View style={{ height: 2, backgroundColor: isDark ? "#1e1e2e" : "rgba(0,0,0,0.06)", borderRadius: 2 }}>
                       {completionPct !== null && (
-                        <View style={{ height: 2, borderRadius: 2, width: `${completionPct}%` as any, backgroundColor: "#6366f1" }} />
+                        <View style={{ height: 2, borderRadius: 2, width: `${completionPct}%` as any, backgroundColor: cardColor }} />
                       )}
                     </View>
                   </Pressable>
@@ -6594,7 +6628,7 @@ export default function HomeScreen() {
 
                 <View style={{ paddingHorizontal: 20, gap: 6 }}>
                   <Row icon="book-outline" iconBg="rgba(99,102,241,0.1)" iconColor="#6366f1"
-                    title={t('profile.guide') || "How to format quiz (.txt)"} sub={t('profile.guide_sub') || "Formatting guide"}
+                    title={t('profile.guide') || "How to format quiz (.txt, .docx)"} sub={t('profile.guide_sub') || "Formatting guide"}
                     onPress={() => setActiveTab("guide")} right={<Chevron />} />
                   <Row icon="chatbubble-ellipses-outline" iconBg="rgba(99,102,241,0.1)" iconColor="#6366f1"
                     title={t('profile.feedback') || "Feedback"} sub={t('profile.feedback_sub') || "Help improve Scorr"}
@@ -6745,10 +6779,6 @@ export default function HomeScreen() {
 
           return (
             <View style={{ flex: 1, backgroundColor: bg }}>
-              {/* Top glow */}
-              <View style={{ position: "absolute", top: -60, right: -60, width: 220, height: 220,
-                borderRadius: 110, backgroundColor: "rgba(99,102,241,0.08)" }} pointerEvents="none" />
-
               {/* ── Search & Profile ── */}
               <View style={{ marginHorizontal: 20, marginTop: 24, marginBottom: 12, flexDirection: "row", alignItems: "center", gap: 20 }}>
                 {/* Search */}
@@ -6807,19 +6837,19 @@ export default function HomeScreen() {
                       style={({ pressed }) => [{
                         flexDirection: "row", alignItems: "center", gap: 4,
                         paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
-                        backgroundColor: isActive ? "#6366f1" : "transparent",
-                        borderWidth: 1, borderColor: isActive ? "#6366f1" : border,
+                        backgroundColor: isActive ? "#8b8ff0" : "transparent",
+                        borderWidth: 1, borderColor: isActive ? "#8b8ff0" : border,
                         alignSelf: "flex-start",
                       }, pressed && styles.pressedScale]}>
-                      <Text style={{ fontSize: 11, letterSpacing: 0.5,
-                        color: isActive ? "#fff" : muted }}>
+                      <Text style={{ fontSize: 11, letterSpacing: 0.5, fontWeight: isActive ? "500" : "400",
+                        color: isActive ? "#1a1640" : muted }}>
                         {c.label}
                       </Text>
                       <View style={{
-                        paddingHorizontal: 4, paddingVertical: 1, borderRadius: 8,
-                        backgroundColor: isActive ? "rgba(255,255,255,0.2)" : (isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)")
+                        paddingHorizontal: isActive ? 7 : 4, paddingVertical: 1, borderRadius: 10,
+                        backgroundColor: isActive ? "rgba(26,22,64,0.25)" : (isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)")
                       }}>
-                        <Text style={{ fontSize: 9, fontWeight: "700", color: isActive ? "#fff" : muted }}>
+                        <Text style={{ fontSize: isActive ? 11 : 9, fontWeight: isActive ? "500" : "700", color: isActive ? "#1a1640" : muted }}>
                           {c.count}
                         </Text>
                       </View>
@@ -6861,6 +6891,14 @@ export default function HomeScreen() {
                       const qCount = quiz.questions || 1;
                       const completionPct = attempts.length > 0 ? Math.min(Math.round((uniqueCount / qCount) * 100), 100) : null;
                       const multiplier = quiz.multiplier;
+
+                      let cardColor = "#5b6080";
+                      if (completionPct !== null) {
+                        if (completionPct >= 75) cardColor = "#2dd4a7";
+                        else if (completionPct >= 25) cardColor = "#8b8ff0";
+                        else cardColor = "#f0a13c";
+                      }
+
                       return (
                         <AnimatedPressable
                           key={quiz.id}
@@ -6872,7 +6910,7 @@ export default function HomeScreen() {
                           }}
                           scaleTo={0.97}
                         >
-                          <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, backgroundColor: "#6366f1" }} />
+                          <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, backgroundColor: cardColor }} />
                           
                           <View style={{ padding: 18, paddingLeft: 20 }}>
                             {/* Title row */}
@@ -6883,8 +6921,8 @@ export default function HomeScreen() {
                               </Text>
                               <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                                 {quiz.isSample && (
-                                  <View style={{ backgroundColor: isDark ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.1)", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 }}>
-                                    <Text style={{ fontSize: 9, fontWeight: "700", color: "#6366f1", letterSpacing: 0.5 }}>SAMPLE</Text>
+                                  <View style={{ backgroundColor: isDark ? "rgba(139,143,240,0.18)" : "rgba(99,102,241,0.1)", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 }}>
+                                    <Text style={{ fontSize: 10, fontWeight: "700", color: isDark ? "#a5a8f5" : "#6366f1", letterSpacing: 0.5 }}>SAMPLE</Text>
                                   </View>
                                 )}
                                 <Feather name="chevron-right" size={16} color={muted} style={{ marginTop: 2 }} />
@@ -6894,21 +6932,21 @@ export default function HomeScreen() {
                             {/* Meta tags */}
                             <View style={{ flexDirection: "row", gap: 12, marginTop: 8, flexWrap: "wrap" }}>
                               <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                                <Ionicons name="help-circle-outline" size={12} color={muted} />
-                                <Text style={{ fontSize: 10, color: muted }}>{quiz.questions} {t('actions.questions') || "questions"}</Text>
+                                <Ionicons name="help-circle-outline" size={14} color={muted} />
+                                <Text style={{ fontSize: 12, color: muted }}>{quiz.questions} {t('actions.questions') || "questions"}</Text>
                               </View>
                               <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                                <Ionicons name="refresh-outline" size={12} color={muted} />
-                                <Text style={{ fontSize: 10, color: muted }}>{attempts.length} {t('actions.attempts') || "attempts"}</Text>
+                                <Ionicons name="refresh-outline" size={14} color={muted} />
+                                <Text style={{ fontSize: 12, color: muted }}>{attempts.length} {t('actions.attempts') || "attempts"}</Text>
                               </View>
                               <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                                <Ionicons name="checkmark-circle-outline" size={12} color={muted} />
-                                <Text style={{ fontSize: 10, color: muted }}>{uniqueCount} correct</Text>
+                                <Ionicons name="checkmark-circle-outline" size={14} color={muted} />
+                                <Text style={{ fontSize: 12, color: muted }}>{uniqueCount} correct</Text>
                               </View>
                               {multiplier && multiplier > 1 && (
                                 <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                                  <Ionicons name="flash-outline" size={12} color={muted} />
-                                  <Text style={{ fontSize: 10, color: muted }}>{multiplier}× streak</Text>
+                                  <Ionicons name="flash-outline" size={14} color={muted} />
+                                  <Text style={{ fontSize: 12, color: muted }}>{multiplier}× streak</Text>
                                 </View>
                               )}
                             </View>
@@ -6916,14 +6954,14 @@ export default function HomeScreen() {
                             {/* Bottom: score + bar */}
                             <View style={{ flexDirection: "row", alignItems: "center",
                               marginTop: 14, paddingTop: 4 }}>
-                              <Text style={{ fontSize: 11, color: completionPct !== null ? "#6366f1" : muted, minWidth: 30 }}>
-                                {completionPct !== null ? `${completionPct}%` : "0%"}
+                              <Text style={{ fontSize: 12, color: completionPct !== null ? cardColor : "#5b6080", minWidth: 30, fontWeight: completionPct !== null ? "500" : "400" }}>
+                                {completionPct !== null ? `${completionPct}%` : "Not started"}
                               </Text>
-                              <View style={{ flex: 1, height: 2, backgroundColor: isDark ? "#1e1e2e" : "rgba(0,0,0,0.07)",
-                                borderRadius: 2, marginHorizontal: 12 }}>
+                              <View style={{ flex: 1, height: 5, backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.07)",
+                                borderRadius: 3, marginLeft: 8 }}>
                                 {completionPct !== null && (
-                                  <View style={{ height: 2, borderRadius: 2, width: `${completionPct}%` as any,
-                                    backgroundColor: "#6366f1" }} />
+                                  <View style={{ height: "100%", borderRadius: 3, width: `${completionPct}%` as any,
+                                    backgroundColor: cardColor }} />
                                 )}
                               </View>
                             </View>
@@ -6936,7 +6974,7 @@ export default function HomeScreen() {
                       <View style={{ alignItems: "center", paddingTop: 48, paddingHorizontal: 24, gap: 10 }}>
                         <Ionicons name="document-text-outline" size={32} color={muted} style={{ opacity: 0.5 }} />
                         <Text style={{ fontSize: 13, color: muted, textAlign: "center", lineHeight: 19, opacity: 0.8 }}>
-                          {"Create a .txt file → tap + to import → start practicing"}
+                          {"Create a .txt, .docx or .pdf file → tap + to import → start practicing"}
                         </Text>
                         <View style={{ flexDirection: "row", gap: 12, marginTop: 4 }}>
                           <Pressable onPress={() => setActiveTab("guide")} style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}>
@@ -6977,10 +7015,10 @@ export default function HomeScreen() {
                 style={{
                   position: "absolute", right: 24, bottom: 24,
                   width: 56, height: 56, borderRadius: 28,
-                  backgroundColor: "#6366f1",
+                  backgroundColor: "#8b8ff0",
                   alignItems: "center", justifyContent: "center",
-                  shadowColor: "#6366f1", shadowOffset: { width: 0, height: 8 },
-                  shadowOpacity: 0.3, shadowRadius: 12, elevation: 8,
+                  shadowColor: "#000", shadowOffset: { width: 0, height: 6 },
+                  shadowOpacity: 0.35, shadowRadius: 16, elevation: 12,
                 }}
                 scaleTo={0.9}
               >
@@ -7319,7 +7357,7 @@ export default function HomeScreen() {
 
               {/* Home */}
               <AnimatedPressable onPress={() => setActiveTab("home")} style={styles.tabItem} scaleTo={0.88}>
-                <Feather name="home" size={24}
+                <IconHome size={24}
                   color={effectiveTab === "home" ? "#818cf8" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"} />
                 <Text style={[styles.tabLabel, effectiveTab === "home" && styles.tabLabelActive, { color: effectiveTab === "home" ? "#818cf8" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)" }]}>{t('tabs.home')}</Text>
               </AnimatedPressable>
@@ -7331,20 +7369,20 @@ export default function HomeScreen() {
                 style={styles.tabItem}
                 scaleTo={0.88}
               >
-                <MaterialCommunityIcons name="sword-cross" size={24} color={effectiveTab === "battle" ? "#818cf8" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"} />
+                <IconSwords size={24} color={effectiveTab === "battle" ? "#818cf8" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"} />
                 <Text style={[styles.tabLabel, effectiveTab === "battle" && styles.tabLabelActive, { color: effectiveTab === "battle" ? "#818cf8" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)" }]}>Battle</Text>
               </AnimatedPressable>
 
               {/* Statistics */}
               <AnimatedPressable onPress={() => setActiveTab("dashboard")} style={styles.tabItem} scaleTo={0.88}>
-                <Feather name="bar-chart-2" size={24}
+                <CustomChartIcon size={24}
                   color={effectiveTab === "dashboard" ? "#818cf8" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"} />
                 <Text style={[styles.tabLabel, effectiveTab === "dashboard" && styles.tabLabelActive, { color: effectiveTab === "dashboard" ? "#818cf8" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)" }]}>{t('tabs.statistics')}</Text>
               </AnimatedPressable>
 
               {/* Profile (replaces menu) */}
               <AnimatedPressable onPress={() => setActiveTab("menu")} style={styles.tabItem} scaleTo={0.88}>
-                <Feather name="user" size={24}
+                <IconUser size={24}
                   color={effectiveTab === "menu" ? "#818cf8" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"} />
                 <Text style={[styles.tabLabel, effectiveTab === "menu" && styles.tabLabelActive, { color: effectiveTab === "menu" ? "#818cf8" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)" }]}>{t('tabs.profile')}</Text>
               </AnimatedPressable>
@@ -8827,30 +8865,58 @@ export default function HomeScreen() {
                         const fileUri = result.assets[0].uri;
                         const fileName = result.assets[0].name;
                         const ext = fileName.split('.').pop()?.toLowerCase();
-                        if (ext && !['txt', 'qst', 'md'].includes(ext)) {
+                        const fileSize = result.assets[0].size || 0;
+                        if (ext === 'pdf' && fileSize > 4.5 * 1024 * 1024) {
+                          Alert.alert(
+                            "File Too Large",
+                            "Please select a PDF under 4.5 MB."
+                          );
+                          return;
+                        }
+
+                        if (ext && !['txt', 'qst', 'md', 'docx', 'pdf'].includes(ext)) {
                           Alert.alert(
                             "Unsupported File",
-                            `Only .txt files are supported. You selected a .${ext} file.\n\nMake sure your quiz is saved as a plain text (.txt) file.`
+                            `You can upload only .txt, .docx, and .pdf files. Your uploaded file is .${ext}`
                           );
                           return;
                         }
                         setIsImporting(true);
                         setTimeout(async () => {
                           try {
-                            const text = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.UTF8 });
+                            let text = "";
+                            if (ext === "pdf") {
+                              const pdfResult = await parsePdfFromBackend(fileUri, fileName);
+                              if (pdfResult.error) {
+                                throw new Error(`Backend PDF parsing failed: ${pdfResult.error}`);
+                              }
+                              text = pdfResult.text;
+                            } else if (ext === "docx") {
+                              const b64 = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.Base64 });
+                              const buff = Buffer.from(b64, "base64");
+                              const result = await mammoth.extractRawText({ arrayBuffer: buff });
+                              text = result.value;
+                            } else {
+                              text = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.UTF8 });
+                            }
                             // Close the overlay FIRST, wait for it to fully dismiss,
                             // THEN show the quiz — otherwise the quiz options panel
                             // gets swallowed by the still-animating loading Modal on Android.
                             setIsImporting(false);
                             setTimeout(() => handleImportQst(text, fileName), 150);
-                          } catch {
+                          } catch (err: any) {
+                            if (ext === "pdf" || ext === "docx") {
+                              setIsImporting(false);
+                              Alert.alert("Error", `Failed to parse ${ext.toUpperCase()} file.\n\n${err.message}`);
+                              return;
+                            }
                             try {
-                              const text = await FileSystem.readAsStringAsync(fileUri);
+                              const textFallback = await FileSystem.readAsStringAsync(fileUri);
                               setIsImporting(false);
-                              setTimeout(() => handleImportQst(text, fileName), 150);
-                            } catch (err: any) {
+                              setTimeout(() => handleImportQst(textFallback, fileName), 150);
+                            } catch (err2: any) {
                               setIsImporting(false);
-                              Alert.alert("Error", "Could not read the file. Make sure it is a valid .txt file.\n\n" + err.message);
+                              Alert.alert("Error", `Could not read the file. Make sure it is a valid .txt, .docx, or .pdf file.\n\n${err.message}`);
                             }
                           }
                         }, 50);
@@ -8873,7 +8939,7 @@ export default function HomeScreen() {
                   <Ionicons name="document-text-outline" size={20} color={settingsDarkMode ? "#aaaacc" : "#666688"} />
                 </View>
                 <Text style={{ fontSize: 15, fontWeight: "600",
-                  color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('create_menu.import_txt') || "Import quiz from file (.txt)"}</Text>
+                  color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('create_menu.import_txt') || "Import quiz from file (.txt, .docx)"}</Text>
               </View>
             </AnimatedPressable>
 

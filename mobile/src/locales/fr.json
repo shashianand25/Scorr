@@ -46,7 +46,7 @@
     "disabled": "Actuellement désactivé",
     "language": "Langue",
     "support": "Support",
-    "guide": "Comment formater le quiz (.txt)",
+    "guide": "Comment formater le quiz (.txt, .docx, .pdf)",
     "guide_sub": "Guide de formatage",
     "feedback": "Commentaires",
     "feedback_sub": "Aidez-nous à améliorer QuizForge",
@@ -108,7 +108,7 @@
     "attempts": "tentatives"
   },
   "create_menu": {
-    "import_txt": "Importer d'un fichier (.txt)",
+    "import_txt": "Importer d'un fichier (.txt, .docx, .pdf)",
     "create_manual": "Créer un quiz manuellement"
   }
 }

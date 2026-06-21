@@ -2,7 +2,11 @@ const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
 const { Resend } = require('resend');
+const multer = require('multer');
+const pdfParse = require('pdf-parse');
 require('dotenv').config();
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 const app = express();
 const resend = new Resend('re_Kt6jhDqQ_FPcQUafA3aH3TkursCPxBcnW');
@@ -232,6 +236,20 @@ app.delete('/api/mobile-quizzes', async (req, res) => {
     await pool.query(`DELETE FROM mobile_quizzes WHERE id = $1 AND user_id = $2`, [quizId, userId]);
     res.json({ ok: true });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PDF Parsing ────────────────────────────────────────────────────────────
+app.post('/api/parse-pdf', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+    const data = await pdfParse(req.file.buffer);
+    res.json({ text: data.text });
+  } catch (err) {
+    console.error('PDF Parse Error:', err);
     res.status(500).json({ error: err.message });
   }
 });

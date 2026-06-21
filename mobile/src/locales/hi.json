@@ -46,7 +46,7 @@
     "disabled": "वर्तमान में अक्षम",
     "language": "भाषा",
     "support": "सहायता",
-    "guide": "क्विज़ को कैसे प्रारूपित करें (.txt)",
+    "guide": "क्विज़ को कैसे प्रारूपित करें (.txt, .docx, .pdf)",
     "guide_sub": "प्रारूपण गाइड",
     "feedback": "प्रतिक्रिया",
     "feedback_sub": "QuizForge को बेहतर बनाने में मदद करें",
@@ -108,7 +108,7 @@
     "attempts": "प्रयास"
   },
   "create_menu": {
-    "import_txt": "फ़ाइल से आयात करें (.txt)",
+    "import_txt": "फ़ाइल से आयात करें (.txt, .docx, .pdf)",
     "create_manual": "मैन्युअल रूप से क्विज़ बनाएं"
   }
 }

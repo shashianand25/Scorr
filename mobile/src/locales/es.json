@@ -46,7 +46,7 @@
     "disabled": "Actualmente desactivado",
     "language": "Idioma",
     "support": "Soporte",
-    "guide": "Cómo formatear la prueba (.txt)",
+    "guide": "Cómo formatear la prueba (.txt, .docx, .pdf)",
     "guide_sub": "Guía de formato",
     "feedback": "Comentarios",
     "feedback_sub": "Ayuda a mejorar QuizForge",
@@ -108,7 +108,7 @@
     "attempts": "intentos"
   },
   "create_menu": {
-    "import_txt": "Importar de archivo (.txt)",
+    "import_txt": "Importar de archivo (.txt, .docx, .pdf)",
     "create_manual": "Crear prueba manualmente"
   }
 }
