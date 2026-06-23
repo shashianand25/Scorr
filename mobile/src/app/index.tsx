@@ -39,12 +39,14 @@ import YoutubeIframe from "react-native-youtube-iframe";
 import { useAudioPlayer, setAudioModeAsync } from "expo-audio";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
 import { LinearGradient } from "expo-linear-gradient";
 import { Buffer } from "buffer";
 import * as mammoth from "mammoth/mammoth.browser.js";
 import { signInWithGoogle, signInWithEmail, signUpWithEmail, signOutUser, onAuth, deleteAccount, resetPassword, type User } from "../lib/firebase";
 import { syncUserToNeon, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz, deleteUserFromNeon, sendFeedback, saveBattleHistory, fetchBattleHistory, parsePdfFromBackend } from "../lib/api";
 import { createBattleRoom, joinBattleRoom, updateBattleScore, finishBattle, markPlayerFinished, listenToBattleRoom, getBattleRoom, type BattleRoom } from "../lib/multiplayer";
+import NetInfo from "@react-native-community/netinfo";
 // expo-speech requires a native rebuild — guarded so app doesn't crash before rebuild
 const Speech = (() => {
   try {
@@ -346,6 +348,15 @@ function parseQstText(text: string): { title: string; category: string; question
       continue;
     }
 
+    // Image tag
+    if (trimmed.startsWith("[Image:") && trimmed.endsWith("]")) {
+      const url = trimmed.substring(7, trimmed.length - 1).trim();
+      if (currentQuestion) {
+        currentQuestion.imageUrl = url;
+      }
+      continue;
+    }
+
     // Options
     if (currentQuestion) {
       if (trimmed.startsWith("+")) {
@@ -559,7 +570,7 @@ export default function HomeScreen() {
     }
   };
   const [showLanding, setShowLanding] = useState(false);
-  const [battlePopup, setBattlePopup] = useState<{myScore: number, opponentScore: number, opponentName: string, won: boolean} | null>(null);
+  const [battlePopup, setBattlePopup] = useState<{myScore: number, opponentScore: number, opponentName: string, won: boolean, myTime?: number, opponentTime?: number} | null>(null);
   const battleConfettiFiredRef = useRef(false);
 
   // ── Suppress browser native blue focus ring globally on web ──
@@ -678,7 +689,7 @@ export default function HomeScreen() {
                 }).then(({ quiz: saved }) => {
                   if (saved) {
                     setQuizzes((prev: any[]) =>
-                      prev.map((pq) => pq.id === q.id ? { ...pq, id: saved.id, neonId: saved.id } : pq)
+                      prev.map((pq) => pq.id === q.id ? { ...pq, neonId: saved.id } : pq)
                     );
                     console.log(`[NeonSync] Backfilled quiz: ${saved.id}`);
                   }
@@ -702,7 +713,7 @@ export default function HomeScreen() {
                   if (saveErr) { console.warn("[NeonSync] upload failed:", saveErr); return; }
                   if (saved) {
                     setQuizzes((prev: any[]) =>
-                      prev.map((pq) => pq.id === q.id ? { ...pq, id: saved.id, neonId: saved.id } : pq)
+                      prev.map((pq) => pq.id === q.id ? { ...pq, neonId: saved.id } : pq)
                     );
                     console.log(`[NeonSync] Uploaded quiz to Neon: ${saved.id}`);
                   }
@@ -720,15 +731,14 @@ export default function HomeScreen() {
                 // Merge based on quiz_title, scores, and date roughly (using date or just avoiding exact duplicates)
                 // The easiest way is to use a Map keyed by `date` + `quizTitle`
                 const mergedMap = new Map();
-                localHistory.forEach((h: any) => mergedMap.set(`${h.date}_${h.quizTitle}`, h));
+                localHistory.forEach((h: any) => mergedMap.set(h.roomCode || `${h.date}_${h.quizTitle}`, h));
                 
                 // Add server history (map DB snake_case back to camelCase)
                 battleHistoryRes.history.forEach((h: any) => {
-                  const parsedDate = new Date(h.created_at).getTime();
-                  const key = `${parsedDate}_${h.quiz_title}`;
-                  if (!mergedMap.has(key)) {
-                    mergedMap.set(key, {
-                      date: parsedDate,
+                  if (!mergedMap.has(h.room_code)) {
+                    mergedMap.set(h.room_code, {
+                      date: new Date(h.created_at).getTime(),
+                      roomCode: h.room_code,
                       quizTitle: h.quiz_title,
                       myScore: h.my_score,
                       opponentScore: h.opponent_score,
@@ -810,11 +820,12 @@ export default function HomeScreen() {
       }
     });
     // Load saved toggle preferences
-    AsyncStorage.multiGet(["pref_shuffleQuestions", "pref_shuffleAnswers", "pref_showAnswerOnSubmit"]).then((pairs) => {
+    AsyncStorage.multiGet(["pref_shuffleQuestions", "pref_shuffleAnswers", "pref_showAnswerOnSubmit", "pref_autoSlideEnabled"]).then((pairs) => {
       pairs.forEach(([key, val]) => {
         if (key === "pref_shuffleQuestions" && val !== null) setShuffleQuestionsRaw(val === "1");
         if (key === "pref_shuffleAnswers" && val !== null) setShuffleAnswersRaw(val === "1");
         if (key === "pref_showAnswerOnSubmit" && val !== null) setShowAnswerOnSubmitRaw(val === "1");
+        if (key === "pref_autoSlideEnabled" && val !== null) setAutoSlideEnabledRaw(val === "1");
       });
     });
     // Load battle history and pending battles
@@ -856,6 +867,9 @@ export default function HomeScreen() {
               loadedHistory = [...loadedHistory, entry].slice(-50);
               historyUpdated = true;
               updatedPending = updatedPending.filter(p => p.code !== pb.code);
+              
+              // Trigger the popup immediately since the user hasn't seen the result yet
+              setBattlePopup({ myScore, opponentScore: oppScore, opponentName: oppName, won: effectiveWin, myTime, opponentTime: oppTime });
             } else {
               const unsubscribe = listenToBattleRoom(pb.code, (data) => {
                 if (data.hostFinished && data.guestFinished) {
@@ -876,7 +890,7 @@ export default function HomeScreen() {
                     return next;
                   });
 
-                  setBattlePopup({ myScore, opponentScore: oppScore, opponentName: oppName, won: effectiveWin });
+                  setBattlePopup({ myScore, opponentScore: oppScore, opponentName: oppName, won: effectiveWin, myTime, opponentTime: oppTime });
                   if (effectiveWin) triggerConfettiBurst();
 
                   AsyncStorage.getItem("pending_battles").then(val => {
@@ -956,6 +970,8 @@ export default function HomeScreen() {
   const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
   const [showQuitConfirm, setShowQuitConfirm] = useState(false);
   const [showRestartConfirm, setShowRestartConfirm] = useState(false);
+  const [showQuizSettingsModal, setShowQuizSettingsModal] = useState(false);
+  const [autoSlideEnabled, setAutoSlideEnabledRaw] = useState(false);
   const [selectedAttemptForModal, setSelectedAttemptForModal] = useState<any | null>(null);
   const [starredQuestions, setStarredQuestions] = useState<Set<string>>(new Set());
   const [homeFilter, setHomeFilter] = useState<"all"|"progress"|"notstarted"|"done">("all");
@@ -983,6 +999,18 @@ export default function HomeScreen() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [showAuthPassword, setShowAuthPassword] = useState(false);
   const [signOutLoading, setSignOutLoading] = useState(false);
+
+  // ── Network State ──
+  const [isConnected, setIsConnected] = useState<boolean>(true);
+  const [offlineModalParams, setOfflineModalParams] = useState<{ title: string; message: string; buttons?: { text: string; onPress: () => void; isPrimary?: boolean }[] } | null>(null);
+  const [syncToastMessage, setSyncToastMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(state => {
+      setIsConnected(state.isConnected ?? true);
+    });
+    return () => unsubscribe();
+  }, []);
   const [settingsDarkMode, setSettingsDarkMode] = useState<boolean>(true);
   const [selectedQuiz, setSelectedQuiz] = useState<any | null>(null);
   const [pdfViewQuiz, setPdfViewQuiz] = useState<any | null>(null);
@@ -1025,8 +1053,16 @@ export default function HomeScreen() {
     setShowAnswerOnSubmitRaw(val);
     AsyncStorage.setItem("pref_showAnswerOnSubmit", val ? "1" : "0");
   };
+  const setAutoSlideEnabled = (val: boolean) => {
+    setAutoSlideEnabledRaw(val);
+    AsyncStorage.setItem("pref_autoSlideEnabled", val ? "1" : "0");
+  };
 
   const [activeSession, setActiveSession] = useState<any | null>(null);
+  const activeSessionRef = React.useRef<any>(null);
+  React.useEffect(() => {
+    activeSessionRef.current = activeSession;
+  }, [activeSession]);
   const [sessionTimeLeft, setSessionTimeLeft] = useState<number>(0);
   const [battleQuestionTimeLeft, setBattleQuestionTimeLeft] = useState<number>(0); // per-question countdown in battle
   const [viewingInsightsQuiz, setViewingInsightsQuiz] = useState<any | null>(null);
@@ -1039,6 +1075,50 @@ export default function HomeScreen() {
   const quizNumbersScrollRef = React.useRef<ScrollView>(null);
   const [confettiParticles, setConfettiParticles] = useState<any[]>([]);
   const [studyingDeck, setStudyingDeck] = useState<any | null>(null);
+
+  const [showReconnectedToast, setShowReconnectedToast] = useState(false);
+  const disconnectTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!isConnected && activeSession?.isBattle) {
+      if (!disconnectTimerRef.current) {
+        disconnectTimerRef.current = setTimeout(() => {
+          setOfflineModalParams({
+            title: "Battle Disconnected",
+            message: "We couldn't reconnect to the battle.",
+            buttons: [
+              { text: "Leave Battle", onPress: () => { handleFinishSession(); } },
+              { text: "Try Again", onPress: () => {}, isPrimary: true }
+            ]
+          });
+        }, 15000);
+      }
+    } else {
+      if (disconnectTimerRef.current) {
+        clearTimeout(disconnectTimerRef.current);
+        disconnectTimerRef.current = null;
+        if (activeSession?.isBattle) {
+          setShowReconnectedToast(true);
+          setTimeout(() => setShowReconnectedToast(false), 3000);
+        }
+      }
+    }
+  }, [isConnected, activeSession?.isBattle]);
+
+  // ── Fallback: Poll battle room if stuck waiting ──
+  useEffect(() => {
+    if (activeSession?.isBattle && activeSession.isFinished && battleRoomState) {
+      const opponentFinished = activeSession.isHost ? battleRoomState.guestFinished : battleRoomState.hostFinished;
+      if (!opponentFinished) {
+        const interval = setInterval(() => {
+          getBattleRoom(battleRoomState.id).then(data => {
+            if (data) setBattleRoomState(data);
+          }).catch(() => {});
+        }, 3000);
+        return () => clearInterval(interval);
+      }
+    }
+  }, [activeSession?.isBattle, activeSession?.isFinished, activeSession?.isHost, battleRoomState?.id, battleRoomState?.hostFinished, battleRoomState?.guestFinished]);
 
   // ── Hardware Back Button Handling ──
   useEffect(() => {
@@ -1276,7 +1356,7 @@ export default function HomeScreen() {
               wrongCount++;
               const correctText = q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.text).join(", ");
               const selectedText = q.answers.filter((a: any) => selected.includes(a.id)).map((a: any) => a.text).join(", ");
-              wrongQsForQuiz.push({ id: q.id, prompt: q.prompt, selected: selectedText, correct: correctText });
+              wrongQsForQuiz.push({ id: q.id, prompt: q.prompt, imageUrl: q.imageUrl, selected: selectedText, correct: correctText });
             }
           }
         });
@@ -1483,7 +1563,7 @@ export default function HomeScreen() {
     setActiveSession(session);
   };
 
-  const saveAndExitQuizSession = (exitSession: boolean = true, sessionToSave: any = activeSession) => {
+  const saveAndExitQuizSession = (exitSession: boolean = true, sessionToSave: any = activeSessionRef.current || activeSession) => {
     if (!sessionToSave || !sessionToSave.isFinished) {
       if (exitSession) setActiveSession(null);
       return;
@@ -1513,9 +1593,9 @@ export default function HomeScreen() {
           correctIdsInSession.push(q.id);
         } else {
           wrongCount++;
-          const correctText = q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.text).join(", ");
           const selectedText = q.answers.filter((a: any) => selected.includes(a.id)).map((a: any) => a.text).join(", ");
-          wrongQsForQuiz.push({ id: q.id, prompt: q.prompt, selected: selectedText, correct: correctText });
+          const correctText = q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.text).join(", ");
+          wrongQsForQuiz.push({ id: q.id, prompt: q.prompt, imageUrl: q.imageUrl, selected: selectedText, correct: correctText });
         }
       }
     });
@@ -1600,6 +1680,10 @@ export default function HomeScreen() {
     const updatedQ = updatedQuizzes.find((q: any) => q.id === sessionToSave.quizId);
     const neonId = updatedQ?.neonId ?? updatedQ?.id;
     if (firebaseUser && neonId && !String(neonId).startsWith("local_")) {
+      if (!isConnected) {
+        setSyncToastMessage("Offline. Changes will sync automatically.");
+        setTimeout(() => setSyncToastMessage(null), 3000);
+      }
       updateMobileQuiz({
         userId: firebaseUser.uid, quizId: neonId,
         attempts: updatedQ.attempts, wrongQuestions: updatedQ.wrongQuestions, uniqueCorrectIds: updatedQ.uniqueCorrectIds,
@@ -1661,10 +1745,29 @@ export default function HomeScreen() {
     setActiveSession(session);
   };
 
+  const recalculateRetriesAfterDeletion = (attemptsList: any[]) => {
+    const idToNewNum: Record<string, number> = {};
+    attemptsList.forEach((a: any, index: number) => {
+      idToNewNum[a.id] = attemptsList.length - index;
+    });
+
+    return attemptsList.map((a: any) => {
+      if (a.mode === "retry") {
+        if (idToNewNum[a.retryOfAttemptId]) {
+          return { ...a, retryOfAttemptNum: idToNewNum[a.retryOfAttemptId] };
+        } else {
+          return { ...a, retryOfAttemptNum: "-" };
+        }
+      }
+      return a;
+    });
+  };
+
   const handleDeleteAttemptOnMobile = (quizId: string, attemptId: string) => {
     if (quizId === "sample_quiz") {
       const q = sampleQuiz;
-      const nextAttempts = q.attempts.filter((a: any) => a.id !== attemptId);
+      const filteredAttempts = q.attempts.filter((a: any) => a.id !== attemptId);
+      const nextAttempts = recalculateRetriesAfterDeletion(filteredAttempts);
       const nextWrong = nextAttempts.length === 0 ? [] : (q.wrongQuestions || []);
       const nextUnique = nextAttempts.length === 0 ? [] : (q.uniqueCorrectIds || []);
       const updatedSample = { ...q, attempts: nextAttempts, wrongQuestions: nextWrong, uniqueCorrectIds: nextUnique };
@@ -1683,7 +1786,8 @@ export default function HomeScreen() {
 
     const updatedQuizzes = quizzes.map((q) => {
       if (q.id === quizId) {
-        const nextAttempts = q.attempts.filter((a: any) => a.id !== attemptId);
+        const filteredAttempts = q.attempts.filter((a: any) => a.id !== attemptId);
+        const nextAttempts = recalculateRetriesAfterDeletion(filteredAttempts);
         const nextWrong = nextAttempts.length === 0 ? [] : (q.wrongQuestions || []);
         const nextUnique = nextAttempts.length === 0 ? [] : (q.uniqueCorrectIds || []);
         return { ...q, attempts: nextAttempts, wrongQuestions: nextWrong, uniqueCorrectIds: nextUnique };
@@ -1742,6 +1846,13 @@ export default function HomeScreen() {
         );
       }
     }
+
+    AsyncStorage.getItem(`quiz_file_${quizId}`).then(uri => {
+      if (uri) {
+        FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
+      }
+      AsyncStorage.removeItem(`quiz_file_${quizId}`).catch(() => {});
+    }).catch(() => {});
 
     const updatedQuizzes = quizzes.filter((q) => q.id !== quizId);
     setQuizzes(updatedQuizzes);
@@ -2398,6 +2509,28 @@ export default function HomeScreen() {
         submitted,
         correctCount: newCorrectCount
       });
+
+      if (activeSession.isBattle && battleTimePerQuestion != null) {
+        const cIndex = activeSession.currentIndex;
+        setTimeout(() => {
+          if (cIndex < activeSession.questions.length - 1) {
+            const nextIdx = cIndex + 1;
+            handleNavigateSession(nextIdx);
+            quizFlatListRef.current?.scrollToIndex({ index: nextIdx, animated: true });
+          } else {
+            handleFinishSession();
+          }
+        }, 700);
+      } else if (autoSlideEnabled) {
+        const cIndex = activeSession.currentIndex;
+        setTimeout(() => {
+          if (cIndex < activeSession.questions.length - 1) {
+            const nextIdx = cIndex + 1;
+            handleNavigateSession(nextIdx);
+            quizFlatListRef.current?.scrollToIndex({ index: nextIdx, animated: true });
+          }
+        }, 800);
+      }
     }
   };
 
@@ -2452,13 +2585,36 @@ export default function HomeScreen() {
         submitted,
         correctCount: newCorrectCount
       });
+
+      if (activeSession.isBattle && battleTimePerQuestion != null) {
+        const cIndex = activeSession.currentIndex;
+        setTimeout(() => {
+          if (cIndex < activeSession.questions.length - 1) {
+            const nextIdx = cIndex + 1;
+            handleNavigateSession(nextIdx);
+            quizFlatListRef.current?.scrollToIndex({ index: nextIdx, animated: true });
+          } else {
+            handleFinishSession();
+          }
+        }, 700);
+      } else if (autoSlideEnabled) {
+        const cIndex = activeSession.currentIndex;
+        setTimeout(() => {
+          if (cIndex < activeSession.questions.length - 1) {
+            const nextIdx = cIndex + 1;
+            handleNavigateSession(nextIdx);
+            quizFlatListRef.current?.scrollToIndex({ index: nextIdx, animated: true });
+          }
+        }, 800);
+      }
     }
   };
 
   const handleNavigateSession = (idx: number) => {
-    if (!activeSession) return;
+    const session = activeSessionRef.current || activeSession;
+    if (!session) return;
     setActiveSession({
-      ...activeSession,
+      ...session,
       currentIndex: idx
     });
     quizNumbersScrollRef.current?.scrollTo({ x: Math.max(0, idx * 48 - SCREEN_WIDTH / 2 + 24), animated: true });
@@ -2468,6 +2624,7 @@ export default function HomeScreen() {
   const saveBattleResult = (roomCode: string, myScore: number, opponentScore: number, opponentName: string, quizTitle: string, effectiveWin: boolean, myTime?: number, opponentTime?: number) => {
     const entry = {
       date: Date.now(),
+      roomCode,
       quizTitle,
       myScore,
       opponentScore,
@@ -2510,33 +2667,36 @@ export default function HomeScreen() {
   };
 
   const handleFinishSession = () => {
-    if (!activeSession) return;
-    const totalQs = activeSession.questions.length;
-    const answeredCount = Object.keys(activeSession.answers).length;
+    const session = activeSessionRef.current || activeSession;
+    if (!session) return;
+    const totalQs = session.questions.length;
+    const answeredCount = Object.keys(session.answers).length;
     const unanswered = totalQs - answeredCount;
 
     const finish = () => {
       playSuccessSound();
+      const currentSession = activeSessionRef.current || activeSession;
       const finishedSession = {
-        ...activeSession,
+        ...currentSession,
         isFinished: true
       };
-      if (activeSession.isBattle && activeSession.battleRoomCode) {
-        // Mark this player as finished — pass total elapsed time for tie-breaking
-        const totalTimeMs = Date.now() - (activeSession.startTime || Date.now());
-        const roomCode = activeSession.battleRoomCode;
-        const host = activeSession.isHost;
-        markPlayerFinished(roomCode, host, totalTimeMs).catch(console.error);
-        
-        // Add to pending battles immediately so if the user force-closes on the waiting screen, it is preserved
-        AsyncStorage.getItem("pending_battles").then(val => {
-          let pending = [];
-          try { if (val) pending = JSON.parse(val); } catch {}
-          if (!pending.find((p: any) => p.code === roomCode)) {
-            pending.push({ code: roomCode, isHost: host });
-            AsyncStorage.setItem("pending_battles", JSON.stringify(pending));
-          }
-        });
+
+      if (currentSession.isBattle) {
+        const totalTimeMs = Date.now() - (currentSession.startTime || Date.now());
+        const roomCode = currentSession.battleRoomCode;
+        if (roomCode) {
+          const host = currentSession.isHost;
+          markPlayerFinished(roomCode, host, totalTimeMs).catch(console.error);
+          
+          AsyncStorage.getItem("pending_battles").then(val => {
+            let pending = [];
+            try { if (val) pending = JSON.parse(val); } catch {}
+            if (!pending.find((p: any) => p.code === roomCode)) {
+              pending.push({ code: roomCode, isHost: host });
+              AsyncStorage.setItem("pending_battles", JSON.stringify(pending));
+            }
+          });
+        }
       }
       setActiveSession(finishedSession);
       saveAndExitQuizSession(false, finishedSession);
@@ -2562,13 +2722,22 @@ export default function HomeScreen() {
     }
   };
 
-  const handleImportQst = (text: string, fileName: string) => {
+  const handleImportQst = (text: string, fileName: string, sourceUri?: string) => {
     try {
       const parsed = parseQstText(text);
       if (parsed.questions.length === 0) {
         throw new Error("No questions found. Scorr format requires questions starting with '?' and answers starting with '+' or '-'.");
       }
       const localId = `local_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      
+      if (sourceUri && Platform.OS !== "web") {
+        const safeName = fileName.replace(/[^a-z0-9.]/gi, '_').toLowerCase();
+        const destUri = `${FileSystem.documentDirectory}quiz_file_${localId}_${safeName}`;
+        FileSystem.copyAsync({ from: sourceUri, to: destUri })
+          .then(() => AsyncStorage.setItem(`quiz_file_${localId}`, destUri))
+          .catch(e => console.log("Failed to save file", e));
+      }
+
       const newQuiz: any = {
         id: localId,
         title: parsed.title || fileName.replace(/\.[^.]+$/, ""),
@@ -2603,7 +2772,7 @@ export default function HomeScreen() {
             console.log("[NeonSync-Import] POST request succeeded! Quiz uploaded with DB ID:", saved.id);
             // Store neonId so future updates/deletes can reference it
             setQuizzes((prev: any[]) =>
-              prev.map((q) => q.id === localId ? { ...q, id: saved.id, neonId: saved.id } : q)
+              prev.map((q) => q.id === localId ? { ...q, neonId: saved.id } : q)
             );
           } else {
             console.error("[NeonSync-Import] POST request failed! Error message from server:", error);
@@ -2796,6 +2965,36 @@ export default function HomeScreen() {
     setShowTimeLimitDropdown(false);
   };
 
+  const handleShareQuiz = async (quiz: any) => {
+    try {
+      if (Platform.OS === "web") {
+        Alert.alert("Not Available", "Sharing is not available on web.");
+        return;
+      }
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (!isAvailable) {
+        Alert.alert("Not Available", "Sharing is not available on this device.");
+        return;
+      }
+      
+      const fileUri = await AsyncStorage.getItem(`quiz_file_${quiz.id}`);
+      if (!fileUri) {
+        Alert.alert("Error", "Original file not found.");
+        return;
+      }
+      
+      const fileInfo = await FileSystem.getInfoAsync(fileUri);
+      if (!fileInfo.exists) {
+        Alert.alert("Error", "Original file not found on disk.");
+        return;
+      }
+      
+      await Sharing.shareAsync(fileUri, { dialogTitle: `Share ${quiz.title}` });
+    } catch (err: any) {
+      Alert.alert("Error", `Could not share: ${err.message}`);
+    }
+  };
+
   const handleProceedToDrafting = () => {
     if (!newTitle.trim()) {
       if (Platform.OS === "web") {
@@ -2914,6 +3113,10 @@ export default function HomeScreen() {
     console.log("[NeonSync-Manual] neonUserReadyRef.current status:", neonUserReadyRef.current);
 
     if (firebaseUser && neonUserReadyRef.current) {
+      if (!isConnected) {
+        setSyncToastMessage("Offline. Changes will sync automatically.");
+        setTimeout(() => setSyncToastMessage(null), 3000);
+      }
       console.log("[NeonSync-Manual] Calling POST /api/mobile-quizzes...");
       createMobileQuiz({
         userId: firebaseUser.uid,
@@ -2925,7 +3128,7 @@ export default function HomeScreen() {
         if (saved && !error) {
           console.log("[NeonSync-Manual] POST request succeeded! Quiz uploaded with DB ID:", saved.id);
           setQuizzes((prev: any[]) =>
-            prev.map((q) => q.id === localId ? { ...q, id: saved.id, neonId: saved.id } : q)
+            prev.map((q) => q.id === localId ? { ...q, neonId: saved.id } : q)
           );
         } else {
           console.error("[NeonSync-Manual] POST request failed! Error message from server:", error);
@@ -3035,20 +3238,18 @@ export default function HomeScreen() {
 
     return (
       <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#0a1020" : "#f4f4f8" }}>
+        {/* Offline Banner for Battle */}
+        {activeSession.isBattle && (!isConnected || showReconnectedToast) && !offlineModalParams && (
+          <View style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 100, backgroundColor: isConnected ? "#34d399" : "#fbbf24", paddingVertical: 12, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 8, elevation: 5, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4 }}>
+            <Ionicons name={isConnected ? "checkmark-circle" : "warning"} size={16} color={isConnected ? "#064e3b" : "#78350f"} />
+            <Text style={{ color: isConnected ? "#064e3b" : "#78350f", fontSize: 13, fontWeight: "700" }}>{isConnected ? "Reconnected" : "Connection lost. Reconnecting..."}</Text>
+          </View>
+        )}
         {/* Session Header / Battle Header */}
         {activeSession.isBattle ? (
           <View style={{ paddingHorizontal: 20, paddingTop: 52, paddingBottom: 16,
             backgroundColor: settingsDarkMode ? "#0a1020" : "#f4f4f8", borderBottomWidth: 1, borderBottomColor: settingsDarkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }}>
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-              <Pressable onPress={() => setShowQuitConfirm(true)} style={({ pressed }) => [{ width: 36, height: 36, borderRadius: 10, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" }, pressed && { opacity: 0.7 }]}>
-                <Ionicons name="close" size={20} color={settingsDarkMode ? "#71717a" : "#64748b"} />
-              </Pressable>
-              <View style={{ alignItems: "center" }}>
-                <Text style={{ fontSize: 11, fontWeight: "800", color: settingsDarkMode ? "#818cf8" : "#6366f1", letterSpacing: 2, textTransform: "uppercase" }}>⚔️  Quiz Clash</Text>
-              </View>
-              <View style={{ width: 36 }} />
-            </View>
-            
+
             {/* Scoreboard */}
             {(() => {
               const hostScore = battleRoomState?.hostScore || 0;
@@ -3142,10 +3343,10 @@ export default function HomeScreen() {
                 </View>
               )}
               <Pressable
-                onPress={() => setShowRestartConfirm(true)}
+                onPress={() => setShowQuizSettingsModal(true)}
                 style={({ pressed }) => [{ width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: settingsDarkMode ? "#334155" : "#e1e4e8", alignItems: "center", justifyContent: "center" }, pressed && { opacity: 0.7 }]}
               >
-                <Ionicons name="refresh" size={18} color={settingsDarkMode ? "#94a3b8" : "#24292f"} />
+                <Ionicons name="settings" size={18} color={settingsDarkMode ? "#94a3b8" : "#24292f"} />
               </Pressable>
               <Pressable
                 onPress={() => {
@@ -3166,6 +3367,13 @@ export default function HomeScreen() {
 
         {/* Horizontal Number Progress */}
         <View style={{ marginBottom: 20 }}>
+          {activeSession.isBattle && battleTimePerQuestion != null ? (
+            <View style={{ alignItems: "center", justifyContent: "center", paddingVertical: 8 }}>
+              <Text style={{ fontSize: 16, fontWeight: "600", color: settingsDarkMode ? "#e2e8f0" : "#334155" }}>
+                Question {currentIndex + 1} of {totalQs}
+              </Text>
+            </View>
+          ) : (
           <ScrollView 
             ref={quizNumbersScrollRef}
             horizontal 
@@ -3223,6 +3431,7 @@ export default function HomeScreen() {
               );
             })}
           </ScrollView>
+          )}
         </View>
 
         <FlatList
@@ -3250,19 +3459,12 @@ export default function HomeScreen() {
                 <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 160 }} showsVerticalScrollIndicator={false}>
                   
                   {/* Battle: question label */}
-                  {activeSession.isBattle ? (
+                  {activeSession.isBattle && (
                     <View style={{ marginBottom: 16, marginTop: 4 }}>
                       <View style={{ backgroundColor: "rgba(99,102,241,0.1)", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6, alignSelf: "flex-start", borderWidth: 1, borderColor: "rgba(99,102,241,0.25)" }}>
                         <Text style={{ fontSize: 11, fontWeight: "800", color: "#818cf8", letterSpacing: 1 }}>QUESTION {qIdx + 1}</Text>
                       </View>
                     </View>
-                  ) : (
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-                    <Text style={{ fontSize: 11, fontWeight: "700", color: "#2dd4bf", letterSpacing: 1 }}>
-                      {activeSession.category?.toUpperCase() || "GASTROENTEROLOGY"} <Text style={{ color: settingsDarkMode ? "#64748b" : "#666677" }}>/ {qst.topic?.toUpperCase() || "PEPTIC ULCER DISEASE"}</Text>
-                    </Text>
-                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#fbbf24" }} />
-                  </View>
                   )}
 
                   <Text 
@@ -3270,6 +3472,14 @@ export default function HomeScreen() {
                   >
                     {qst.prompt}
                   </Text>
+
+                  {qst.imageUrl && (
+                    <Image 
+                      source={{ uri: qst.imageUrl }} 
+                      style={{ width: "100%", height: 200, borderRadius: 12, marginBottom: 20, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }} 
+                      resizeMode="contain" 
+                    />
+                  )}
 
                   {/* Options */}
                   <View style={{ gap: 12 }}>
@@ -3437,7 +3647,7 @@ export default function HomeScreen() {
                 effectiveWin = myTime < oppTime;
               }
               saveBattleResult(code, myScore, oppScore, oppName, data.quizTitle || "", effectiveWin, myTime !== Infinity ? myTime : undefined, oppTime !== Infinity ? oppTime : undefined);
-              setBattlePopup({ myScore, opponentScore: oppScore, opponentName: oppName, won: effectiveWin });
+              setBattlePopup({ myScore, opponentScore: oppScore, opponentName: oppName, won: effectiveWin, myTime, opponentTime: oppTime });
               if (effectiveWin) triggerConfettiBurst();
               unsubscribe();
             }
@@ -3485,6 +3695,18 @@ export default function HomeScreen() {
               <Text style={{ fontSize: 13, color: muted, textAlign: "center" }}>
                 Results will appear when both players are done.
               </Text>
+              <Pressable
+                onPress={() => {
+                  if (activeSession?.battleRoomCode) {
+                    getBattleRoom(activeSession.battleRoomCode).then(data => {
+                      if (data) setBattleRoomState(data);
+                    });
+                  }
+                }}
+                style={({ pressed }) => [{ marginTop: 8, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={{ fontSize: 13, fontWeight: "600", color: isDark ? "#818cf8" : "#6366f1" }}>Refresh Status</Text>
+              </Pressable>
             </View>
 
             {/* Exit button */}
@@ -3633,6 +3855,7 @@ export default function HomeScreen() {
           wrongQsForQuiz.push({
             id: q.id,
             prompt: q.prompt,
+            imageUrl: q.imageUrl,
             selected: selectedText,
             correct: correctText,
           });
@@ -3770,6 +3993,9 @@ export default function HomeScreen() {
                 {wrongQsForQuiz.map((q: any, idx: number) => (
                   <View key={q.id} style={[styles.wrongQuestionItem, idx === wrongQsForQuiz.length - 1 && { borderBottomWidth: 0 }, !settingsDarkMode && styles.lightBorder]}>
                     <Text style={[styles.wrongQuestionPrompt, !settingsDarkMode && styles.lightText]}>{idx + 1}. {q.prompt}</Text>
+                    {q.imageUrl && (
+                      <Image source={{ uri: q.imageUrl }} style={{ width: "100%", height: 120, borderRadius: 8, marginTop: 8, marginBottom: 8, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }} resizeMode="contain" />
+                    )}
                     <Text style={styles.wrongAnswerText}>Your answer: {q.selected || "(Skipped)"}</Text>
                     <Text style={styles.correctAnswerText}>Correct: {q.correct}</Text>
                   </View>
@@ -3959,7 +4185,7 @@ export default function HomeScreen() {
 
   /** Opens battle options sheet – does NOT create room yet */
   const handleHostBattle = (quizId: string) => {
-    const q = quizzes.find((q) => q.id === quizId);
+    const q = quizId === "sample_quiz" ? sampleQuiz : quizzes.find((q) => q.id === quizId);
     if (!q) return;
     setBattleOptionsQuiz(q);
     setBattleSelectionMode("all");
@@ -3976,6 +4202,13 @@ export default function HomeScreen() {
 
   /** Actually creates the room after options are confirmed */
   const handleStartBattle = async () => {
+    if (!isConnected) {
+      setOfflineModalParams({
+        title: "Can't Create Battle",
+        message: "An internet connection is required to create a battle."
+      });
+      return;
+    }
     const q = battleOptionsQuiz;
     if (!q) return;
 
@@ -3983,7 +4216,7 @@ export default function HomeScreen() {
     setBattleConnError("");
     setBattleCreating(true); // show loading inside modal
     try {
-      let qsList: any[] = q.questionsList || [];
+      let qsList: any[] = q.id === "sample_quiz" ? SAMPLE_QUIZ.questionsList : (q.questionsList || []);
       if (!qsList || qsList.length === 0) {
         qsList = generateMockQuestionsForQuiz(q.title, q.questions || 1);
       }
@@ -4026,6 +4259,13 @@ export default function HomeScreen() {
   };
 
   const handleJoinBattle = async () => {
+    if (!isConnected) {
+      setOfflineModalParams({
+        title: "Can't Join Battle",
+        message: "You're offline. Connect to the internet and try again."
+      });
+      return;
+    }
     if (!joinCodeInput.trim()) return;
 
     setBattleError("");
@@ -4049,6 +4289,7 @@ export default function HomeScreen() {
             startBattleSession(data, false);
           }
         });
+        setJoinCodeInput("");
       } else {
         setBattleError(res.error || "Room not found. Check the code and try again.");
       }
@@ -4211,19 +4452,7 @@ export default function HomeScreen() {
             Challenge friends. Prove your knowledge.
           </Text>
 
-          {/* Error banner */}
-          {battleError ? (
-            <Pressable
-              onPress={() => setBattleError("")}
-              style={{ backgroundColor: isDark ? "rgba(239,68,68,0.12)" : "rgba(239,68,68,0.08)",
-                borderWidth: 1, borderColor: isDark ? "rgba(239,68,68,0.25)" : "rgba(239,68,68,0.2)",
-                padding: 14, borderRadius: 12, marginBottom: 16, flexDirection: "row", alignItems: "center", gap: 10 }}
-            >
-              <Text style={{ fontSize: 16 }}>⚠️</Text>
-              <Text style={{ color: isDark ? "#f87171" : "#dc2626", fontSize: 14, flex: 1, fontWeight: "500" }}>{battleError}</Text>
-              <Text style={{ fontSize: 12, color: muted }}>Tap to dismiss</Text>
-            </Pressable>
-          ) : null}
+          {/* Error banner removed to use inline errors */}
 
           {!battleRoomCode ? (
             <>
@@ -4284,8 +4513,8 @@ export default function HomeScreen() {
                     style={{
                       flex: 1, height: 40,
                       backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.02)",
-                      borderWidth: 0.5,
-                      borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)",
+                      borderWidth: battleError ? 1 : 0.5,
+                      borderColor: battleError ? (isDark ? "#f87171" : "#ef4444") : (isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)"),
                       borderRadius: 10, paddingHorizontal: 12,
                       fontSize: 13, color: txt, letterSpacing: 2
                     }}
@@ -4293,7 +4522,10 @@ export default function HomeScreen() {
                     placeholderTextColor={mutedSub}
                     maxLength={5}
                     value={joinCodeInput}
-                    onChangeText={setJoinCodeInput}
+                    onChangeText={(text) => {
+                      setJoinCodeInput(text);
+                      if (battleError) setBattleError("");
+                    }}
                     autoCapitalize="characters"
                   />
                   <Pressable
@@ -4317,6 +4549,12 @@ export default function HomeScreen() {
                     )}
                   </Pressable>
                 </View>
+                {!!battleError && (
+                  <View style={{ flexDirection: "row", alignItems: "center", marginTop: 10, gap: 6, paddingHorizontal: 4 }}>
+                    <Text style={{ fontSize: 13 }}>⚠️</Text>
+                    <Text style={{ color: isDark ? "#f87171" : "#ef4444", fontSize: 13, fontWeight: "500", flex: 1 }}>{battleError}</Text>
+                  </View>
+                )}
               </View>
 
               {/* Dynamic Stats Row 1: Win Rate Circular */}
@@ -4464,7 +4702,7 @@ export default function HomeScreen() {
               </Pressable>
             </View>
             <FlatList
-              data={quizzes}
+              data={(!sampleDismissed && sampleQuiz) ? [sampleQuiz, ...quizzes] : quizzes}
               keyExtractor={(item) => item.id}
               contentContainerStyle={{ padding: 16, gap: 10 }}
               renderItem={({ item }) => (
@@ -7307,6 +7545,13 @@ export default function HomeScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#0f172a" : "#f4f4f8" }}>
+      {/* Offline Sync Toast */}
+      {!!syncToastMessage && (
+        <View style={{ position: "absolute", top: Platform.OS === "ios" ? 52 : 24, left: 20, right: 20, zIndex: 1000, backgroundColor: settingsDarkMode ? "#334155" : "#475569", padding: 12, borderRadius: 8, flexDirection: "row", alignItems: "center", gap: 10, elevation: 5, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6 }}>
+          <Ionicons name="cloud-offline" size={20} color="#cbd5e1" />
+          <Text style={{ color: "#f8fafc", fontSize: 13, fontWeight: "500", flex: 1 }}>{syncToastMessage}</Text>
+        </View>
+      )}
     <SafeAreaView style={[styles.rootContainer, !settingsDarkMode && styles.lightRootContainer]} edges={["top", "left", "right"]}>
       {activeSession ? (
         renderActiveSessionView()
@@ -7509,7 +7754,7 @@ export default function HomeScreen() {
             >
               <View style={{ width: 44, height: 44, borderRadius: 12,
                 backgroundColor: "rgba(99,102,241,0.12)", alignItems: "center", justifyContent: "center" }}>
-                <Ionicons name="bar-chart-outline" size={22} color="#6366f1" />
+                <CustomChartIcon size={22} color="#6366f1" />
               </View>
               <Text style={{ fontSize: 16, fontWeight: "700", flex: 1,
                 color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('actions.statistics') || "Statistics"}</Text>
@@ -7539,6 +7784,30 @@ export default function HomeScreen() {
                 color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('actions.rename') || "Rename"}</Text>
             </AnimatedPressable>
 
+
+
+            {/* Share */}
+            <AnimatedPressable
+              onPress={() => {
+                const quiz = showQuizActions;
+                setShowQuizActions(null);
+                handleShareQuiz(quiz);
+              }}
+              style={{
+                flexDirection: "row", alignItems: "center", gap: 16,
+                paddingVertical: 17, paddingHorizontal: 24,
+              }}
+              scaleTo={0.97}
+            >
+              <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: "rgba(16,185,129,0.1)", alignItems: "center", justifyContent: "center" }}>
+                <Ionicons name="share-outline" size={22} color="#10b981" />
+              </View>
+              <Text style={{ fontSize: 16, fontWeight: "700", flex: 1, color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>
+                Share
+              </Text>
+            </AnimatedPressable>
+
+            <View style={{ height: 0.5, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)", marginHorizontal: 24 }} />
 
 
             {/* Delete */}
@@ -7732,6 +8001,13 @@ export default function HomeScreen() {
                       return;
                     }
 
+                    AsyncStorage.getItem(`quiz_file_${deletingQuizConfirm.id}`).then(uri => {
+                      if (uri) {
+                        FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
+                      }
+                      AsyncStorage.removeItem(`quiz_file_${deletingQuizConfirm.id}`).catch(() => {});
+                    }).catch(() => {});
+
                     setQuizzes(quizzes.filter(q => q.id !== deletingQuizConfirm.id));
                     setDeletingQuizConfirm(null);
                     // Delete from Neon if logged in and quiz is synced
@@ -7857,23 +8133,178 @@ export default function HomeScreen() {
             <View style={[styles.dialogIcon, { backgroundColor: "rgba(245,158,11,0.12)" }]}>
               <Ionicons name="warning-outline" size={30} color="#f59e0b" />
             </View>
-            <Text style={[styles.dialogTitle, !settingsDarkMode && styles.lightText]}>Quit Quiz?</Text>
+            <Text style={[styles.dialogTitle, !settingsDarkMode && styles.lightText]}>
+              {activeSession?.isBattle ? "Submit and Exit Now?" : "Quit Quiz?"}
+            </Text>
             <Text style={[styles.dialogDescription, !settingsDarkMode && styles.lightTextSub, { textAlign: "center", lineHeight: 20, marginBottom: 24 }]}>
-              Your progress will be lost and this attempt won't be saved.
+              {activeSession?.isBattle ? "Your current score will be submitted to the battle." : "Your progress will be lost and this attempt won't be saved."}
             </Text>
             <View style={styles.dialogButtons}>
               <Pressable
                 onPress={() => setShowQuitConfirm(false)}
                 style={({ pressed }) => [styles.dialogCancel, !settingsDarkMode && { borderColor: "rgba(0,0,0,0.15)" }, pressed && styles.pressedScale]}
               >
-                <Text style={[styles.dialogCancelText, !settingsDarkMode && styles.lightText]}>Keep Going</Text>
+                <Text style={[styles.dialogCancelText, !settingsDarkMode && styles.lightText]}>Cancel</Text>
               </Pressable>
               <Pressable
-                onPress={() => { setShowQuitConfirm(false); setActiveSession(null); }}
-                style={({ pressed }) => [styles.dialogConfirm, { backgroundColor: "#f59e0b" }, pressed && styles.pressedScale]}
+                onPress={() => { 
+                  setShowQuitConfirm(false); 
+                  if (activeSession?.isBattle) {
+                    handleFinishSession();
+                  } else {
+                    setActiveSession(null); 
+                  }
+                }}
+                style={({ pressed }) => [styles.dialogConfirm, { backgroundColor: activeSession?.isBattle ? "#10b981" : "#f59e0b" }, pressed && styles.pressedScale]}
               >
-                <Text style={[styles.dialogConfirmText, { color: "#000" }]}>Quit</Text>
+                <Text style={[styles.dialogConfirmText, { color: activeSession?.isBattle ? "#ffffff" : "#000" }]}>
+                  {activeSession?.isBattle ? "Submit & Exit" : "Quit"}
+                </Text>
               </Pressable>
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* ── Offline Protection Modal ── */}
+      <Modal visible={!!offlineModalParams} animationType="fade" transparent onRequestClose={() => setOfflineModalParams(null)}>
+        <Pressable style={[styles.centerModalBackdrop, { backgroundColor: "rgba(0,0,0,0.6)" }]} onPress={() => setOfflineModalParams(null)}>
+          <View style={{
+            backgroundColor: settingsDarkMode ? "rgba(22, 24, 31, 0.95)" : "#ffffff",
+            borderRadius: 28,
+            padding: 32,
+            width: Dimensions.get("window").width * 0.85,
+            maxWidth: 340,
+            alignItems: "center",
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 12 },
+            shadowOpacity: 0.35,
+            shadowRadius: 24,
+            elevation: 10,
+            borderWidth: 1,
+            borderColor: settingsDarkMode ? "rgba(239, 68, 68, 0.15)" : "rgba(239, 68, 68, 0.1)",
+          }} onStartShouldSetResponder={() => true}>
+            
+
+
+            <View style={{
+              width: 72, height: 72, borderRadius: 36,
+              backgroundColor: settingsDarkMode ? "rgba(239, 68, 68, 0.12)" : "rgba(239, 68, 68, 0.08)",
+              alignItems: "center", justifyContent: "center",
+              marginBottom: 20,
+              borderWidth: 1, borderColor: "rgba(239, 68, 68, 0.25)"
+            }}>
+              <Ionicons name="cloud-offline" size={32} color="#ef4444" />
+            </View>
+
+            <Text style={{
+              fontSize: 22,
+              fontWeight: "800",
+              color: settingsDarkMode ? "#ffffff" : "#0f172a",
+              letterSpacing: -0.4,
+              marginBottom: 12,
+              textAlign: "center"
+            }}>
+              {offlineModalParams?.title}
+            </Text>
+
+            <Text style={{
+              fontSize: 16,
+              color: settingsDarkMode ? "#cbd5e1" : "#475569",
+              textAlign: "center",
+              marginBottom: 32,
+              lineHeight: 24,
+              fontWeight: "400"
+            }}>
+              {offlineModalParams?.message}
+            </Text>
+            
+            <View style={{ width: "100%", gap: 12 }}>
+              {offlineModalParams?.buttons ? (
+                offlineModalParams.buttons.map((btn, idx) => (
+                  <Pressable
+                    key={idx}
+                    onPress={() => {
+                      setOfflineModalParams(null);
+                      btn.onPress();
+                    }}
+                    style={({ pressed }) => [
+                      { paddingVertical: 16, borderRadius: 16, alignItems: "center", justifyContent: "center", width: "100%" },
+                      btn.isPrimary ? { backgroundColor: "#ef4444" } : { backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" },
+                      pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }
+                    ]}
+                  >
+                    <Text style={[{ fontSize: 16, fontWeight: "700" }, btn.isPrimary ? { color: "#ffffff" } : { color: settingsDarkMode ? "#e2e8f0" : "#334155" }]}>
+                      {btn.text}
+                    </Text>
+                  </Pressable>
+                ))
+              ) : (
+                <Pressable
+                  onPress={() => setOfflineModalParams(null)}
+                  style={({ pressed }) => [
+                    { paddingVertical: 16, borderRadius: 16, alignItems: "center", justifyContent: "center", width: "100%", backgroundColor: "#ef4444", shadowColor: "#ef4444", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 4 },
+                    pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }
+                  ]}
+                >
+                  <Text style={{ fontSize: 16, fontWeight: "700", color: "#ffffff", letterSpacing: 0.3 }}>OK</Text>
+                </Pressable>
+              )}
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* ── Quiz Settings Modal ── */}
+      <Modal visible={showQuizSettingsModal} animationType="fade" transparent onRequestClose={() => setShowQuizSettingsModal(false)}>
+        <Pressable style={{ flex: 1 }} onPress={() => setShowQuizSettingsModal(false)}>
+          <View style={{
+            position: "absolute",
+            top: (insets?.top || 0) + 90,
+            right: 20,
+            width: 220,
+            backgroundColor: settingsDarkMode ? "#1e293b" : "#ffffff",
+            borderRadius: 16,
+            padding: 8,
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.25,
+            shadowRadius: 10,
+            elevation: 8
+          }} onStartShouldSetResponder={() => true}>
+            <View style={{ gap: 4 }}>
+              {/* Restart */}
+              <Pressable
+                onPress={() => {
+                  setShowQuizSettingsModal(false);
+                  setShowRestartConfirm(true);
+                }}
+                style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", paddingVertical: 12, paddingHorizontal: 12, borderRadius: 10 }, pressed && { backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }]}
+              >
+                <Ionicons name="refresh" size={20} color="#6366f1" style={{ marginRight: 12 }} />
+                <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#e2e8f0" : "#334155" }}>Restart Quiz</Text>
+              </Pressable>
+
+              {/* Submit */}
+              <Pressable
+                onPress={() => {
+                  setShowQuizSettingsModal(false);
+                  handleFinishSession();
+                }}
+                style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", paddingVertical: 12, paddingHorizontal: 12, borderRadius: 10 }, pressed && { backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }]}
+              >
+                <Ionicons name="checkmark-done" size={20} color="#10b981" style={{ marginRight: 12 }} />
+                <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#e2e8f0" : "#334155" }}>Submit Quiz</Text>
+              </Pressable>
+
+              {/* Auto Slide */}
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 12, paddingHorizontal: 12, borderRadius: 10 }}>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <Ionicons name="play-forward" size={20} color="#f59e0b" style={{ marginRight: 12 }} />
+                  <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#e2e8f0" : "#334155" }}>Auto Slide</Text>
+                </View>
+                <ToggleSwitch checked={autoSlideEnabled} onChange={setAutoSlideEnabled} darkMode={settingsDarkMode} />
+              </View>
             </View>
           </View>
         </Pressable>
@@ -8785,6 +9216,10 @@ export default function HomeScreen() {
                   </Pressable>
                 </View>
 
+                {item.imageUrl && (
+                  <Image source={{ uri: item.imageUrl }} style={{ width: "100%", height: 160, borderRadius: 8, marginBottom: 16, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }} resizeMode="contain" />
+                )}
+
                 <View style={{ gap: 4 }}>
                   {(item.answers || []).map((ans: any, aIndex: number) => {
                     const isCorrect = ans.isCorrect;
@@ -8844,7 +9279,12 @@ export default function HomeScreen() {
             <View style={{ alignItems: "center", paddingTop: 12, paddingBottom: 6 }}>
               <View style={{ width: 36, height: 4, borderRadius: 2, marginBottom: 14,
                 backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.12)" }} />
+              <Text style={{ fontSize: 17, fontWeight: "700", color: settingsDarkMode ? "#ffffff" : "#0d0f14", marginBottom: 8 }}>
+                Add Quiz
+              </Text>
             </View>
+
+            <View style={{ height: 0.5, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)", marginBottom: 8 }} />
 
             {/* Import from File */}
             <AnimatedPressable
@@ -8866,6 +9306,13 @@ export default function HomeScreen() {
                         const fileName = result.assets[0].name;
                         const ext = fileName.split('.').pop()?.toLowerCase();
                         const fileSize = result.assets[0].size || 0;
+                        if (ext === 'pdf' && !isConnected) {
+                          setOfflineModalParams({
+                            title: "Can't Convert PDF",
+                            message: "PDF conversion requires an internet connection."
+                          });
+                          return;
+                        }
                         if (ext === 'pdf' && fileSize > 4.5 * 1024 * 1024) {
                           Alert.alert(
                             "File Too Large",
@@ -8894,8 +9341,27 @@ export default function HomeScreen() {
                             } else if (ext === "docx") {
                               const b64 = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.Base64 });
                               const buff = Buffer.from(b64, "base64");
-                              const result = await mammoth.extractRawText({ arrayBuffer: buff });
-                              text = result.value;
+                              const result = await mammoth.convertToHtml({ arrayBuffer: buff });
+                              let htmlStr = result.value;
+                              
+                              // Extract images
+                              const imgRegex = /<img[^>]+src="data:image\/([^;]+);base64,([^"]+)"[^>]*>/g;
+                              let match;
+                              let processedHtml = htmlStr;
+                              while ((match = imgRegex.exec(htmlStr)) !== null) {
+                                const extName = match[1];
+                                const base64Data = match[2];
+                                const localFileName = `img_${Date.now()}_${Math.floor(Math.random()*10000)}.${extName}`;
+                                const localUri = (FileSystem.documentDirectory || "") + localFileName;
+                                await FileSystem.writeAsStringAsync(localUri, base64Data, { encoding: FileSystem.EncodingType.Base64 });
+                                processedHtml = processedHtml.replace(match[0], `\n[Image: ${localUri}]\n`);
+                              }
+                              
+                              // Convert remaining HTML to plain text
+                              processedHtml = processedHtml.replace(/<\/p>/gi, '\n');
+                              processedHtml = processedHtml.replace(/<br\s*\/?>/gi, '\n');
+                              processedHtml = processedHtml.replace(/<[^>]+>/g, '');
+                              text = processedHtml;
                             } else {
                               text = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.UTF8 });
                             }
@@ -8903,7 +9369,7 @@ export default function HomeScreen() {
                             // THEN show the quiz — otherwise the quiz options panel
                             // gets swallowed by the still-animating loading Modal on Android.
                             setIsImporting(false);
-                            setTimeout(() => handleImportQst(text, fileName), 150);
+                            setTimeout(() => handleImportQst(text, fileName, fileUri), 150);
                           } catch (err: any) {
                             if (ext === "pdf" || ext === "docx") {
                               setIsImporting(false);
@@ -8913,7 +9379,7 @@ export default function HomeScreen() {
                             try {
                               const textFallback = await FileSystem.readAsStringAsync(fileUri);
                               setIsImporting(false);
-                              setTimeout(() => handleImportQst(textFallback, fileName), 150);
+                              setTimeout(() => handleImportQst(textFallback, fileName, fileUri), 150);
                             } catch (err2: any) {
                               setIsImporting(false);
                               Alert.alert("Error", `Could not read the file. Make sure it is a valid .txt, .docx, or .pdf file.\n\n${err.message}`);
@@ -8938,8 +9404,13 @@ export default function HomeScreen() {
                   alignItems: "center", justifyContent: "center" }}>
                   <Ionicons name="document-text-outline" size={20} color={settingsDarkMode ? "#aaaacc" : "#666688"} />
                 </View>
-                <Text style={{ fontSize: 15, fontWeight: "600",
-                  color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('create_menu.import_txt') || "Import quiz from file (.txt, .docx)"}</Text>
+                <View style={{ flexDirection: "column" }}>
+                  <Text style={{ fontSize: 15, fontWeight: "600",
+                    color: settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('create_menu.import_txt') || "Import file (.txt, .docx, .pdf)"}</Text>
+                  <Text style={{ fontSize: 11, color: settingsDarkMode ? "#888899" : "#666680", marginTop: 2 }}>
+                    (Use .docx if your quiz contains images)
+                  </Text>
+                </View>
               </View>
             </AnimatedPressable>
 
@@ -9212,7 +9683,7 @@ export default function HomeScreen() {
                 Battle against <Text style={{ fontWeight: "700", color: settingsDarkMode ? "#f8fafc" : "#0f172a" }}>{battlePopup.opponentName}</Text>
               </Text>
               
-              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", width: "100%", marginBottom: 32 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", width: "100%", marginBottom: (battlePopup.myScore === battlePopup.opponentScore) ? 16 : 32 }}>
                 <View style={{ alignItems: "center", flex: 1 }}>
                   <Text style={{ fontSize: 12, color: settingsDarkMode ? "#94a3b8" : "#64748b", fontWeight: "700", marginBottom: 4, textTransform: "uppercase" }}>You</Text>
                   <Text style={{ fontSize: 36, fontWeight: "900", color: settingsDarkMode ? "#fff" : "#0d0f14" }}>{battlePopup.myScore}</Text>
@@ -9225,6 +9696,19 @@ export default function HomeScreen() {
                   <Text style={{ fontSize: 36, fontWeight: "900", color: settingsDarkMode ? "#fff" : "#0d0f14" }}>{battlePopup.opponentScore}</Text>
                 </View>
               </View>
+
+              {battlePopup.myScore === battlePopup.opponentScore && battlePopup.myTime !== undefined && battlePopup.opponentTime !== undefined && (
+                <View style={{ backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)", borderRadius: 12, paddingVertical: 10, paddingHorizontal: 16, marginBottom: 24, width: "100%", alignItems: "center" }}>
+                  <Text style={{ fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 1, color: battlePopup.won ? "#22c55e" : "#ef4444", marginBottom: 4 }}>
+                    Tie Breaker
+                  </Text>
+                  <Text style={{ fontSize: 14, color: settingsDarkMode ? "#cbd5e1" : "#475569", textAlign: "center" }}>
+                    You finished in <Text style={{ fontWeight: "700", color: settingsDarkMode ? "#f8fafc" : "#0f172a" }}>{(battlePopup.myTime / 1000).toFixed(1)}s</Text>,
+                    while they took <Text style={{ fontWeight: "700", color: settingsDarkMode ? "#f8fafc" : "#0f172a" }}>{(battlePopup.opponentTime / 1000).toFixed(1)}s</Text>.
+                  </Text>
+                </View>
+              )}
+
               
               <Pressable
                 onPress={() => setBattlePopup(null)}
@@ -9233,8 +9717,31 @@ export default function HomeScreen() {
                   paddingVertical: 14, borderRadius: 14, width: "100%", alignItems: "center"
                 }, pressed && { opacity: 0.8 }]}
               >
-                <Text style={{ fontSize: 16, fontWeight: "700", color: battlePopup.won ? "#fff" : (settingsDarkMode ? "#fff" : "#0f172a") }}>Awesome!</Text>
+                <Text style={{ fontSize: 16, fontWeight: "700", color: battlePopup.won ? "#fff" : (settingsDarkMode ? "#fff" : "#0f172a") }}>{battlePopup.won ? "Awesome!" : "Close"}</Text>
               </Pressable>
+            </View>
+          )}
+
+          {confettiParticles.length > 0 && battlePopup && (
+            <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 99999 }}>
+              {confettiParticles.map((p) => {
+                let shapeStyle: any = { width: p.size, height: p.size, backgroundColor: p.color };
+                if (p.shape === "circle") {
+                  shapeStyle.borderRadius = p.size / 2;
+                } else if (p.shape === "triangle") {
+                  shapeStyle = {
+                    width: 0, height: 0, backgroundColor: "transparent", borderStyle: "solid",
+                    borderLeftWidth: p.size / 2, borderRightWidth: p.size / 2, borderBottomWidth: p.size,
+                    borderLeftColor: "transparent", borderRightColor: "transparent", borderBottomColor: p.color
+                  };
+                }
+                return (
+                  <View key={p.id} style={[
+                    { position: "absolute", left: "50%", top: p.y, marginLeft: p.x - p.size / 2 },
+                    shapeStyle, { transform: [{ rotate: `${p.rotation}deg` }] }
+                  ]} />
+                );
+              })}
             </View>
           )}
         </View>

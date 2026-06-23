@@ -3,10 +3,10 @@ import Link from "next/link";
 export default function Home() {
   return (
     <div style={{ background: "var(--background)", minHeight: "100vh", padding: "2rem 1rem", display: "flex", justifyContent: "center", alignItems: "center" }}>
-      <div style={{ width: "340px", background: "#10142a", borderRadius: "32px", padding: "22px 16px 18px", boxSizing: "border-box", fontFamily: "var(--font-inter, var(--font-sans))" }}>
+      <div style={{ width: "340px", background: "#10142a", borderRadius: "32px", padding: "16px 16px 18px", boxSizing: "border-box", fontFamily: "var(--font-inter, var(--font-sans))" }}>
         
         {/* Search & Profile */}
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
           <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.05)", border: "0.5px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "11px 14px" }}>
             <i className="ti ti-search" style={{ fontSize: "17px", color: "#777d99" }} aria-hidden="true"></i>
             <span style={{ fontSize: "14px", color: "#777d99" }}>Search</span>
