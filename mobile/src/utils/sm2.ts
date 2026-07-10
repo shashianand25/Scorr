@@ -1,4 +1,4 @@
-export function calculateSM2(card: any, rating: "again" | "hard" | "good" | "easy") {
+export function calculateSM2(card: any, rating: "again" | "hard" | "good" | "easy" | "perfect") {
   let { sm2_interval: interval, sm2_repetition: repetition, sm2_easeFactor: easeFactor } = card;
   let nextReviewDate = Date.now();
 
@@ -17,7 +17,7 @@ export function calculateSM2(card: any, rating: "again" | "hard" | "good" | "eas
     else interval = interval * easeFactor;
     repetition += 1;
     nextReviewDate = Date.now() + interval * 24 * 60 * 60 * 1000;
-  } else if (rating === "easy") {
+  } else if (rating === "easy" || rating === "perfect") {
     if (repetition === 0) interval = 4;
     else interval = interval * easeFactor * 1.3;
     easeFactor += 0.15;

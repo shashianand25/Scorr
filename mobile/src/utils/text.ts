@@ -1,57 +1,107 @@
 import React from "react";
 import { Text, Platform } from "react-native";
 
-// Serialize questionsList → compact QST text (? prompt \n + correct \n - wrong)
-export const questionsToSourceText = (title: string, category: string, qs: any[]): string => {
-  if (!Array.isArray(qs) || qs.length === 0) return '';
-  const header = `@title: ${title}\n@category: ${category}\n\n`;
-  const body = qs.map((q: any) => {
-    if (q.prompt && Array.isArray(q.answers)) {
-      const opts = q.answers.map((a: any) => `${a.isCorrect ? '+' : '-'} ${a.text}`).join('\n');
-      return `? ${q.prompt}\n${opts}`;
-    }
-    if (q.question && q.options) {
-      const opts = Object.entries(q.options).map(([k, v]) =>
-        `${k === q.answer ? '+' : '-'} ${v}`
-      ).join('\n');
-      return `? ${q.question}\n${opts}`;
-    }
-    return '';
-  }).filter(Boolean).join('\n\n');
+// Serialize questionsList and flashcards → compact QST text
+export const questionsToSourceText = (title: string, category: string, qs: any[], flashcards?: any[]): string => {
+  let header = `@title: ${title}\n@category: ${category}\n\n`;
+  let body = "";
+
+  if (flashcards && flashcards.length > 0) {
+    body += "===FLASHCARDS===\n\n";
+    body += flashcards.map((f: any) => `# ${f.front}\n= ${f.back}`).join('\n\n');
+    body += "\n\n";
+  }
+
+  if (Array.isArray(qs) && qs.length > 0) {
+    body += "===MCQS===\n\n";
+    body += qs.map((q: any) => {
+      if (q.prompt && Array.isArray(q.answers)) {
+        const opts = q.answers.map((a: any) => `${a.isCorrect ? '+' : '-'} ${a.text}`).join('\n');
+        return `? ${q.prompt}\n${opts}`;
+      }
+      if (q.question && q.options) {
+        const opts = Object.entries(q.options).map(([k, v]) =>
+          `${k === q.answer ? '+' : '-'} ${v}`
+        ).join('\n');
+        return `? ${q.question}\n${opts}`;
+      }
+      return '';
+    }).filter(Boolean).join('\n\n');
+  }
+  
   return header + body;
 };
 
 export const renderFormattedText = (text: string, baseStyle?: any) => {
   if (!text) return null;
-  const regex = /(\*\*.*?\*\*|\*.*?\*|<u>.*?<\/u>|<span style="color:#ef4444">.*?<\/span>|<span style="font-size:20px">.*?<\/span>|\$\$.*?\$\$|---)/g;
-  const parts = text.split(regex);
-  return (
-    React.createElement(Text, { style: baseStyle },
-      parts.map((part, i) => {
-        if (!part) return null;
-        if (part === "---") return React.createElement(Text, { key: i, style: { opacity: 0.2 } }, "\n──────────\n");
-        if (part.startsWith("**") && part.endsWith("**")) return React.createElement(Text, { key: i, style: { fontWeight: "bold" } }, part.slice(2, -2));
-        if (part.startsWith("$$") && part.endsWith("$$")) return React.createElement(Text, { key: i, style: { fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontStyle: "italic", color: "#a855f7" } }, part.slice(2, -2));
-        if (part.startsWith("*") && part.endsWith("*")) return React.createElement(Text, { key: i, style: { fontStyle: "italic" } }, part.slice(1, -1));
-        if (part.startsWith("<u>") && part.endsWith("</u>")) return React.createElement(Text, { key: i, style: { textDecorationLine: "underline" } }, part.slice(3, -4));
-        if (part.startsWith('<span style="color:#ef4444">') && part.endsWith('</span>')) return React.createElement(Text, { key: i, style: { color: "#ef4444" } }, part.slice(28, -7));
-        if (part.startsWith('<span style="font-size:20px">') && part.endsWith('</span>')) return React.createElement(Text, { key: i, style: { fontSize: (baseStyle?.fontSize || 16) + 6 } }, part.slice(29, -7));
-        return React.createElement(Text, { key: i }, part);
-      })
+
+  // Inline markdown regex (no newlines captured here)
+  const inlineRegex = /(\*\*.*?\*\*|\*.*?\*|<u>.*?<\/u>|<span style="color:#ef4444">.*?<\/span>|<span style="font-size:20px">.*?<\/span>|\$\$.*?\$\$|---)/g;
+
+  const renderInline = (segment: string, keyPrefix: string) =>
+    segment.split(inlineRegex).map((part, i) => {
+      if (!part) return null;
+      const key = `${keyPrefix}-${i}`;
+      if (part === '---') return React.createElement(Text, { key, style: { opacity: 0.2 } }, '──────────');
+      if (part.startsWith('**') && part.endsWith('**')) return React.createElement(Text, { key, style: { fontWeight: 'bold' } }, part.slice(2, -2));
+      if (part.startsWith('$$') && part.endsWith('$$')) return React.createElement(Text, { key, style: { fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontStyle: 'italic', color: '#a855f7' } }, part.slice(2, -2));
+      if (part.startsWith('*') && part.endsWith('*')) return React.createElement(Text, { key, style: { fontStyle: 'italic' } }, part.slice(1, -1));
+      if (part.startsWith('<u>') && part.endsWith('</u>')) return React.createElement(Text, { key, style: { textDecorationLine: 'underline' } }, part.slice(3, -4));
+      if (part.startsWith('<span style="color:#ef4444">') && part.endsWith('</span>')) return React.createElement(Text, { key, style: { color: '#ef4444' } }, part.slice(28, -7));
+      if (part.startsWith('<span style="font-size:20px">') && part.endsWith('</span>')) return React.createElement(Text, { key, style: { fontSize: (baseStyle?.fontSize || 16) + 6 } }, part.slice(29, -7));
+      return React.createElement(Text, { key }, part);
+    });
+
+  // Split on newlines → render each line as its own Text block so spacing is consistent
+  const lines = text.split('\n');
+  if (lines.length === 1) {
+    // Single line — keep the original inline wrapper
+    return React.createElement(Text, { style: baseStyle }, renderInline(text, 'l0'));
+  }
+
+  // Multi-line — wrap in a View so each line is its own block (no inline spacing weirdness)
+  return React.createElement(
+    (require('react-native').View as any),
+    { style: { gap: 4 } },
+    lines.map((line, idx) =>
+      React.createElement(
+        Text,
+        { key: idx, style: [baseStyle, idx > 0 && { marginTop: 2 }] },
+        renderInline(line.trim() || ' ', `l${idx}`)
+      )
     )
   );
 };
 
-export function parseQstText(text: string): { title: string; category: string; questions: any[] } {
+
+export function parseQstText(text: string): { title: string; category: string; questions: any[]; flashcards: any[] } {
   const lines = text.split(/\r?\n/);
   let title = "";
   let category = "General";
   const questions: any[] = [];
+  const flashcards: any[] = [];
+  
   let currentQuestion: any = null;
+  let currentFlashcard: any = null;
+  let currentSection: "NONE" | "FLASHCARDS" | "MCQS" = "NONE";
 
   for (let line of lines) {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
+    if (!trimmed) continue;
+
+    if (trimmed.startsWith("===") && trimmed.endsWith("===")) {
+      const sec = trimmed.replace(/=/g, "").trim().toUpperCase();
+      if (sec === "FLASHCARDS") {
+        currentSection = "FLASHCARDS";
+        if (currentQuestion) { questions.push(currentQuestion); currentQuestion = null; }
+        if (currentFlashcard) { flashcards.push(currentFlashcard); currentFlashcard = null; }
+      } else if (sec === "MCQS") {
+        currentSection = "MCQS";
+        if (currentQuestion) { questions.push(currentQuestion); currentQuestion = null; }
+        if (currentFlashcard) { flashcards.push(currentFlashcard); currentFlashcard = null; }
+      }
+      continue;
+    }
 
     if (trimmed.startsWith("@")) {
       const parts = trimmed.substring(1).split(":");
@@ -63,39 +113,68 @@ export function parseQstText(text: string): { title: string; category: string; q
       }
       continue;
     }
+    
+    // Maintain backwards compatibility if sections aren't defined, default to MCQS
+    if (currentSection === "NONE" && (trimmed.startsWith("?") || trimmed.startsWith("+") || trimmed.startsWith("-"))) {
+        currentSection = "MCQS";
+    }
 
-    if (trimmed.startsWith("?")) {
-      if (currentQuestion) questions.push(currentQuestion);
-      currentQuestion = {
-        id: `q-${questions.length + 1}`,
-        prompt: trimmed.substring(1).trim(),
-        answers: [],
-        type: "single_choice",
-      };
+    if (currentSection === "FLASHCARDS" || currentSection === "NONE" && trimmed.startsWith("#")) {
+      if (trimmed.startsWith("#")) {
+        if (currentFlashcard) flashcards.push(currentFlashcard);
+        currentFlashcard = {
+          id: `f-${flashcards.length + 1}`,
+          front: trimmed.substring(1).trim(),
+          back: "",
+        };
+      } else if (trimmed.startsWith("=") && currentFlashcard) {
+        currentFlashcard.back += (currentFlashcard.back ? " " : "") + trimmed.substring(1).trim();
+      } else if (currentFlashcard) {
+        // Append to the active part (back if it started, otherwise front)
+        if (currentFlashcard.back) {
+           currentFlashcard.back += " " + trimmed;
+        } else {
+           currentFlashcard.front += " " + trimmed;
+        }
+      }
       continue;
     }
 
-    if (trimmed.startsWith("[Image:") && trimmed.endsWith("]")) {
-      const url = trimmed.substring(7, trimmed.length - 1).trim();
-      if (currentQuestion) currentQuestion.imageUrl = url;
-      continue;
-    }
+    if (currentSection === "MCQS") {
+      if (trimmed.startsWith("?")) {
+        if (currentQuestion) questions.push(currentQuestion);
+        currentQuestion = {
+          id: `q-${questions.length + 1}`,
+          prompt: trimmed.substring(1).trim(),
+          answers: [],
+          type: "single_choice",
+        };
+        continue;
+      }
 
-    if (currentQuestion) {
-      if (trimmed.startsWith("+")) {
-        currentQuestion.answers.push({ id: `a-${currentQuestion.id}-${currentQuestion.answers.length + 1}`, text: trimmed.substring(1).trim(), isCorrect: true });
-      } else if (trimmed.startsWith("-") || trimmed.startsWith("*")) {
-        currentQuestion.answers.push({ id: `a-${currentQuestion.id}-${currentQuestion.answers.length + 1}`, text: trimmed.substring(1).trim(), isCorrect: false });
+      if (trimmed.startsWith("[Image:") && trimmed.endsWith("]")) {
+        const url = trimmed.substring(7, trimmed.length - 1).trim();
+        if (currentQuestion) currentQuestion.imageUrl = url;
+        continue;
+      }
+
+      if (currentQuestion) {
+        if (trimmed.startsWith("+")) {
+          currentQuestion.answers.push({ id: `a-${currentQuestion.id}-${currentQuestion.answers.length + 1}`, text: trimmed.substring(1).trim(), isCorrect: true });
+        } else if (trimmed.startsWith("-") || trimmed.startsWith("*")) {
+          currentQuestion.answers.push({ id: `a-${currentQuestion.id}-${currentQuestion.answers.length + 1}`, text: trimmed.substring(1).trim(), isCorrect: false });
+        } else currentQuestion.answers.length ? currentQuestion.answers[currentQuestion.answers.length - 1].text += ` ${trimmed}` : currentQuestion.prompt += ` ${trimmed}`;
       }
     }
   }
 
   if (currentQuestion) questions.push(currentQuestion);
+  if (currentFlashcard) flashcards.push(currentFlashcard);
 
   for (let q of questions) {
     const correctCount = q.answers.filter((a: any) => a.isCorrect).length;
     q.type = correctCount > 1 ? "multiple_choice" : "single_choice";
   }
 
-  return { title, category, questions };
+  return { title, category, questions, flashcards };
 }
