@@ -668,7 +668,7 @@ export default function HomeScreen() {
 
 
 
-  const [activeTab, setActiveTab] = useState<"home" | "add" | "guide" | "menu" | "insights" | "battle" | "flashcards" | "insights-flashcard">("home");
+  const [activeTab, setActiveTab] = useState<"home" | "add" | "guide" | "menu" | "insights" | "battle" | "flashcards" | "insights-flashcard" | "bookmarked-questions">("home");
   const [battleRoomCode, setBattleRoomCode] = useState("");
   const [battleRoomState, setBattleRoomState] = useState<BattleRoom | null>(null);
   const [isHost, setIsHost] = useState(false);
@@ -918,6 +918,10 @@ export default function HomeScreen() {
           setActiveTab("insights");
           return true;
         }
+      }
+      if (activeTab === "bookmarked-questions") {
+        setActiveTab("insights");
+        return true;
       }
       if (activeTab === "insights") {
         setActiveTab("home");
@@ -1316,10 +1320,11 @@ export default function HomeScreen() {
         filteredQuestions = filteredQuestions.filter((q: any) => wrongList.some((w: any) => w.id === q.id));
       }
     } else if (selectionMode === "unanswered") {
-      const neverAttemptedIds = new Set<string>(
-        (selectedQuiz.attempts || []).flatMap((a: any) => a.questionIds || [])
-      );
-      const unansweredQs = filteredQuestions.filter((q: any) => !neverAttemptedIds.has(q.id));
+      const attemptedIds = new Set<string>([
+        ...(selectedQuiz.uniqueCorrectIds || []),
+        ...(selectedQuiz.wrongQuestions || []).map((w: any) => w.id || w)
+      ]);
+      const unansweredQs = filteredQuestions.filter((q: any) => !attemptedIds.has(q.id));
       if (unansweredQs.length > 0) {
         filteredQuestions = unansweredQs;
       }
@@ -1878,26 +1883,18 @@ export default function HomeScreen() {
           const bookmarkCount = bookmarkedQs.length;
           return (
             <View style={{ marginBottom: 20 }}>
-              <Pressable onPress={() => setExpandedQId(expandedQId === "bookmarked" ? null : "bookmarked")} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: cardBg, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: border }}>
+              <Pressable onPress={() => setActiveTab("bookmarked-questions")} style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: cardBg, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: border }, pressed && { opacity: 0.7 }]}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                   <Ionicons name="bookmark" size={18} color={textSub} />
-                  <Text style={{ fontSize: 15, color: textMain, fontWeight: "500" }}>Bookmarked</Text>
+                  <Text style={{ fontSize: 15, color: textMain, fontWeight: "500" }}>Bookmarked Questions</Text>
                   {bookmarkCount > 0 && (
                     <View style={{ backgroundColor: isDark ? "rgba(99,102,241,0.2)" : "#e0e7ff", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
                       <Text style={{ fontSize: 11, fontWeight: "700", color: isDark ? "#818cf8" : "#4f46e5" }}>{bookmarkCount}</Text>
                     </View>
                   )}
                 </View>
-                <Feather name={expandedQId === "bookmarked" ? "chevron-up" : "chevron-down"} size={18} color={textSub} />
+                <Feather name="chevron-right" size={18} color={textSub} />
               </Pressable>
-
-              {expandedQId === "bookmarked" && (
-                <View style={{ marginTop: 8, backgroundColor: cardBg, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: border }}>
-                  {bookmarkedQs.length === 0 ? (
-                    <View style={{ alignItems: "center", paddingVertical: 20 }}>
-                      <Ionicons name="bookmark-outline" size={28} color={textSub} style={{ marginBottom: 8, opacity: 0.5 }} />
-                      <Text style={{ fontSize: 13, color: textSub }}>No bookmarked questions yet.</Text>
-                    </View>
                   ) : (
                     <View style={{ gap: 12 }}>
                       <Pressable 
@@ -2446,9 +2443,10 @@ export default function HomeScreen() {
 
   const totalQuestions = selectedQuiz?.questions ?? 0;
   const wrongCount = selectedQuiz?.wrongQuestions?.length ?? 0;
-  const attemptedIds: Set<string> = new Set(
-    (selectedQuiz?.attempts || []).flatMap((a: any) => a.questionIds || [])
-  );
+  const attemptedIds: Set<string> = new Set([
+    ...(selectedQuiz?.uniqueCorrectIds || []),
+    ...(selectedQuiz?.wrongQuestions || []).map((w: any) => w.id || w)
+  ]);
   const unansweredCount = selectedQuiz
     ? (selectedQuiz.questionsList || []).filter((q: any) => !attemptedIds.has(q.id)).length
     : totalQuestions;
@@ -8018,33 +8016,13 @@ export default function HomeScreen() {
         return (
           <Modal
             visible={studyModeModalVisible}
-            animationType="slide"
-            transparent={true}
+            animationType="fade"
+            transparent={false}
             onRequestClose={() => setStudyModeModalVisible(false)}
           >
-            <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-              <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }} onPress={() => setStudyModeModalVisible(false)}>
-                <View style={[{
-                  backgroundColor: isDark ? "#1E293B" : "#ffffff",
-                  borderTopLeftRadius: 28, borderTopRightRadius: 28,
-                  paddingBottom: Platform.OS === "ios" ? 36 : 24,
-                  paddingTop: 12,
-                  width: "100%",
-                  maxHeight: "90%",
-                  marginTop: "auto"
-                }, !isDark && {
-                  shadowColor: "#000",
-                  shadowOffset: { width: 0, height: -2 },
-                  shadowOpacity: 0.1,
-                  shadowRadius: 10,
-                  elevation: 10
-                }]} onStartShouldSetResponder={() => true}>
-                  
-                  {/* Drag handle */}
-                  <View style={{ alignItems: "center", paddingBottom: 16 }}>
-                    <View style={{ width: 36, height: 4, borderRadius: 2,
-                      backgroundColor: isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.12)" }} />
-                  </View>
+            <KeyboardAvoidingView style={{ flex: 1, backgroundColor: isDark ? "#0f172a" : "#f4f4f8" }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+              <View style={{ flex: 1, paddingTop: Platform.OS === "ios" ? 60 : 40 }}>
+
 
                   {/* Header */}
                   <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingBottom: 24 }}>
@@ -8117,7 +8095,6 @@ export default function HomeScreen() {
                 </Pressable>
               </View>
             </View>
-            </Pressable>
             </KeyboardAvoidingView>
           </Modal>
         );
