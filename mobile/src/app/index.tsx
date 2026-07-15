@@ -3827,6 +3827,68 @@ export default function HomeScreen() {
             <Text style={[styles.startQuizBtnText, { color: settingsDarkMode ? "#818cf8" : "#4f46e5" }]}>Retake Entire Quiz</Text>
           </Pressable>
 
+          {/* ── Cross-mode CTA: nudge toward flashcards if score is low ── */}
+          {(() => {
+            const origQuiz = quizzes.find((q: any) => q.id === activeSession?.quizId) ||
+              (activeSession?.quizId === "sample_quiz" ? { ...sampleQuiz, flashcards: sampleQuiz?.flashcards || [] } : null);
+            const hasFlashcards = (origQuiz?.flashcards || []).length > 0;
+            if (!hasFlashcards) return null;
+            const isDark = settingsDarkMode;
+            if (scorePct < 80) {
+              return (
+                <Pressable
+                  onPress={() => {
+                    saveAndExitQuizSession(false);
+                    // Navigate to insights then open flashcard study mode
+                    if (origQuiz) {
+                      setViewingInsightsQuiz(origQuiz);
+                      setViewingInsightsQuizFromTab("home");
+                      setActiveTab("insights" as any);
+                      setTimeout(() => setStudyModeModalVisible(true), 350);
+                    }
+                  }}
+                  style={({ pressed }) => ({
+                    flexDirection: "row", alignItems: "center", justifyContent: "center",
+                    gap: 10, height: 52, borderRadius: 14,
+                    backgroundColor: isDark ? "rgba(168,85,247,0.18)" : "rgba(168,85,247,0.1)",
+                    borderWidth: 1, borderColor: isDark ? "rgba(168,85,247,0.4)" : "rgba(168,85,247,0.25)",
+                    opacity: pressed ? 0.8 : 1,
+                  })}
+                >
+                  <Ionicons name="albums" size={18} color="#a855f7" />
+                  <Text style={{ fontSize: 14, fontWeight: "700", color: "#a855f7" }}>
+                    Reinforce with Flashcards →
+                  </Text>
+                </Pressable>
+              );
+            }
+            return (
+              <Pressable
+                onPress={() => {
+                  saveAndExitQuizSession(false);
+                  if (origQuiz) {
+                    setViewingInsightsQuiz(origQuiz);
+                    setViewingInsightsQuizFromTab("home");
+                    setActiveTab("insights" as any);
+                    setTimeout(() => setStudyModeModalVisible(true), 350);
+                  }
+                }}
+                style={({ pressed }) => ({
+                  flexDirection: "row", alignItems: "center", justifyContent: "center",
+                  gap: 10, height: 48, borderRadius: 14,
+                  backgroundColor: "transparent",
+                  borderWidth: 1, borderColor: isDark ? "rgba(168,85,247,0.3)" : "rgba(168,85,247,0.2)",
+                  opacity: pressed ? 0.7 : 1,
+                })}
+              >
+                <Ionicons name="albums-outline" size={16} color={isDark ? "#c084fc" : "#9333ea"} />
+                <Text style={{ fontSize: 13, fontWeight: "600", color: isDark ? "#c084fc" : "#9333ea" }}>
+                  Review Flashcards
+                </Text>
+              </Pressable>
+            );
+          })()}
+
           <Pressable
             onPress={() => saveAndExitQuizSession()}
             style={[styles.startQuizBtn, { backgroundColor: settingsDarkMode ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.06)", shadowOpacity: 0 }]}
@@ -5945,7 +6007,8 @@ export default function HomeScreen() {
             const reviewedCards = allCards.filter((c: any) => !!c.sm2_nextReviewDate).length;
             const reviewedPct = totalCards > 0 ? Math.round((reviewedCards / totalCards) * 100) : 0;
             // Count truly mastered (graduated to Review interval ≥ 1 day)
-            const masteredCards = allCards.filter((c: any) => c.sm2_repetition > 0 && c.sm2_interval >= 1).length;
+            // Require at least 2 repetitions and 3-day interval to count as truly mastered (SM-2 convention)
+            const masteredCards = allCards.filter((c: any) => (c.sm2_repetition ?? 0) >= 2 && (c.sm2_interval ?? 0) >= 3).length;
 
             // Upcoming cards — not yet due, sorted soonest first
             const nowMs = Date.now();
@@ -6235,6 +6298,34 @@ export default function HomeScreen() {
                         </Text>
                       </Pressable>
                     )}
+
+                    {/* ── Cross-mode CTA: nudge toward quiz after flashcard session ── */}
+                    {viewingInsightsQuiz && (viewingInsightsQuiz.questionsList || []).length > 0 && (() => {
+                      const isDark = settingsDarkMode;
+                      const origQuiz = viewingInsightsQuiz;
+                      const hasAttempts = (origQuiz.attempts || []).length > 0;
+                      return (
+                        <Pressable
+                          onPress={() => {
+                            setStudyingDeck(null);
+                            setActiveTab("insights" as any);
+                            setTimeout(() => handleOpenQuizOptions(origQuiz), 300);
+                          }}
+                          style={({ pressed }) => ({
+                            flexDirection: "row", alignItems: "center", justifyContent: "center",
+                            gap: 10, height: 52, borderRadius: 18,
+                            backgroundColor: isDark ? "rgba(99,102,241,0.18)" : "rgba(99,102,241,0.1)",
+                            borderWidth: 1, borderColor: isDark ? "rgba(99,102,241,0.4)" : "rgba(99,102,241,0.2)",
+                            opacity: pressed ? 0.8 : 1,
+                          })}
+                        >
+                          <Ionicons name="help-circle" size={18} color={isDark ? "#818cf8" : "#6366f1"} />
+                          <Text style={{ fontSize: 14, fontWeight: "700", color: isDark ? "#818cf8" : "#4f46e5" }}>
+                            {hasAttempts ? "Test Yourself with Quiz →" : "Start Quiz →"}
+                          </Text>
+                        </Pressable>
+                      );
+                    })()}
 
                     {/* Back — text only */}
                     <Pressable
@@ -7215,15 +7306,40 @@ export default function HomeScreen() {
                       const attempts = quiz.attempts || [];
                       const uniqueCount = (quiz.uniqueCorrectIds || []).length;
                       const qCount = quiz.questions || 1;
-                      const completionPct = attempts.length > 0 ? Math.min(Math.round((uniqueCount / qCount) * 100), 100) : null;
+                      const quizPct = attempts.length > 0 ? Math.min(Math.round((uniqueCount / qCount) * 100), 100) : null;
                       const multiplier = quiz.multiplier;
 
+                      // ── Flashcard progress ──────────────────────────────
+                      const allFlashcards = quiz.flashcards || [];
+                      const fcTotal = allFlashcards.length;
+                      // Find persisted SM-2 state from flashcardDecks (keyed by temp-{quizId})
+                      const linkedDeck = flashcardDecks.find((d: any) => d.id === `temp-${quiz.id}`);
+                      const fcCardsWithState = fcTotal > 0
+                        ? allFlashcards.map((c: any, idx: number) => {
+                            const cardId = c.id || `fc-${idx}`;
+                            const saved = linkedDeck?.cards?.find((sc: any) => sc.id === cardId);
+                            return saved ?? c;
+                          })
+                        : [];
+                      const fcMastered = fcCardsWithState.filter((c: any) =>
+                        (c.sm2_repetition ?? 0) >= 2 && (c.sm2_interval ?? 0) >= 3
+                      ).length;
+                      const fcSeen = fcCardsWithState.filter((c: any) => !!c.sm2_nextReviewDate).length;
+                      const fcPct = fcTotal > 0 ? Math.min(Math.round((fcSeen / fcTotal) * 100), 100) : null;
+                      const fcDue = fcCardsWithState.filter((c: any) =>
+                        c.sm2_nextReviewDate && c.sm2_nextReviewDate <= Date.now()
+                      ).length;
+
                       let cardColor = "#5b6080";
-                      if (completionPct !== null) {
-                        if (completionPct >= 75) cardColor = "#2dd4a7";
-                        else if (completionPct >= 25) cardColor = "#8b8ff0";
+                      if (quizPct !== null) {
+                        if (quizPct >= 75) cardColor = "#2dd4a7";
+                        else if (quizPct >= 25) cardColor = "#8b8ff0";
                         else cardColor = "#f0a13c";
                       }
+
+                      const fcColor = fcPct !== null
+                        ? (fcPct >= 75 ? "#a855f7" : fcPct >= 25 ? "#818cf8" : "#f59e0b")
+                        : "#5b6080";
 
                       return (
                         <AnimatedPressable
@@ -7272,10 +7388,12 @@ export default function HomeScreen() {
                                 <Ionicons name="refresh-outline" size={14} color={muted} />
                                 <Text style={{ fontSize: 12, color: muted }}>{attempts.length} {t('actions.attempts') || "attempts"}</Text>
                               </View>
-                              <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                                <Ionicons name="checkmark-circle-outline" size={14} color={muted} />
-                                <Text style={{ fontSize: 12, color: muted }}>{uniqueCount} correct</Text>
-                              </View>
+                              {fcTotal > 0 && fcDue > 0 && (
+                                <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                                  <Ionicons name="albums-outline" size={14} color="#a855f7" />
+                                  <Text style={{ fontSize: 12, color: "#a855f7", fontWeight: "600" }}>{fcDue} due</Text>
+                                </View>
+                              )}
                               {multiplier && multiplier > 1 && (
                                 <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
                                   <Ionicons name="flash-outline" size={14} color={muted} />
@@ -7284,19 +7402,38 @@ export default function HomeScreen() {
                               )}
                             </View>
 
-                            {/* Bottom: score + bar */}
-                            <View style={{ flexDirection: "row", alignItems: "center",
-                              marginTop: 14, paddingTop: 4 }}>
-                              <Text style={{ fontSize: 12, color: completionPct !== null ? cardColor : "#5b6080", minWidth: 30, fontWeight: completionPct !== null ? "500" : "400" }}>
-                                {completionPct !== null ? `${completionPct}%` : "Not started"}
-                              </Text>
-                              <View style={{ flex: 1, height: 5, backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.07)",
-                                borderRadius: 3, marginLeft: 8 }}>
-                                {completionPct !== null && (
-                                  <View style={{ height: "100%", borderRadius: 3, width: `${completionPct}%` as any,
-                                    backgroundColor: cardColor }} />
-                                )}
+                            {/* Bottom: dual progress bars */}
+                            <View style={{ marginTop: 14, gap: 6 }}>
+                              {/* Quiz progress */}
+                              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                                <View style={{ flexDirection: "row", alignItems: "center", gap: 3, width: 72 }}>
+                                  <Ionicons name="help-circle-outline" size={11} color={quizPct !== null ? cardColor : muted} />
+                                  <Text style={{ fontSize: 11, color: quizPct !== null ? cardColor : muted, fontWeight: quizPct !== null ? "600" : "400" }}>
+                                    {quizPct !== null ? `${quizPct}%` : "—"}
+                                  </Text>
+                                </View>
+                                <View style={{ flex: 1, height: 4, backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", borderRadius: 2, marginLeft: 6 }}>
+                                  {quizPct !== null && (
+                                    <View style={{ height: "100%", borderRadius: 2, width: `${quizPct}%` as any, backgroundColor: cardColor }} />
+                                  )}
+                                </View>
                               </View>
+                              {/* Flashcard progress */}
+                              {fcTotal > 0 && (
+                                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                                  <View style={{ flexDirection: "row", alignItems: "center", gap: 3, width: 72 }}>
+                                    <Ionicons name="albums-outline" size={11} color={fcPct !== null ? fcColor : muted} />
+                                    <Text style={{ fontSize: 11, color: fcPct !== null ? fcColor : muted, fontWeight: fcPct !== null ? "600" : "400" }}>
+                                      {fcPct !== null ? `${fcPct}%` : "—"}
+                                    </Text>
+                                  </View>
+                                  <View style={{ flex: 1, height: 4, backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", borderRadius: 2, marginLeft: 6 }}>
+                                    {fcPct !== null && (
+                                      <View style={{ height: "100%", borderRadius: 2, width: `${fcPct}%` as any, backgroundColor: fcColor }} />
+                                    )}
+                                  </View>
+                                </View>
+                              )}
                             </View>
                           </View>
                         </AnimatedPressable>
