@@ -89,7 +89,7 @@ export async function signInWithGoogle(): Promise<User | null> {
                         err.code === "-5" ||
                         String(err.message).includes("CANCELLED");
     if (!isCancelled) {
-      Alert.alert("Google Sign-In Failed", err.message || "Could not connect to Google services. Please check your internet connection.");
+      Alert.alert("Google Sign-In Failed", typeof __DEV__ !== 'undefined' && __DEV__ ? (err.message || "Could not connect.") : require('../utils/errors').getUserErrorMessage(err));
     }
     return null;
   }

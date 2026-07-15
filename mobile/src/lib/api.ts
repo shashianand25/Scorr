@@ -20,7 +20,7 @@ async function apiFetch<T>(
   options?: RequestInit
 ): Promise<{ data: T | null; error: string | null }> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000); // 8-second timeout
+  const timeoutId = setTimeout(() => controller.abort(), 25000); // 25-second timeout to allow for Vercel cold starts
 
   let responseClone: Response | null = null;
   try {
@@ -47,12 +47,20 @@ async function apiFetch<T>(
     return { data: json as T, error: null };
   } catch (err: any) {
     clearTimeout(timeoutId);
-    if (err.name === 'AbortError') {
+    let errMsg = err?.message ?? "Network error";
+    
+    if (err.name === 'AbortError' || errMsg.toLowerCase().includes('canceled') || errMsg.toLowerCase().includes('aborted')) {
       console.warn("[API Timeout]", path);
-      return { data: null, error: "Network timeout: Server took too long to respond." };
+      return { data: null, error: "Network timeout: Server took too long to respond (might be a cold start). Please try again." };
     }
-    console.warn("[API]", path, err?.message);
-    return { data: null, error: err?.message ?? "Network error" };
+    
+    // Sanitize to prevent exposing the backend URL on DNS/Network failures
+    if (errMsg.includes(BASE_URL) || errMsg.includes("recall-backend") || errMsg.includes("UnknownHostException") || errMsg.includes("Network request failed")) {
+      errMsg = "Network error: Please check your internet connection.";
+    }
+    
+    console.warn("[API]", path, errMsg);
+    return { data: null, error: errMsg };
   }
 }
 
@@ -329,6 +337,10 @@ export async function parsePdfFromBackend(fileUri: string, fileName: string): Pr
     if (data.error) return { text: "", error: data.error };
     return { text: data.text || "" };
   } catch (err: any) {
-    return { text: "", error: err.message };
+    let errMsg = err?.message || "Upload failed";
+    if (errMsg.includes(BASE_URL) || errMsg.includes("recall-backend") || errMsg.includes("UnknownHostException") || errMsg.includes("Network request failed")) {
+      errMsg = "Network error: Please check your internet connection.";
+    }
+    return { text: "", error: errMsg };
   }
 }

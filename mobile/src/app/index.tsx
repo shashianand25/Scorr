@@ -38,6 +38,7 @@ import { Buffer } from "buffer";
 import * as mammoth from "mammoth/mammoth.browser.js";
 import { signInWithGoogle, signInWithEmail, signUpWithEmail, signOutUser, onAuth, deleteAccount, resetPassword, type User } from "../lib/firebase";
 import { syncUserToNeon, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz, deleteUserFromNeon, sendFeedback, saveBattleHistory, fetchBattleHistory, parsePdfFromBackend } from "../lib/api";
+import { getUserErrorMessage } from "../utils/errors";
 import { createBattleRoom, joinBattleRoom, updateBattleScore, finishBattle, markPlayerFinished, listenToBattleRoom, getBattleRoom, type BattleRoom } from "../lib/multiplayer";
 import NetInfo from "@react-native-community/netinfo";
 // expo-speech requires a native rebuild — guarded so app doesn't crash before rebuild
@@ -56,7 +57,7 @@ import "../lib/i18n";
 import { SAMPLE_QUIZ, APP_LANGUAGES } from "../constants/sample-quiz";
 import { generateMockQuestionsForQuiz, getCategoryIconDetails } from "../utils/quiz";
 import { getUserFirstName, getUserFullName, getUserInitial } from "../utils/user";
-import { calculateSM2 } from "../utils/sm2";
+import { Scheduler, CardState } from "../utils/sm2";
 import { AnimatedPressable } from "../components/ui/AnimatedPressable";
 import { ToggleSwitch } from "../components/ui/ToggleSwitch";
 import { Stepper } from "../components/ui/Stepper";
@@ -511,13 +512,13 @@ export default function HomeScreen() {
   }, []);
 
   // ── Pre-load quizzes instantly before Firebase initializes (offline-first) ──
-  // This runs in ~50ms. Firebase fires 2-3s later and silently updates if needed.
   useEffect(() => {
     (async () => {
       try {
-        const [qRaw, sRaw] = await Promise.all([
+        const [qRaw, sRaw, dRaw] = await Promise.all([
           AsyncStorage.getItem(storageKey("quizzes")),
           AsyncStorage.getItem(`quizforge_starred_global`),
+          AsyncStorage.getItem(`quizforge_flashcard_decks`),
         ]);
         if (qRaw) {
           const parsed = JSON.parse(qRaw);
@@ -525,6 +526,10 @@ export default function HomeScreen() {
         }
         if (sRaw) {
           setStarredQuestions(new Set(JSON.parse(sRaw)));
+        }
+        if (dRaw) {
+          const parsed = JSON.parse(dRaw);
+          setFlashcardDecks(prev => prev.length === 0 ? parsed : prev);
         }
         setDataLoaded(true);
       } catch {
@@ -821,6 +826,7 @@ export default function HomeScreen() {
   const quizNumbersScrollRef = React.useRef<ScrollView>(null);
   const [confettiParticles, setConfettiParticles] = useState<any[]>([]);
   const [studyingDeck, setStudyingDeck] = useState<any | null>(null);
+  const previewSourceDeckRef = useRef<any | null>(null);
   
   const [speakingText, setSpeakingText] = useState<string | null>(null);
   const toggleSpeech = (text: string) => {
@@ -1768,15 +1774,15 @@ export default function HomeScreen() {
     
     // Derived dark mode colors based on the requested design + supporting light mode
     const isDark = settingsDarkMode;
-    const bg = isDark ? "#0f172a" : "#f4f4f8";
+    const bg = isDark ? "#0B0F1E" : "#f4f4f8";
     const cardBg = isDark ? "#141930" : "#ffffff";
     const iconBg = isDark ? "#161B2E" : "#e5e7eb";
     const textMain = isDark ? "#F3F4F6" : "#111827";
     const textSub = isDark ? "#9CA3AF" : "#6B7280";
-    const border = isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)";
+    const border = isDark ? "rgba(181, 168, 255, 0.12)" : "rgba(0,0,0,0.06)";
 
     return (
-      <ScrollView contentContainerStyle={{ padding: 20, paddingTop: 20, paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
+      <ScrollView style={{ flex: 1, backgroundColor: bg }} contentContainerStyle={{ padding: 20, paddingTop: 20, paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
         {/* Top Bar */}
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
           <Pressable 
@@ -1794,14 +1800,16 @@ export default function HomeScreen() {
         </View>
 
         {/* Title Card */}
-        <View style={{ backgroundColor: cardBg, borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: border }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <View style={{ backgroundColor: cardBg, borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: border, width: "100%" }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
             <View style={{ backgroundColor: isDark ? "#123324" : "#dcfce7", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
               <Text style={{ color: isDark ? "#4ADE80" : "#166534", fontSize: 11, fontWeight: "600" }}>{quiz.category || "General"}</Text>
             </View>
             <Text style={{ fontSize: 12, color: textSub }}>{(quiz.questionsList || []).length} questions</Text>
           </View>
-          <Text style={{ fontSize: 20, fontWeight: "600", color: textMain, lineHeight: 28 }}>{quiz.title}</Text>
+          <Text style={{ fontSize: 18, fontWeight: "600", color: textMain, lineHeight: 24 }} numberOfLines={2} ellipsizeMode="tail" textBreakStrategy="simple">
+            {(quiz.title || "").replace(/[\r\n]+/g, "")}
+          </Text>
         </View>
 
         {/* Stats Grid */}
@@ -2551,6 +2559,15 @@ export default function HomeScreen() {
     ).catch(e => console.warn("[Persist] starred save failed:", e));
   }, [starredQuestions, dataLoaded]);
 
+  // ── Persist flashcard decks (SM2 ratings) ────────────────────────────────
+  useEffect(() => {
+    if (!dataLoaded) return;
+    AsyncStorage.setItem(
+      `quizforge_flashcard_decks`,
+      JSON.stringify(flashcardDecks)
+    ).catch(e => console.warn("[Persist] flashcard decks save failed:", e));
+  }, [flashcardDecks, dataLoaded]);
+
   const totalAttempts = quizzes.reduce((sum, q) => sum + (q.attempts || []).length, 0);
   const bestScore = quizzes.reduce((max, q) => {
     const qMax = (q.attempts || []).reduce((m: number, a: any) => Math.max(m, a.score), 0);
@@ -2575,6 +2592,7 @@ export default function HomeScreen() {
   const [studyCardIdx, setStudyCardIdx] = useState(0);
   const [studyQueue, setStudyQueue] = useState<string[]>([]);
   const [customStudyMode, setCustomStudyMode] = useState(false);
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
   // ── Study Mode Modal ──
   const [studyModeModalVisible, setStudyModeModalVisible] = useState(false);
   const [selectedStudyMode, setSelectedStudyMode] = useState<"spaced" | "simple">("spaced");
@@ -2659,6 +2677,7 @@ export default function HomeScreen() {
   const [insightsKnown, setInsightsKnown] = useState(0);
   const [insightsUnknown, setInsightsUnknown] = useState(0);
   const swipeX   = useRef(new Animated.Value(0)).current;
+  const studyTiltAnim = useRef(new Animated.Value(0)).current;
   const [cardType, setCardType] = useState<"Basic" | "Basic (and reversed card)" | "Basic (optional reversed card)" | "Basic (type in the answer)" | "Cloze" | "Image Occlusion">("Basic");
   const [showTypePicker, setShowTypePicker] = useState(false);
   const [showDeckPicker, setShowDeckPicker] = useState(false);
@@ -2717,7 +2736,7 @@ export default function HomeScreen() {
       
       await Sharing.shareAsync(fileUri, { dialogTitle: `Share ${quiz.title}` });
     } catch (err: any) {
-      Alert.alert("Error", `Could not share: ${err.message}`);
+      Alert.alert("Error", typeof __DEV__ !== 'undefined' && __DEV__ ? err.message : getUserErrorMessage(err));
     }
   };
 
@@ -2907,8 +2926,12 @@ export default function HomeScreen() {
       }
     } catch (err: any) {
       setAiGenPhase(null);
-      if (Platform.OS === "web") alert("AI generation failed: " + err.message);
-      else Alert.alert("Generation Failed", err.message);
+      let errMsg = err.message || "Unknown error";
+      if (errMsg.includes("generativelanguage.googleapis.com") || errMsg.includes("UnknownHostException") || errMsg.includes("Network request failed")) {
+         errMsg = "Network error: Please check your internet connection.";
+      }
+      if (Platform.OS === "web") alert("AI generation failed: " + errMsg);
+      else Alert.alert("Generation Failed", typeof __DEV__ !== 'undefined' && __DEV__ ? errMsg : getUserErrorMessage(errMsg));
     }
   };
 
@@ -3819,22 +3842,26 @@ export default function HomeScreen() {
   const startStudy = (deck: any, custom: boolean = false) => {
     setCustomStudyMode(custom);
 
+    // Use the current in-state version of the deck so we never lose saved SM2 ratings.
+    // Fall back to the passed deck only if it's not in state yet (e.g. brand new deck).
+    const stateDeck = flashcardDecks.find((d: any) => d.id === deck.id) || deck;
+
     const updatedDeck = {
-      ...deck,
-      cards: (deck.cards || []).map((c: any) => ({
+      ...stateDeck,
+      cards: (stateDeck.cards || []).map((c: any) => ({
         ...c,
         id: c.id || Date.now().toString() + Math.random().toString(),
         sm2_interval: c.sm2_interval ?? 0,
         sm2_repetition: c.sm2_repetition ?? 0,
-        sm2_easeFactor: c.sm2_easeFactor ?? 2.5
+        sm2_easeFactor: c.sm2_easeFactor ?? 2.5,
+        sm2_state: c.sm2_state ?? CardState.NEW,
       }))
     };
     
-    setFlashcardDecks((prev: any[]) => prev.map(d => d.id === deck.id ? updatedDeck : d));
-    
+    const nowWithBuffer = Date.now() + 5000;
     const due = custom 
       ? updatedDeck.cards 
-      : updatedDeck.cards.filter((c: any) => !c.sm2_nextReviewDate || c.sm2_nextReviewDate <= Date.now());
+      : updatedDeck.cards.filter((c: any) => !c.sm2_nextReviewDate || c.sm2_nextReviewDate <= nowWithBuffer);
     
     setStudyQueue(due.map((c: any) => c.id));
     setStudyingDeck(updatedDeck);
@@ -3843,12 +3870,13 @@ export default function HomeScreen() {
     swipeX.setValue(0);
     setStudyTypedAnswer("");
     setStudyChecked(false);
+    setIsPreviewMode(false);
   };
 
 
 
   const handleSM2Rating = (rating: "again" | "hard" | "good" | "easy" | "perfect") => {
-    if (!studyingDeck || studyQueue.length === 0) return;
+    if (!studyingDeck || studyQueue.length === 0 || selectedRating !== null) return;
     
     setSelectedRating(rating);
     Animated.timing(swipeX, {
@@ -3866,7 +3894,7 @@ export default function HomeScreen() {
 
       let newQueue = [...studyQueue.slice(1)];
       
-      const updatedCard = calculateSM2(currentCard, rating);
+      const updatedCard = Scheduler.schedule(currentCard, rating);
       if (rating === "again") {
         newQueue.push(cardId);
       }
@@ -3890,12 +3918,16 @@ export default function HomeScreen() {
       setStudyChecked(false);
       setSelectedRating(null);
 
-      swipeX.setValue(Dimensions.get("window").width);
-      Animated.timing(swipeX, {
-        toValue: 0,
-        duration: 150,
-        useNativeDriver: true
-      }).start();
+      if (newQueue.length > 0) {
+        swipeX.setValue(Dimensions.get("window").width);
+        Animated.timing(swipeX, {
+          toValue: 0,
+          duration: 150,
+          useNativeDriver: true
+        }).start();
+      } else {
+        swipeX.setValue(0);
+      }
     });
   };
 
@@ -4447,7 +4479,7 @@ export default function HomeScreen() {
                     borderWidth: 1, borderColor: cardBorder,
                     borderRadius: 16, padding: 18,
                     flexDirection: "row", alignItems: "center", gap: 14,
-                    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: isDark ? 0 : 0.04, shadowRadius: 8, elevation: 1,
+                    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: isDark ? 0 : 0.04, shadowRadius: 8, elevation: isDark ? 0 : 1,
                   }, pressed && { opacity: 0.8, borderColor: isDark ? "rgba(99,102,241,0.4)" : "rgba(99,102,241,0.3)" }]}
                 >
                   <View style={{
@@ -4486,7 +4518,7 @@ export default function HomeScreen() {
               <Pressable onPress={() => { if (!battleCreating) setShowBattleOptions(false); }}
                 style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)",
                   alignItems: "center", justifyContent: "center", opacity: battleCreating ? 0.3 : 1 }}>
-                <Ionicons name="close" size={20} color={muted} />
+                <Ionicons name="close" size={20} color={txt} />
               </Pressable>
             </View>
             <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 140 }} showsVerticalScrollIndicator={false}>
@@ -4495,12 +4527,12 @@ export default function HomeScreen() {
                 <View style={{ backgroundColor: isDark ? "rgba(99,102,241,0.1)" : "rgba(99,102,241,0.07)",
                   borderRadius: 14, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: isDark ? "rgba(99,102,241,0.2)" : "rgba(99,102,241,0.15)" }}>
                   <Text style={{ fontSize: 16, fontWeight: "800", color: txt, marginBottom: 4 }}>{battleOptionsQuiz.title}</Text>
-                  <Text style={{ fontSize: 13, color: muted }}>{battleOptionsQuiz.questions} questions available</Text>
+                  <Text style={{ fontSize: 13, color: txt }}>{battleOptionsQuiz.questions} questions available</Text>
                 </View>
               )}
 
               {/* Question Selection */}
-              <Text style={{ fontSize: 12, fontWeight: "700", color: muted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Question Selection</Text>
+              <Text style={{ fontSize: 12, fontWeight: "700", color: txt, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Question Selection</Text>
               <View style={{ flexDirection: "row", gap: 10, marginBottom: 16 }}>
                 {([{ value: "all" as const, label: "All" }, { value: "random" as const, label: "Random" }, { value: "range" as const, label: "Range" }]).map(({ value, label }) => {
                   const isActive = battleSelectionMode === value;
@@ -4576,7 +4608,7 @@ export default function HomeScreen() {
                         <Text style={{ fontSize: 16, color: txt, fontWeight: "700" }}>+</Text>
                       </Pressable>
                     </View>
-                    <Text style={{ fontSize: 14, color: muted, marginHorizontal: 2 }}>to</Text>
+                    <Text style={{ fontSize: 14, color: txt, marginHorizontal: 2 }}>to</Text>
                     <View style={{ flexDirection: "row", alignItems: "center" }}>
                       <Pressable onPress={() => setBattleRangeEnd(Math.max(battleRangeStart, battleRangeEnd - 1))}
                         style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" }}>
@@ -4603,7 +4635,7 @@ export default function HomeScreen() {
               )}
 
               {/* Time per question */}
-              <Text style={{ fontSize: 12, fontWeight: "700", color: muted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10, marginTop: 4 }}>Time per Question</Text>
+              <Text style={{ fontSize: 12, fontWeight: "700", color: txt, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10, marginTop: 4 }}>Time per Question</Text>
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
                 {([null, 15, 20, 30, 45, 60] as (number | null)[]).map((t) => {
                   const isActive = battleTimePerQuestion === t;
@@ -4617,7 +4649,7 @@ export default function HomeScreen() {
                       }]}
                     >
                       <Text style={{ fontSize: 13, fontWeight: "700",
-                        color: isActive ? (isDark ? "#818cf8" : "#6366f1") : muted }}>
+                        color: isActive ? (isDark ? "#818cf8" : "#6366f1") : txt }}>
                         {label}
                       </Text>
                     </Pressable>
@@ -4626,7 +4658,7 @@ export default function HomeScreen() {
               </View>
 
               {/* Toggles */}
-              <Text style={{ fontSize: 12, fontWeight: "700", color: muted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Gameplay Options</Text>
+              <Text style={{ fontSize: 12, fontWeight: "700", color: txt, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Gameplay Options</Text>
               <View style={{ backgroundColor: cardBg,
                 borderRadius: 14, borderWidth: 1, borderColor: cardBorder, overflow: "hidden" }}>
                 {[
@@ -4638,7 +4670,7 @@ export default function HomeScreen() {
                     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 16 }}>
                       <View style={{ flex: 1, marginRight: 12 }}>
                         <Text style={{ fontSize: 15, fontWeight: "600", color: txt, marginBottom: 2 }}>{row.label}</Text>
-                        <Text style={{ fontSize: 12, color: muted }}>{row.sub}</Text>
+                        <Text style={{ fontSize: 12, color: txt }}>{row.sub}</Text>
                       </View>
                       <ToggleSwitch checked={row.value} onChange={row.set} darkMode={isDark} />
                     </View>
@@ -5905,29 +5937,321 @@ export default function HomeScreen() {
           const cardBg  = isDark ? "#334155" : "#475569";
           const pageBg  = isDark ? "#0f172a" : "#f4f4f8";
           
-          if (studyQueue.length === 0) {
+          if (studyQueue.length === 0 && !isPreviewMode) {
+            // ── Completion screen ────────────────────────────────────────
+            const allCards: any[] = studyingDeck.cards || [];
+            const totalCards = allCards.length;
+            // Count cards that have been seen at least once (sm2_nextReviewDate set)
+            const reviewedCards = allCards.filter((c: any) => !!c.sm2_nextReviewDate).length;
+            const reviewedPct = totalCards > 0 ? Math.round((reviewedCards / totalCards) * 100) : 0;
+            // Count truly mastered (graduated to Review interval ≥ 1 day)
+            const masteredCards = allCards.filter((c: any) => c.sm2_repetition > 0 && c.sm2_interval >= 1).length;
+
+            // Upcoming cards — not yet due, sorted soonest first
+            const nowMs = Date.now();
+            const upcomingCards = allCards
+              .filter((c: any) => c.sm2_nextReviewDate && c.sm2_nextReviewDate > nowMs)
+              .sort((a: any, b: any) => a.sm2_nextReviewDate - b.sm2_nextReviewDate);
+
+            // Next review time (soonest due card)
+            const nextReviewMs = upcomingCards.length > 0 ? upcomingCards[0].sm2_nextReviewDate : null;
+            const formatCountdown = (ms: number) => {
+              const diff = ms - nowMs;
+              if (diff <= 0) return "now";
+              const secs = Math.floor(diff / 1000);
+              const mins = Math.floor(secs / 60);
+              const hrs  = Math.floor(mins / 60);
+              const days = Math.floor(hrs / 24);
+              if (days > 0) return `${days}d ${hrs % 24}h`;
+              if (hrs > 0) return `${hrs}h ${mins % 60}m`;
+              if (mins > 0) return `${mins}m`;
+              return "< 1m";
+            };
+
+            const formatRelative = (ms: number) => {
+              const diff = ms - nowMs;
+              if (diff <= 0) return "now";
+              const secs = Math.floor(diff / 1000);
+              const mins = Math.floor(secs / 60);
+              const hrs  = Math.floor(mins / 60);
+              const days = Math.floor(hrs / 24);
+              if (days >= 2) return `in ${days} days`;
+              if (days === 1) return "tomorrow";
+              if (hrs > 0) return `in ${hrs}h ${mins % 60}m`;
+              if (mins > 0) return `in ${mins}m`;
+              return "in < 1m";
+            };
+
+            // New (unseen) cards available to learn
+            const newCards = allCards.filter((c: any) => !c.sm2_nextReviewDate && (c.sm2_repetition ?? 0) === 0);
+
+            // Preview candidates — next 5 upcoming
+            const previewCandidates = upcomingCards.slice(0, 5);
+
+            const handleGoBack = () => {
+              setIsPreviewMode(false);
+              if (viewingInsightsQuiz) {
+                setStudyingDeck(null);
+                setActiveTab("insights" as any);
+              } else {
+                setStudyingDeck(null);
+              }
+            };
+
+            const handleLearnNew = () => {
+              if (newCards.length === 0) return;
+              setIsPreviewMode(false);
+              // Build a deck of only new cards
+              const newDeck = { ...studyingDeck, cards: newCards };
+              setStudyQueue(newCards.map((c: any) => c.id));
+              setStudyingDeck(newDeck);
+              setStudyFlipped(false);
+              flipAnim.setValue(0);
+              swipeX.setValue(0);
+              setStudyTypedAnswer("");
+              setStudyChecked(false);
+            };
+
+            const handlePreviewNext = () => {
+              if (previewCandidates.length === 0) return;
+              // Save the full deck so we can restore it after preview finishes
+              previewSourceDeckRef.current = studyingDeck;
+              const previewDeck = { ...studyingDeck, cards: previewCandidates };
+              setStudyQueue(previewCandidates.map((c: any) => c.id));
+              setStudyingDeck(previewDeck);
+              setIsPreviewMode(true);
+              setStudyFlipped(false);
+              flipAnim.setValue(0);
+              swipeX.setValue(0);
+            };
+
+            const masteredPct = totalCards > 0 ? Math.round((masteredCards / totalCards) * 100) : 0;
+
+            const handleReviewAll = () => {
+              setIsPreviewMode(false);
+              // Start a full SM-2 review of all cards in the deck, regardless of due date
+              const allDeck = { ...studyingDeck, cards: allCards };
+              setStudyQueue(allCards.map((c: any) => c.id));
+              setStudyingDeck(allDeck);
+              setStudyFlipped(false);
+              flipAnim.setValue(0);
+              swipeX.setValue(0);
+              setStudyTypedAnswer("");
+              setStudyChecked(false);
+            };
+
+            const bg      = isDark ? "#080c18" : "#f0f4ff";
+            const surface = isDark ? "#111827" : "#ffffff";
+            const border  = isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)";
+            const txt     = isDark ? "#f1f5f9" : "#0f172a";
+            const muted   = isDark ? "#4b5563" : "#94a3b8";
+            const sep     = isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)";
+
             return (
-              <View style={{ flex: 1, backgroundColor: pageBg, padding: 20 }}>
-                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: 30 }}>
-                  <Pressable onPress={() => {
-                    if (viewingInsightsQuiz) {
-                      setStudyingDeck(null);
-                      setActiveTab("insights");
-                    } else {
-                      setStudyingDeck(null);
-                    }
-                  }} style={({pressed}) => [pressed && {opacity: 0.7}]}>
-                    <Ionicons name="arrow-back" size={26} color={isDark ? "#ffffff" : "#0d0f14"} />
-                  </Pressable>
-                </View>
-                <View style={{ marginTop: 40, paddingHorizontal: 10 }}>
-                  <Text style={{ fontSize: 28, fontWeight: "bold", color: isDark ? "#ffffff" : "#0d0f14", marginBottom: 20, lineHeight: 36 }}>
-                    Congratulations! You have finished this deck for now.
-                  </Text>
-                  <Text style={{ fontSize: 16, color: isDark ? "#cbd5e1" : "#475569", lineHeight: 26 }}>
-                    If you wish to study outside of the regular schedule, you can <Text onPress={() => startStudy(studyingDeck, true)} style={{ color: "#60a5fa", fontWeight: "600", textDecorationLine: "underline" }}>Revise Deck</Text>.
-                  </Text>
-                </View>
+              <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+                backgroundColor: bg, zIndex: 99 }}>
+                <ScrollView
+                  contentContainerStyle={{ flexGrow: 1, paddingBottom: 48 }}
+                  showsVerticalScrollIndicator={false}
+                >
+
+                  {/* ── Hero ──────────────────────────────────────── */}
+                  <View style={{ alignItems: "center", paddingTop: 72, paddingBottom: 28, paddingHorizontal: 24 }}>
+                    {/* Glowing emoji ring */}
+                    <View style={{
+                      width: 100, height: 100, borderRadius: 50,
+                      backgroundColor: isDark ? "rgba(0,212,170,0.1)" : "rgba(0,212,170,0.12)",
+                      borderWidth: 1.5, borderColor: "rgba(0,212,170,0.35)",
+                      alignItems: "center", justifyContent: "center",
+                      marginBottom: 24,
+                      shadowColor: "#00d4aa", shadowOffset: { width: 0, height: 0 },
+                      shadowOpacity: 0.4, shadowRadius: 20, elevation: 8,
+                    }}>
+                      <Text style={{ fontSize: 46 }}>🎉</Text>
+                    </View>
+
+                    <Text style={{ fontSize: 30, fontWeight: "800", color: txt,
+                      textAlign: "center", letterSpacing: -0.5, marginBottom: 8 }}>
+                      You're all caught up!
+                    </Text>
+                    <Text style={{ fontSize: 15, color: muted, textAlign: "center", lineHeight: 22, marginBottom: 18 }}>
+                      All due cards have been reviewed.
+                    </Text>
+
+                    {/* Next review pill */}
+                    {nextReviewMs ? (
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 7,
+                        backgroundColor: isDark ? "rgba(0,212,170,0.1)" : "rgba(0,212,170,0.1)",
+                        borderRadius: 24, paddingHorizontal: 18, paddingVertical: 9,
+                        borderWidth: 1, borderColor: "rgba(0,212,170,0.3)" }}>
+                        <Ionicons name="time-outline" size={15} color="#00d4aa" />
+                        <Text style={{ fontSize: 14, color: "#00d4aa", fontWeight: "700" }}>
+                          Next review in {formatCountdown(nextReviewMs)}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+
+                  {/* ── Stat tiles ────────────────────────────────── */}
+                  <View style={{ flexDirection: "row", paddingHorizontal: 20, gap: 12, marginBottom: 14 }}>
+                    {/* Reviewed */}
+                    <View style={{ flex: 1, backgroundColor: surface, borderRadius: 20,
+                      padding: 18, borderWidth: 1, borderColor: border,
+                      shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: isDark ? 0.3 : 0.06, shadowRadius: 8, elevation: 3 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 12 }}>
+                        <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: "#00d4aa" }} />
+                        <Text style={{ fontSize: 11, fontWeight: "700", color: "#00d4aa",
+                          letterSpacing: 1.1, textTransform: "uppercase" }}>Reviewed</Text>
+                      </View>
+                      <Text style={{ fontSize: 32, fontWeight: "800", color: txt, lineHeight: 36 }}>
+                        {reviewedCards}
+                      </Text>
+                      <Text style={{ fontSize: 12, color: muted, marginTop: 3, marginBottom: 14 }}>
+                        of {totalCards} cards
+                      </Text>
+                      <View style={{ height: 4, backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "#e8f0fe",
+                        borderRadius: 2 }}>
+                        <View style={{ height: 4, borderRadius: 2, backgroundColor: "#00d4aa",
+                          width: `${reviewedPct}%` as any }} />
+                      </View>
+                    </View>
+
+                    {/* Mastered */}
+                    <View style={{ flex: 1, backgroundColor: surface, borderRadius: 20,
+                      padding: 18, borderWidth: 1, borderColor: border,
+                      shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: isDark ? 0.3 : 0.06, shadowRadius: 8, elevation: 3 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 12 }}>
+                        <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: "#818cf8" }} />
+                        <Text style={{ fontSize: 11, fontWeight: "700", color: "#818cf8",
+                          letterSpacing: 1.1, textTransform: "uppercase" }}>Mastered</Text>
+                      </View>
+                      <Text style={{ fontSize: 32, fontWeight: "800", color: txt, lineHeight: 36 }}>
+                        {masteredCards}
+                      </Text>
+                      <Text style={{ fontSize: 12, color: muted, marginTop: 3, marginBottom: 14 }}>
+                        of {totalCards} cards
+                      </Text>
+                      <View style={{ height: 4, backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "#e8f0fe",
+                        borderRadius: 2 }}>
+                        <View style={{ height: 4, borderRadius: 2, backgroundColor: "#818cf8",
+                          width: `${masteredPct}%` as any }} />
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* ── Coming up ─────────────────────────────────── */}
+                  {upcomingCards.length > 0 && (
+                    <View style={{ marginHorizontal: 20, backgroundColor: surface, borderRadius: 20,
+                      borderWidth: 1, borderColor: border, marginBottom: 20, overflow: "hidden",
+                      shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: isDark ? 0.3 : 0.06, shadowRadius: 8, elevation: 3 }}>
+                      {/* Section header */}
+                      <View style={{ paddingHorizontal: 18, paddingTop: 16, paddingBottom: 12,
+                        borderBottomWidth: 1, borderBottomColor: sep }}>
+                        <Text style={{ fontSize: 11, fontWeight: "700", letterSpacing: 1.1,
+                          textTransform: "uppercase", color: muted }}>Coming Up</Text>
+                      </View>
+                      {upcomingCards.slice(0, 5).map((c: any, i: number) => (
+                        <View key={c.id || i} style={{ flexDirection: "row", alignItems: "center",
+                          paddingHorizontal: 18, paddingVertical: 13,
+                          borderTopWidth: i === 0 ? 0 : 1, borderTopColor: sep }}>
+                          <View style={{ width: 6, height: 6, borderRadius: 3,
+                            backgroundColor: "#00d4aa", marginRight: 14, flexShrink: 0, opacity: 0.7 }} />
+                          <Text style={{ flex: 1, fontSize: 14, color: txt, lineHeight: 20 }}
+                            numberOfLines={1}>
+                            {c.front || c.question || c.prompt || "Card"}
+                          </Text>
+                          <View style={{ backgroundColor: isDark ? "rgba(255,255,255,0.07)" : "#f1f5f9",
+                            borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4,
+                            marginLeft: 12, flexShrink: 0 }}>
+                            <Text style={{ fontSize: 12, color: muted, fontWeight: "500" }}>
+                              {formatRelative(c.sm2_nextReviewDate)}
+                            </Text>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* ── Actions ───────────────────────────────────── */}
+                  <View style={{ paddingHorizontal: 20, gap: 10 }}>
+
+                    {/* Review All — primary teal CTA */}
+                    <Pressable
+                      onPress={handleReviewAll}
+                      style={({ pressed }) => ({
+                        flexDirection: "row", alignItems: "center", justifyContent: "center",
+                        gap: 10, height: 58, borderRadius: 18,
+                        backgroundColor: "#00d4aa",
+                        opacity: pressed ? 0.85 : 1,
+                        shadowColor: "#00d4aa", shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.4, shadowRadius: 12, elevation: 6,
+                      })}
+                    >
+                      <Ionicons name="refresh-circle-outline" size={22} color="#000" />
+                      <Text style={{ fontSize: 16, fontWeight: "800", color: "#000", letterSpacing: 0.2 }}>
+                        Review All Cards
+                      </Text>
+                    </Pressable>
+
+                    {/* Learn New — indigo */}
+                    {newCards.length > 0 && (
+                      <Pressable
+                        onPress={handleLearnNew}
+                        style={({ pressed }) => ({
+                          flexDirection: "row", alignItems: "center", justifyContent: "center",
+                          gap: 10, height: 56, borderRadius: 18,
+                          backgroundColor: "#6366f1",
+                          opacity: pressed ? 0.85 : 1,
+                          shadowColor: "#6366f1", shadowOffset: { width: 0, height: 4 },
+                          shadowOpacity: 0.3, shadowRadius: 10, elevation: 5,
+                        })}
+                      >
+                        <Ionicons name="book-outline" size={20} color="#fff" />
+                        <Text style={{ fontSize: 16, fontWeight: "700", color: "#fff" }}>
+                          Learn New Cards ({newCards.length})
+                        </Text>
+                      </Pressable>
+                    )}
+
+                    {/* Preview Next — subtle filled */}
+                    {previewCandidates.length > 0 && (
+                      <Pressable
+                        onPress={handlePreviewNext}
+                        style={({ pressed }) => ({
+                          flexDirection: "row", alignItems: "center", justifyContent: "center",
+                          gap: 10, height: 52, borderRadius: 18,
+                          backgroundColor: isDark ? "rgba(255,255,255,0.07)" : "#e8eaf6",
+                          borderWidth: 1, borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(99,102,241,0.15)",
+                          opacity: pressed ? 0.7 : 1,
+                        })}
+                      >
+                        <Ionicons name="eye-outline" size={18} color={isDark ? "#94a3b8" : "#6366f1"} />
+                        <Text style={{ fontSize: 15, fontWeight: "600",
+                          color: isDark ? "#cbd5e1" : "#4338ca" }}>
+                          Preview Next {previewCandidates.length}
+                        </Text>
+                      </Pressable>
+                    )}
+
+                    {/* Back — text only */}
+                    <Pressable
+                      onPress={handleGoBack}
+                      style={({ pressed }) => ({
+                        flexDirection: "row", alignItems: "center", justifyContent: "center",
+                        gap: 6, height: 44, opacity: pressed ? 0.5 : 1,
+                      })}
+                    >
+                      <Ionicons name="chevron-back" size={16} color={muted} />
+                      <Text style={{ fontSize: 14, fontWeight: "500", color: muted }}>
+                        {viewingInsightsQuiz ? "Back to Quiz" : "Back to Deck"}
+                      </Text>
+                    </Pressable>
+                  </View>
+
+                </ScrollView>
               </View>
             );
           }
@@ -5937,17 +6261,19 @@ export default function HomeScreen() {
           const isCloze = studyingDeck.cardType === "Cloze";
           const isTypeInAnswer = studyingDeck.cardType === "Basic (type in the answer)";
 
-          let frontText = card.front;
-          let backText  = card.back;
+          let frontText = card.front || card.question || card.prompt || "";
+          let backText  = card.back || card.answer || "";
           if (isCloze) {
-            frontText = card.front.replace(/\{\{c1::(.*?)\}\}/g, "[...]");
-            backText  = card.front.replace(/\{\{c1::(.*?)\}\}/g, "$1");
+            frontText = String(frontText).replace(/\{\{c1::(.*?)\}\}/g, "[...]");
+            backText  = String(frontText).replace(/\{\{c1::(.*?)\}\}/g, "$1");
           }
 
           const frontInterpolate = flipAnim.interpolate({ inputRange: [0, 180], outputRange: ["0deg","180deg"] });
           const backInterpolate  = flipAnim.interpolate({ inputRange: [0, 180], outputRange: ["180deg","360deg"] });
           const frontOpacity     = flipAnim.interpolate({ inputRange: [89, 90], outputRange: [1, 0], extrapolate: "clamp" });
           const backOpacity      = flipAnim.interpolate({ inputRange: [89, 90], outputRange: [0, 1], extrapolate: "clamp" });
+          
+          const swipeRotate = studyTiltAnim.interpolate({ inputRange: [-20, 0, 20], outputRange: ["-20deg", "0deg", "20deg"], extrapolate: "clamp" });
 
           const flipCard = () => {
             if (studyFlipped) {
@@ -5964,12 +6290,20 @@ export default function HomeScreen() {
           const reviewCount = studyQueue.filter(id => { const c = studyingDeck.cards.find((cd: any) => cd.id === id); return c && c.sm2_repetition > 0 && c.sm2_interval >= 2; }).length;
 
           return (
-            <View style={{ flex: 1, backgroundColor: isDark ? "#0d1117" : "#f4f4f8" }}>
-              {/* Header */}
+            <View style={{ flex: 1, backgroundColor: isDark ? "#0d0f1a" : "#f4f4f8" }}>
+
+              {/* Header Row */}
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 10 }}>
-                <Text style={{ fontSize: 16, fontWeight: "700", color: isDark ? "#ffffff" : "#111827" }}>
-                  {studyingDeck.cards.length - studyQueue.length + 1}/{studyingDeck.cards.length}
-                </Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  <Text style={{ fontSize: 16, fontWeight: "700", color: isDark ? "#ffffff" : "#111827" }}>
+                    {studyingDeck.cards.length - studyQueue.length + 1}/{studyingDeck.cards.length}
+                  </Text>
+                  {isPreviewMode && (
+                    <View style={{ backgroundColor: "rgba(99,102,241,0.18)", borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+                      <Text style={{ fontSize: 10, fontWeight: "700", color: "#818cf8", letterSpacing: 0.8 }}>PREVIEW</Text>
+                    </View>
+                  )}
+                </View>
                 <Pressable onPress={() => {
                   if (viewingInsightsQuiz) {
                     setStudyingDeck(null);
@@ -5982,139 +6316,214 @@ export default function HomeScreen() {
                 </Pressable>
               </View>
 
-              {/* Progress bar — full width teal */}
+              {/* Progress bar */}
               <View style={{ height: 4, backgroundColor: isDark ? "rgba(255,255,255,0.07)" : "#e0e0e8" }}>
                 <View style={{ height: 4, backgroundColor: "#00d4aa", width: `${((studyingDeck.cards.length - studyQueue.length + 1) / studyingDeck.cards.length) * 100}%` }} />
               </View>
 
-              {/* Card */}
-              <View style={{ flex: 1, paddingHorizontal: 28, paddingTop: 20, paddingBottom: 16 }}>
-                <Pressable onPress={() => { if (!isTypeInAnswer) flipCard(); }} style={{ width: "100%", height: "100%" }}>
-                  {/* FRONT face */}
-                  <Animated.View pointerEvents={studyFlipped ? "none" : "auto"} style={[{
+              {/* Card Stack Area — same structure as Simple Preview */}
+              <View style={{ flex: 1, padding: 16, paddingTop: 20 }}>
+
+                {/* Transparent outer wrapper — handles swipe translate + shadow */}
+                <Animated.View
+                  style={{
+                    flex: 1,
+                    shadowColor: "#000", shadowOffset: { width: 0, height: 10 },
+                    shadowOpacity: isDark ? 0.5 : 0.15, shadowRadius: 24, elevation: 10,
+                    transform: [{ translateX: swipeX }],
+                  }}
+                >
+                  {/* FRONT FACE */}
+                  <Animated.View style={{
                     position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
-                    borderRadius: 20, alignItems: "center", justifyContent: "center",
-                    backgroundColor: isDark ? "#334155" : "#ffffff", padding: 24,
-                  }, { transform: [{ translateX: swipeX }, { rotateY: frontInterpolate }], opacity: frontOpacity }]}>
-                    {renderFormattedText(frontText, { fontSize: 22, fontWeight: "400", textAlign: "center",
-                      lineHeight: 32, color: isDark ? "#ffffff" : "#0d0f14" })}
-                    {isTypeInAnswer && (
-                      <View style={{ width: "100%", marginTop: 28, gap: 12 }}>
-                        <TextInput
-                          placeholder="Type your answer…"
-                          placeholderTextColor={"rgba(255,255,255,0.4)"}
-                          style={{ backgroundColor: "rgba(0,0,0,0.1)",
-                            borderRadius: 14, paddingHorizontal: 16, paddingVertical: 13,
-                            color: isDark ? "#ffffff" : "#0d0f14", fontSize: 16, textAlign: "center",
-                            borderWidth: 1, borderColor: "rgba(255,255,255,0.1)" }}
-                          value={studyTypedAnswer} onChangeText={setStudyTypedAnswer}
-                        />
-                        <Pressable onPress={() => { setStudyChecked(true); flipCard(); }}
-                          style={({ pressed }) => [{ backgroundColor: isDark ? "#ffffff" : "#0d0f14", borderRadius: 14, height: 48,
-                            alignItems: "center", justifyContent: "center" }, pressed && styles.pressedScale]}>
-                          <Text style={{ fontSize: 15, fontWeight: "700", color: isDark ? "#000000" : "#ffffff" }}>Check Answer</Text>
-                        </Pressable>
-                      </View>
-                    )}
+                    borderRadius: 24, backgroundColor: isDark ? "#253344" : "#ffffff",
+                    backfaceVisibility: "hidden", overflow: "hidden",
+                    opacity: frontOpacity,
+                    transform: [{ perspective: 1200 }, { rotateY: frontInterpolate }],
+                  }}>
+                    {/* Speaker — top right */}
                     <Pressable
                       onPress={() => toggleSpeech(frontText)}
-                      style={({ pressed }) => ({ position: "absolute", bottom: 16, right: 16, opacity: pressed ? 0.6 : 1, padding: 8, backgroundColor: speakingText === frontText ? "rgba(255,255,255,1)" : "transparent", borderRadius: 12 })}>
-                      <Ionicons name="volume-high-outline" size={24} color={speakingText === frontText ? "#000" : (isDark ? "#ffffff" : "#0d0f14")} />
+                      style={({ pressed }) => ({ position: "absolute", top: 16, right: 16, zIndex: 10, opacity: pressed ? 0.5 : 1, padding: 8, backgroundColor: speakingText === frontText ? "rgba(255,255,255,1)" : "transparent", borderRadius: 12 })}
+                    >
+                      <Ionicons name="volume-high-outline" size={22} color={speakingText === frontText ? "#000" : (isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.28)")} />
+                    </Pressable>
+
+                    {/* Term — centred */}
+                    <Pressable onPress={() => { if (!isTypeInAnswer) flipCard(); }} style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 28, paddingVertical: 52 }}>
+                      {renderFormattedText(frontText, {
+                        fontSize: 22, fontWeight: "500",
+                        color: isDark ? "#f1f5f9" : "#111827",
+                        lineHeight: 33, letterSpacing: 0.1,
+                        textAlign: "center",
+                      })}
+                      {isTypeInAnswer && (
+                        <View style={{ width: "100%", marginTop: 28, gap: 12 }}>
+                          <TextInput
+                            placeholder="Type your answer…"
+                            placeholderTextColor={"rgba(255,255,255,0.4)"}
+                            style={{ backgroundColor: "rgba(0,0,0,0.1)",
+                              borderRadius: 14, paddingHorizontal: 16, paddingVertical: 13,
+                              color: isDark ? "#ffffff" : "#0d0f14", fontSize: 16, textAlign: "center",
+                              borderWidth: 1, borderColor: "rgba(255,255,255,0.1)" }}
+                            value={studyTypedAnswer} onChangeText={setStudyTypedAnswer}
+                          />
+                          <Pressable onPress={() => { setStudyChecked(true); flipCard(); }}
+                            style={({ pressed }) => [{ backgroundColor: isDark ? "#ffffff" : "#0d0f14", borderRadius: 14, height: 48,
+                              alignItems: "center", justifyContent: "center" }, pressed && styles.pressedScale]}>
+                            <Text style={{ fontSize: 15, fontWeight: "700", color: isDark ? "#000000" : "#ffffff" }}>Check Answer</Text>
+                          </Pressable>
+                        </View>
+                      )}
                     </Pressable>
                   </Animated.View>
 
-                  {/* BACK face */}
-                  <Animated.View pointerEvents={studyFlipped ? "auto" : "none"} style={[{
+                  {/* BACK FACE */}
+                  <Animated.View style={{
                     position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
-                    borderRadius: 20, alignItems: "center", justifyContent: "center",
-                    backgroundColor: isDark ? "#334155" : "#ffffff", padding: 24,
-                  }, { transform: [{ translateX: swipeX }, { rotateY: backInterpolate }], opacity: backOpacity }]}>
-                    {renderFormattedText(backText, { fontSize: 22, fontWeight: "400", textAlign: "center",
-                      lineHeight: 32, color: isDark ? "#ffffff" : "#0d0f14" })}
-                    {isCloze && card.back.trim() ? (
-                      <View style={{ width: "100%", marginTop: 20, paddingTop: 16,
-                        borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.1)" }}>
-                        <Text style={{ fontSize: 10, color: "rgba(255,255,255,0.4)",
-                          fontWeight: "700", letterSpacing: 1, textAlign: "center", marginBottom: 6 }}>EXTRA NOTES</Text>
-                        {renderFormattedText(card.back, { fontSize: 14, color: "#e2e8f0", textAlign: "center", lineHeight: 20 })}
-                      </View>
-                    ) : null}
-                    {isTypeInAnswer && studyChecked && (
-                      <View style={{ marginTop: 20, alignItems: "center", width: "100%" }}>
-                        {studyTypedAnswer.trim().toLowerCase() === card.back.trim().toLowerCase() ? (
-                          <View style={{ flexDirection: "row", alignItems: "center", gap: 8,
-                            backgroundColor: "rgba(34,197,94,0.2)", paddingHorizontal: 18,
-                            paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: "rgba(34,197,94,0.4)" }}>
-                            <Ionicons name="checkmark-circle" size={18} color="#4ade80" />
-                            <Text style={{ color: "#4ade80", fontWeight: "700", fontSize: 14 }}>Correct!</Text>
-                          </View>
-                        ) : (
-                          <View style={{ gap: 8, backgroundColor: "rgba(239,68,68,0.2)",
-                            paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12,
-                            alignItems: "center", width: "90%", borderWidth: 1, borderColor: "rgba(239,68,68,0.4)" }}>
-                            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                              <Ionicons name="close-circle" size={18} color="#f87171" />
-                              <Text style={{ color: "#f87171", fontWeight: "700" }}>Incorrect</Text>
-                            </View>
-                            <Text style={{ fontSize: 13, color: "#f87171", textAlign: "center" }}>
-                              Expected: <Text style={{ fontWeight: "700", color: isDark ? "#ffffff" : "#000" }}>{card.back}</Text>
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                    )}
+                    borderRadius: 24, backgroundColor: isDark ? "#253344" : "#ffffff",
+                    backfaceVisibility: "hidden", overflow: "hidden",
+                    opacity: backOpacity,
+                    transform: [{ perspective: 1200 }, { rotateY: backInterpolate }],
+                  }}>
+                    {/* Speaker — top right */}
                     <Pressable
                       onPress={() => toggleSpeech(backText)}
-                      style={({ pressed }) => ({ position: "absolute", bottom: 16, right: 16, opacity: pressed ? 0.6 : 1, padding: 8, backgroundColor: speakingText === backText ? "rgba(255,255,255,1)" : "transparent", borderRadius: 12 })}>
-                      <Ionicons name="volume-high-outline" size={24} color={speakingText === backText ? "#000" : (isDark ? "#ffffff" : "#0d0f14")} />
+                      style={({ pressed }) => ({ position: "absolute", top: 16, right: 16, zIndex: 10, opacity: pressed ? 0.5 : 1, padding: 8, backgroundColor: speakingText === backText ? "rgba(255,255,255,1)" : "transparent", borderRadius: 12 })}
+                    >
+                      <Ionicons name="volume-high-outline" size={22} color={speakingText === backText ? "#000" : (isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.28)")} />
+                    </Pressable>
+
+                    {/* Answer + extras */}
+                    <Pressable onPress={() => { if (!isTypeInAnswer) flipCard(); }} style={{ flex: 1, justifyContent: "center", paddingHorizontal: 28, paddingVertical: 40, paddingTop: 52 }}>
+                      {renderFormattedText(backText, {
+                        fontSize: 18, fontWeight: "400",
+                        color: isDark ? "#ffffff" : "#0f172a",
+                        lineHeight: 28, letterSpacing: 0.1,
+                      })}
+                      {isCloze && card.back.trim() ? (
+                        <View style={{ width: "100%", marginTop: 20, paddingTop: 16,
+                          borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.1)" }}>
+                          <Text style={{ fontSize: 10, color: "rgba(255,255,255,0.4)",
+                            fontWeight: "700", letterSpacing: 1, textAlign: "center", marginBottom: 6 }}>EXTRA NOTES</Text>
+                          {renderFormattedText(card.back, { fontSize: 14, color: "#e2e8f0", textAlign: "center", lineHeight: 20 })}
+                        </View>
+                      ) : null}
+                      {isTypeInAnswer && studyChecked && (
+                        <View style={{ marginTop: 20, alignItems: "center", width: "100%" }}>
+                          {studyTypedAnswer.trim().toLowerCase() === card.back.trim().toLowerCase() ? (
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 8,
+                              backgroundColor: "rgba(34,197,94,0.2)", paddingHorizontal: 18,
+                              paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: "rgba(34,197,94,0.4)" }}>
+                              <Ionicons name="checkmark-circle" size={18} color="#4ade80" />
+                              <Text style={{ color: "#4ade80", fontWeight: "700", fontSize: 14 }}>Correct!</Text>
+                            </View>
+                          ) : (
+                            <View style={{ gap: 8, backgroundColor: "rgba(239,68,68,0.2)",
+                              paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12,
+                              alignItems: "center", width: "90%", borderWidth: 1, borderColor: "rgba(239,68,68,0.4)" }}>
+                              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                                <Ionicons name="close-circle" size={18} color="#f87171" />
+                                <Text style={{ color: "#f87171", fontWeight: "700" }}>Incorrect</Text>
+                              </View>
+                              <Text style={{ fontSize: 13, color: "#f87171", textAlign: "center" }}>
+                                Expected: <Text style={{ fontWeight: "700", color: isDark ? "#ffffff" : "#000" }}>{card.back}</Text>
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      )}
                     </Pressable>
                   </Animated.View>
-                </Pressable>
+
+                </Animated.View>
               </View>
 
-              {/* Bottom Actions */}
-              {!studyFlipped ? (
-                <View style={{ height: 160, paddingHorizontal: 20, paddingBottom: 28, justifyContent: "flex-end", borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.1)" }}>
+              {/* Bottom Actions — fixed height so card never shifts */}
+              <View style={{ height: 160, justifyContent: "center", borderTopWidth: 1, borderTopColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)" }}>
+              {isPreviewMode ? (
+                // ── Preview mode: no rating buttons, just flip + advance ──
+                <View style={{ paddingHorizontal: 20, gap: 12 }}>
+                  {!studyFlipped ? (
+                    <Pressable
+                      onPress={() => { if (!isTypeInAnswer) flipCard(); }}
+                      style={({ pressed }) => [{ backgroundColor: "#ffffff", borderRadius: 14, height: 52, alignItems: "center", justifyContent: "center" }, pressed && { opacity: 0.8 }]}
+                    >
+                      <Text style={{ fontSize: 16, fontWeight: "700", color: "#000000" }}>Show Answer</Text>
+                    </Pressable>
+                  ) : (
+                    <Pressable
+                      onPress={() => {
+                        // Advance without updating SM2
+                        const newQueue = studyQueue.slice(1);
+                        setStudyQueue(newQueue);
+                        setStudyFlipped(false);
+                        flipAnim.setValue(0);
+                        swipeX.setValue(0);
+                        if (newQueue.length === 0) {
+                          // Restore full deck so completion screen has accurate data
+                          if (previewSourceDeckRef.current) {
+                            setStudyingDeck(previewSourceDeckRef.current);
+                            previewSourceDeckRef.current = null;
+                          }
+                          setIsPreviewMode(false);
+                        }
+                      }}
+                      style={({ pressed }) => [{ backgroundColor: isDark ? "#334155" : "#e2e8f0", borderRadius: 14, height: 52, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 }, pressed && { opacity: 0.8 }]}
+                    >
+                      <Text style={{ fontSize: 16, fontWeight: "700", color: isDark ? "#ffffff" : "#0f172a" }}>Next</Text>
+                      <Ionicons name="chevron-forward" size={18} color={isDark ? "#ffffff" : "#0f172a"} />
+                    </Pressable>
+                  )}
+                  <Text style={{ fontSize: 12, color: isDark ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.3)", textAlign: "center" }}>
+                    Preview only — no changes to your review schedule
+                  </Text>
+                </View>
+              ) : !studyFlipped ? (
+                <View style={{ paddingHorizontal: 20 }}>
                   <Pressable
-                    onPress={() => { if(!isTypeInAnswer) flipCard(); }}
-                    style={({ pressed }) => [{
-                      backgroundColor: "#ffffff",
-                      borderRadius: 12, height: 52,
-                      alignItems: "center", justifyContent: "center",
-                    }, pressed && { opacity: 0.8 }]}
+                    onPress={() => { if (!isTypeInAnswer) flipCard(); }}
+                    style={({ pressed }) => [{ backgroundColor: "#ffffff", borderRadius: 14, height: 52, alignItems: "center", justifyContent: "center" }, pressed && { opacity: 0.8 }]}
                   >
                     <Text style={{ fontSize: 16, fontWeight: "700", color: "#000000" }}>Show Answer</Text>
                   </Pressable>
                 </View>
               ) : (
-                  <View style={{ height: 160, paddingBottom: 28, paddingTop: 16, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.1)", justifyContent: "flex-end" }}>
-                    <Text style={{ textAlign: "center", fontSize: 14, color: isDark ? "#ffffff" : "#0d0f14", marginBottom: 16 }}>How well did you know this?</Text>
-                    <View style={{ flexDirection: "row", paddingHorizontal: 20, gap: 12 }}>
-                      {[
-                        { rating: "again"   as const, num: "1", label: "Again",   color: "#ef4444" },
-                        { rating: "hard"    as const, num: "2", label: "Hard",    color: "#eab308" },
-                        { rating: "good"    as const, num: "3", label: "Good",    color: "#22c55e" },
-                        { rating: "perfect" as const, num: "4", label: "Perfect", color: "#00d4aa" },
-                      ].map(({ rating, num, label, color }) => (
-                        <Pressable
-                          key={rating}
-                          onPress={() => handleSM2Rating(rating)}
-                          style={({ pressed }) => ({ flex: 1, alignItems: "center", opacity: pressed ? 0.7 : 1 })}
-                        >
-                          <View style={{
-                            width: "100%", height: 52,
-                            borderRadius: 12, borderWidth: 1.5, borderColor: color,
-                            alignItems: "center", justifyContent: "center",
-                            backgroundColor: selectedRating === rating ? color : "transparent", marginBottom: 8,
-                          }}>
-                            <Text style={{ fontSize: 20, fontWeight: "700", color: selectedRating === rating ? (rating === "hard" || rating === "perfect" ? "#000" : "#fff") : color }}>{num}</Text>
-                          </View>
-                          <Text style={{ fontSize: 13, fontWeight: "600", color: isDark ? "#ffffff" : "#0d0f14" }}>{label}</Text>
-                        </Pressable>
-                      ))}
-                    </View>
+                <View>
+                  <Text style={{ textAlign: "center", fontSize: 14, color: isDark ? "#ffffff" : "#0d0f14", marginBottom: 14 }}>How well did you know this?</Text>
+                  <View style={{ flexDirection: "row", paddingHorizontal: 20, gap: 12 }}>
+                    {[
+                      { rating: "again"   as const, num: "1", label: "Again",   color: "#ef4444" },
+                      { rating: "hard"    as const, num: "2", label: "Hard",    color: "#eab308" },
+                      { rating: "good"    as const, num: "3", label: "Good",    color: "#22c55e" },
+                      { rating: "perfect" as const, num: "4", label: "Perfect", color: "#00d4aa" },
+                    ].map(({ rating, num, label, color }) => (
+                      <Pressable
+                        key={rating}
+                        onPress={() => handleSM2Rating(rating)}
+                        style={({ pressed }) => ({ flex: 1, alignItems: "center", transform: [{ scale: pressed ? 0.92 : 1 }] })}
+                      >
+                        {({ pressed }) => (
+                          <>
+                            <View style={{
+                              width: "100%", height: 52,
+                              borderRadius: 12, borderWidth: 1.5, borderColor: color,
+                              alignItems: "center", justifyContent: "center",
+                              backgroundColor: selectedRating === rating || pressed ? color : "transparent", marginBottom: 8,
+                            }}>
+                              <Text style={{ fontSize: 20, fontWeight: "700", color: (selectedRating === rating || pressed) ? (rating === "hard" || rating === "perfect" ? "#000" : "#fff") : color }}>{num}</Text>
+                            </View>
+                            <Text style={{ fontSize: 13, fontWeight: "600", color: isDark ? "#ffffff" : "#0d0f14", textAlign: "center" }}>
+                              {label}
+                            </Text>
+                          </>
+                        )}
+                      </Pressable>
+                    ))}
                   </View>
+                </View>
               )}
+              </View>
             </View>
           );
         }
@@ -6468,10 +6877,10 @@ export default function HomeScreen() {
 
                   {/* Info */}
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 15, fontWeight: "500", color: "#f1f0ff" }} numberOfLines={1}>
+                    <Text style={{ fontSize: 15, fontWeight: "500", color: txt }} numberOfLines={1}>
                       {firebaseUser ? getUserFullName(firebaseUser) : "Guest"}
                     </Text>
-                    <Text style={{ fontSize: 11, color: "#ffffff", marginTop: 3, fontWeight: "300" }} numberOfLines={1}>
+                    <Text style={{ fontSize: 11, color: muted, marginTop: 3, fontWeight: "300" }} numberOfLines={1}>
                       {firebaseUser ? firebaseUser.email ?? "" : "// sign in to sync your data"}
                     </Text>
                   </View>
@@ -7386,6 +7795,40 @@ export default function HomeScreen() {
         };
 
         const handleStart = () => {
+          if (selectedStudyMode === "spaced" && dueCards.length === 0) {
+            // No due cards — go straight to the completion screen instead of an alert
+            setStudyModeModalVisible(false);
+            const savedDeck = flashcardDecks.find((d: any) => d.id === `temp-${quiz?.id}`);
+            const savedCardsMap = new Map((savedDeck?.cards || []).map((c: any) => [c.id, c]));
+            const mergedCards = allCards.map((c: any, i: number) => {
+              const cardId = c.id || `fc-${i}`;
+              const saved = savedCardsMap.get(cardId) as any;
+              return {
+                ...c, id: cardId,
+                sm2_interval:       saved?.sm2_interval       ?? c.sm2_interval       ?? 0,
+                sm2_repetition:     saved?.sm2_repetition     ?? c.sm2_repetition     ?? 0,
+                sm2_easeFactor:     saved?.sm2_easeFactor     ?? c.sm2_easeFactor     ?? 2.5,
+                sm2_state:          saved?.sm2_state          ?? c.sm2_state          ?? CardState.NEW,
+                sm2_nextReviewDate: saved?.sm2_nextReviewDate ?? c.sm2_nextReviewDate ?? null,
+              };
+            });
+            const tempDeck = { id: `temp-${quiz?.id}`, neonId: null,
+              title: quiz?.title || "Flashcards", cardType: "Basic", cards: mergedCards };
+            setFlashcardDecks((prev: any[]) => {
+              const exists = prev.find((d: any) => d.id === tempDeck.id);
+              return exists
+                ? prev.map((d: any) => d.id === tempDeck.id ? { ...d, cards: mergedCards } : d)
+                : [...prev, tempDeck];
+            });
+            setStudyingDeck(tempDeck);
+            setStudyQueue([]);         // empty queue → completion screen
+            setIsPreviewMode(false);
+            flipAnim.setValue(0);
+            swipeX.setValue(0);
+            setActiveTab("flashcards" as any);
+            return;
+          }
+
           setStudyModeModalVisible(false);
           if (selectedStudyMode === "simple") {
             setFcIndex(0);
@@ -7396,126 +7839,178 @@ export default function HomeScreen() {
             setActiveTab("insights-flashcard" as any);
           } else {
             const limit = getLimit();
-            const baseCards = dueCards.length > 0 ? dueCards : allCards;
-            const cardsToStudy = limit ? baseCards.slice(0, limit) : baseCards;
+
+            // Look up any previously saved SM2 progress for this quiz's flashcards
+            const savedDeck = flashcardDecks.find((d: any) => d.id === `temp-${quiz?.id}`);
+            const savedCardsMap = new Map((savedDeck?.cards || []).map((c: any) => [c.id, c]));
+
+            // Merge SM2 data from saved deck into the current flashcards
+            const mergedCards = allCards.map((c: any, i: number) => {
+              const cardId = c.id || `fc-${i}`;
+              const saved = savedCardsMap.get(cardId) as any;
+              return {
+                ...c,
+                id: cardId,
+                sm2_interval:       saved?.sm2_interval       ?? c.sm2_interval       ?? 0,
+                sm2_repetition:     saved?.sm2_repetition     ?? c.sm2_repetition     ?? 0,
+                sm2_easeFactor:     saved?.sm2_easeFactor     ?? c.sm2_easeFactor     ?? 2.5,
+                sm2_state:          saved?.sm2_state          ?? c.sm2_state          ?? CardState.NEW,
+                sm2_nextReviewDate: saved?.sm2_nextReviewDate ?? c.sm2_nextReviewDate ?? null,
+              };
+            });
+
+            // Filter for due cards — add 5s buffer so "again" cards (nextReviewDate ≈ now) always qualify
+            const now = Date.now() + 5000;
+            const mergedDue = mergedCards.filter((c: any) => !c.sm2_nextReviewDate || c.sm2_nextReviewDate <= now);
+
+            if (mergedDue.length === 0) {
+              // No due cards — go straight to the completion screen instead of an alert
+              setStudyModeModalVisible(false);
+              const tempDeck = { id: `temp-${quiz?.id}`, neonId: null,
+                title: quiz?.title || "Flashcards", cardType: "Basic", cards: mergedCards };
+              setFlashcardDecks((prev: any[]) => {
+                const exists = prev.find((d: any) => d.id === tempDeck.id);
+                return exists
+                  ? prev.map((d: any) => d.id === tempDeck.id ? { ...d, cards: mergedCards } : d)
+                  : [...prev, tempDeck];
+              });
+              setStudyingDeck(tempDeck);
+              setStudyQueue([]);         // empty queue → completion screen
+              setIsPreviewMode(false);
+              flipAnim.setValue(0);
+              swipeX.setValue(0);
+              setActiveTab("flashcards" as any);
+              return;
+            }
+
+            const cardsToStudy = limit ? mergedDue.slice(0, limit) : mergedDue;
             const tempDeck = {
               id: `temp-${quiz?.id}`,
               neonId: null,
               title: quiz?.title || "Flashcards",
               cardType: "Basic",
-              cards: cardsToStudy.map((c: any, i: number) => ({
-                ...c,
-                id: c.id || `fc-${i}`,
-                sm2_interval: c.sm2_interval ?? 0,
-                sm2_repetition: c.sm2_repetition ?? 0,
-                sm2_easeFactor: c.sm2_easeFactor ?? 2.5,
-              }))
+              cards: cardsToStudy,
             };
+
+            // Save/update the temp deck in state so SM2 data persists
+            setFlashcardDecks((prev: any[]) => {
+              const exists = prev.find((d: any) => d.id === tempDeck.id);
+              if (exists) {
+                return prev.map((d: any) => d.id === tempDeck.id ? { ...d, cards: mergedCards } : d);
+              }
+              return [...prev, { ...tempDeck, cards: mergedCards }];
+            });
+
             startStudy(tempDeck, false);
             setActiveTab("flashcards" as any);
           }
         };
 
         return (
-          <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: isDark ? "#0d1117" : "#f4f4f8" }}>
-            {/* Header */}
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 56, paddingBottom: 24 }}>
-              <Text style={{ fontSize: 22, fontWeight: "700", color: "#ffffff" }}>Study Mode</Text>
-              <Pressable onPress={() => setStudyModeModalVisible(false)} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 6 })}>
-                <Ionicons name="close" size={26} color={isDark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.6)"} />
-              </Pressable>
-            </View>
-
-            <View style={{ paddingHorizontal: 20, flex: 1 }}>
-              {/* Spaced Repetition option */}
-              <Pressable
-                onPress={() => setSelectedStudyMode("spaced")}
-                style={({ pressed }) => ({
-                  flexDirection: "row", alignItems: "center",
-                  backgroundColor: "transparent",
-                  borderRadius: 16, padding: 18, marginBottom: 14,
-                  borderWidth: 2,
-                  borderColor: selectedStudyMode === "spaced" ? "#00d4aa" : "rgba(255,255,255,0.4)",
-                  opacity: pressed ? 0.85 : 1,
-                })}
-              >
-                <Text style={{ fontSize: 26, marginRight: 14 }}>🧠</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 16, fontWeight: "700", color: "#ffffff", marginBottom: 3 }}>Spaced Repetition</Text>
-                  <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.45)" }}>Optimizes retention with smart scheduling</Text>
-                </View>
-                <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: selectedStudyMode === "spaced" ? "#00d4aa" : "rgba(255,255,255,0.4)", alignItems: "center", justifyContent: "center" }}>
-                  {selectedStudyMode === "spaced" && <View style={{ width: 11, height: 11, borderRadius: 6, backgroundColor: "#00d4aa" }} />}
-                </View>
-              </Pressable>
-
-              {/* Simple Review option */}
-              <Pressable
-                onPress={() => setSelectedStudyMode("simple")}
-                style={({ pressed }) => ({
-                  flexDirection: "row", alignItems: "center",
-                  backgroundColor: "transparent",
-                  borderRadius: 16, padding: 18, marginBottom: 28,
-                  borderWidth: 2,
-                  borderColor: selectedStudyMode === "simple" ? "#00d4aa" : "rgba(255,255,255,0.4)",
-                  opacity: pressed ? 0.85 : 1,
-                })}
-              >
-                <Text style={{ fontSize: 26, marginRight: 14 }}>📋</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 16, fontWeight: "700", color: "#ffffff", marginBottom: 3 }}>Simple Review</Text>
-                  <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.45)" }}>Browse all cards at your own pace</Text>
-                </View>
-                <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: selectedStudyMode === "simple" ? "#00d4aa" : "rgba(255,255,255,0.3)", alignItems: "center", justifyContent: "center" }}>
-                  {selectedStudyMode === "simple" && <View style={{ width: 11, height: 11, borderRadius: 6, backgroundColor: "#00d4aa" }} />}
-                </View>
-              </Pressable>
-
-              <View>
-                  <Text style={{ fontSize: 14, color: "rgba(255,255,255,0.6)", marginBottom: 14 }}>
-                    How many flashcards would you like to study?
-                  </Text>
-                  <View style={{ flexDirection: "row", gap: 10, marginBottom: 10 }}>
-                    {(["auto", 10, 20] as const).map(opt => {
-                      const isActive = studyCardCount === opt;
-                      return (
-                        <Pressable
-                          key={String(opt)}
-                          onPress={() => setStudyCardCount(opt)}
-                          style={({ pressed }) => ({
-                            paddingHorizontal: 22, paddingVertical: 11, borderRadius: 12,
-                            backgroundColor: isActive ? "#ffffff" : "transparent",
-                            borderWidth: 1.5,
-                            borderColor: isActive ? "#ffffff" : "rgba(255,255,255,0.4)",
-                            opacity: pressed ? 0.75 : 1,
-                          })}
-                        >
-                          <Text style={{ fontSize: 14, fontWeight: "600", color: isActive ? "#000000" : "#ffffff" }}>
-                            {opt === "auto" ? "Auto" : String(opt)}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
+          <Modal
+            visible={studyModeModalVisible}
+            animationType="slide"
+            transparent={true}
+            onRequestClose={() => setStudyModeModalVisible(false)}
+          >
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+              <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }} onPress={() => setStudyModeModalVisible(false)}>
+                <View style={[{
+                  backgroundColor: isDark ? "#1E293B" : "#ffffff",
+                  borderTopLeftRadius: 28, borderTopRightRadius: 28,
+                  paddingBottom: Platform.OS === "ios" ? 36 : 24,
+                  paddingTop: 12,
+                  width: "100%",
+                  maxHeight: "90%",
+                  marginTop: "auto"
+                }, !isDark && {
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: -2 },
+                  shadowOpacity: 0.1,
+                  shadowRadius: 10,
+                  elevation: 10
+                }]} onStartShouldSetResponder={() => true}>
+                  
+                  {/* Drag handle */}
+                  <View style={{ alignItems: "center", paddingBottom: 16 }}>
+                    <View style={{ width: 36, height: 4, borderRadius: 2,
+                      backgroundColor: isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.12)" }} />
                   </View>
-                  <Text style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>{countLabel}</Text>
-                </View>
-            </View>
 
-            {/* Start Flashcards button — pinned to bottom */}
-            <View style={{ paddingHorizontal: 20, paddingBottom: 36, paddingTop: 12 }}>
-              <Pressable
-                onPress={handleStart}
-                style={({ pressed }) => ({
-                  backgroundColor: "#ffffff",
-                  borderRadius: 16, paddingVertical: 18,
-                  alignItems: "center",
-                  opacity: pressed ? 0.85 : 1,
-                })}
-              >
-                <Text style={{ fontSize: 16, fontWeight: "600", color: "#000000" }}>Start Flashcards</Text>
-              </Pressable>
+                  {/* Header */}
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingBottom: 24 }}>
+                    <Text style={{ fontSize: 22, fontWeight: "700", color: isDark ? "#ffffff" : "#0d0f14" }}>Study Mode</Text>
+                <Pressable onPress={() => setStudyModeModalVisible(false)} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 6 })}>
+                  <Ionicons name="close" size={26} color={isDark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.6)"} />
+                </Pressable>
+              </View>
+
+              <ScrollView style={{ paddingHorizontal: 20 }}>
+                {/* Spaced Repetition option */}
+                <Pressable
+                  onPress={() => setSelectedStudyMode("spaced")}
+                  style={({ pressed }) => ({
+                    flexDirection: "row", alignItems: "center",
+                    backgroundColor: "transparent",
+                    borderRadius: 16, padding: 18, marginBottom: 14,
+                    borderWidth: 2,
+                    borderColor: selectedStudyMode === "spaced" ? "#6366f1" : (isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)"),
+                    opacity: pressed ? 0.85 : 1,
+                  })}
+                >
+                  <Text style={{ fontSize: 26, marginRight: 14 }}>🧠</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 16, fontWeight: "700", color: isDark ? "#ffffff" : "#0d0f14", marginBottom: 3 }}>Spaced Repetition</Text>
+                    <Text style={{ fontSize: 13, color: isDark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.7)" }}>Optimizes retention with smart scheduling</Text>
+                  </View>
+                  <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: selectedStudyMode === "spaced" ? "#6366f1" : (isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.2)"), alignItems: "center", justifyContent: "center" }}>
+                    {selectedStudyMode === "spaced" && <View style={{ width: 11, height: 11, borderRadius: 6, backgroundColor: "#6366f1" }} />}
+                  </View>
+                </Pressable>
+
+                {/* Simple Review option */}
+                <Pressable
+                  onPress={() => setSelectedStudyMode("simple")}
+                  style={({ pressed }) => ({
+                    flexDirection: "row", alignItems: "center",
+                    backgroundColor: "transparent",
+                    borderRadius: 16, padding: 18, marginBottom: 28,
+                    borderWidth: 2,
+                    borderColor: selectedStudyMode === "simple" ? "#6366f1" : (isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)"),
+                    opacity: pressed ? 0.85 : 1,
+                  })}
+                >
+                  <Text style={{ fontSize: 26, marginRight: 14 }}>📋</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 16, fontWeight: "700", color: isDark ? "#ffffff" : "#0d0f14", marginBottom: 3 }}>Simple Review</Text>
+                    <Text style={{ fontSize: 13, color: isDark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.7)" }}>Browse all cards at your own pace</Text>
+                  </View>
+                  <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: selectedStudyMode === "simple" ? "#6366f1" : (isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.2)"), alignItems: "center", justifyContent: "center" }}>
+                    {selectedStudyMode === "simple" && <View style={{ width: 11, height: 11, borderRadius: 6, backgroundColor: "#6366f1" }} />}
+                  </View>
+                </Pressable>
+
+
+              </ScrollView>
+
+              {/* Start Flashcards button — pinned to bottom */}
+              <View style={{ paddingHorizontal: 20, paddingBottom: 16, paddingTop: 12 }}>
+                <Pressable
+                  onPress={handleStart}
+                  style={({ pressed }) => ({
+                    backgroundColor: "#6366f1",
+                    borderRadius: 16, paddingVertical: 18,
+                    alignItems: "center",
+                    opacity: pressed ? 0.85 : 1,
+                  })}
+                >
+                  <Text style={{ fontSize: 16, fontWeight: "700", color: "#ffffff" }}>Start Flashcards</Text>
+                </Pressable>
+              </View>
             </View>
-          </View>
+            </Pressable>
+            </KeyboardAvoidingView>
+          </Modal>
         );
       })()}
     </View>

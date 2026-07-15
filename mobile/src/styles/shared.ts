@@ -383,7 +383,7 @@ export const styles = StyleSheet.create({
   },
   startQuizBtn: {
     backgroundColor: "#6366f1",
-    height: 48,
+    paddingVertical: 16,
     borderRadius: 12,
     flexDirection: "row",
     alignItems: "center",

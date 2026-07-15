@@ -12,6 +12,8 @@ import { Buffer } from "buffer";
 import * as mammoth from "mammoth/mammoth.browser.js";
 
 
+import { deleteMobileQuiz } from "../../lib/api";
+import { getUserErrorMessage } from "../../utils/errors";
 import { styles } from "../../styles/shared";
 import { AnimatedPressable } from "../ui/AnimatedPressable";
 import { Stepper } from "../ui/Stepper";
@@ -1752,11 +1754,11 @@ export function AppModals({ p }: { p: any }) {
                             setTimeout(() => (p.handleGenerateWithAI || (() => {}))(text, fileName), 150);
                           } catch (err: any) {
                             (p.setIsImporting || (() => {}))(false);
-                            Alert.alert("Error", err.message);
+                            Alert.alert("Error", typeof __DEV__ !== 'undefined' && __DEV__ ? err.message : getUserErrorMessage(err));
                           }
                         }, 50);
                       }
-                    } catch (err: any) { Alert.alert("Error", err.message); }
+                    } catch (err: any) { Alert.alert("Error", typeof __DEV__ !== 'undefined' && __DEV__ ? err.message : getUserErrorMessage(err)); }
                   }, 350);
                 }
               }}
@@ -1868,7 +1870,7 @@ export function AppModals({ p }: { p: any }) {
                           } catch (err: any) {
                             if (ext === "pdf" || ext === "docx") {
                               (p.setIsImporting || (() => {}))(false);
-                              Alert.alert("Error", `Failed to parse ${ext.toUpperCase()} file.\n\n${err.message}`);
+                              Alert.alert("Error", typeof __DEV__ !== 'undefined' && __DEV__ ? `Failed to parse ${ext.toUpperCase()} file.\n\n${err.message}` : getUserErrorMessage(err));
                               return;
                             }
                             try {
@@ -1877,13 +1879,13 @@ export function AppModals({ p }: { p: any }) {
                               setTimeout(() => (p.handleImportQst || (() => {}))(textFallback, fileName, fileUri), 150);
                             } catch (err2: any) {
                               (p.setIsImporting || (() => {}))(false);
-                              Alert.alert("Error", `Could not read the file. Make sure it is a valid .txt, .docx, or .pdf file.\n\n${err.message}`);
+                              Alert.alert("Error", typeof __DEV__ !== 'undefined' && __DEV__ ? `Could not read the file. Make sure it is a valid .txt, .docx, or .pdf file.\n\n${err.message}` : getUserErrorMessage(err));
                             }
                           }
                         }, 50);
                       }
                     } catch (err: any) {
-                      Alert.alert("Error", "Failed to open file picker: " + err.message);
+                      Alert.alert("Error", typeof __DEV__ !== 'undefined' && __DEV__ ? "Failed to open file picker: " + err.message : getUserErrorMessage(err));
                     }
                   }, 350);
                 }
