@@ -1402,6 +1402,15 @@ export default function HomeScreen() {
       }
     });
 
+    if (correctCount === 0 && wrongCount === 0) {
+      if (exitSession) {
+        setActiveSession(null);
+      } else {
+        setActiveSession((prev: any) => prev ? { ...prev, attemptSaved: true } : prev);
+      }
+      return;
+    }
+
     const scorePct = questions.length > 0 ? Math.round((correctCount / questions.length) * 100) : 0;
     const targetAttemptId = sessionToSave.targetAttemptId;
     const retryOfAttemptNum = sessionToSave.retryOfAttemptNum;
@@ -1769,6 +1778,95 @@ export default function HomeScreen() {
     );
   };
 
+  const renderBookmarkedQuestionsView = () => {
+    if (!viewingInsightsQuiz) return null;
+    const quiz = viewingInsightsQuiz;
+    const isDark = settingsDarkMode;
+    // Match the global root container background
+    const bg = isDark ? "#0f172a" : "#f4f4f8";
+    const textMain = isDark ? "#ffffff" : "#0d0f14";
+    const textSub = isDark ? "#9ca3af" : "#6b7280";
+    const cardBg = isDark ? "#1e293b" : "#ffffff";
+    const border = isDark ? "#334155" : "#e5e7eb";
+
+    const bookmarkedQs = (quiz.id === "sample_quiz" ? SAMPLE_QUIZ.questionsList : (quiz.questionsList || [])).filter((q: any) => starredQuestions.has(q.id));
+
+    return (
+      <View style={{ flex: 1, backgroundColor: bg }}>
+        {/* Header matching Flashcard Options */}
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: Platform.OS === 'ios' ? 60 : 40, paddingBottom: 24 }}>
+          <Pressable onPress={() => setActiveTab("insights")} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 6, marginLeft: -6 })}>
+            <Ionicons name="arrow-back" size={24} color={isDark ? "#ffffff" : "#0f172a"} />
+          </Pressable>
+          <Text style={{ fontSize: 18, fontWeight: "700", color: isDark ? "#ffffff" : "#0d0f14" }}>Bookmarked Questions</Text>
+          {/* Use width: 36 to perfectly center the title against the 24px icon + 12px padding */}
+          <View style={{ width: 36 }} />
+        </View>
+
+        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 100 }}>
+          {bookmarkedQs.length === 0 ? (
+            <View style={{ alignItems: "center", paddingVertical: 40, marginTop: 40 }}>
+              <Ionicons name="bookmark-outline" size={64} color={isDark ? "rgba(255,255,255,0.15)" : "#cbd5e1"} style={{ marginBottom: 16 }} />
+              <Text style={{ fontSize: 16, color: textSub, textAlign: "center" }}>No bookmarked questions yet.</Text>
+            </View>
+          ) : (
+            <View style={{ gap: 16 }}>
+              <Pressable 
+                onPress={() => playQuizDirectly({ ...quiz, questionsList: bookmarkedQs }, "all")}
+                style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: isDark ? "#6366f1" : "#4f46e5", paddingVertical: 14, borderRadius: 12, marginBottom: 12 }, pressed && { opacity: 0.8 }]}
+              >
+                <Ionicons name="play" size={18} color="#fff" />
+                <Text style={{ color: "#fff", fontWeight: "600", fontSize: 16 }}>Attempt Bookmarked</Text>
+              </Pressable>
+              {bookmarkedQs.map((q: any, i: number) => {
+                const isBookmarked = starredQuestions.has(q.id);
+                return (
+                <View key={q.id} style={{ padding: 16, borderRadius: 16, backgroundColor: cardBg, borderWidth: 1, borderColor: border }}>
+                  <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
+                    <Text style={{ flex: 1, fontSize: 16, fontWeight: "700", color: isDark ? "#f8fafc" : "#111827", lineHeight: 24 }}>
+                      <Text style={{ color: isDark ? "#64748b" : "#9ca3af" }}>#{i + 1} </Text>
+                      {q.prompt}
+                    </Text>
+                    <Pressable onPress={() => setStarredQuestions(prev => {
+                      const next = new Set(prev);
+                      if (next.has(q.id)) next.delete(q.id);
+                      else next.add(q.id);
+                      return next;
+                    })} style={{ paddingLeft: 12 }}>
+                      <Ionicons name={isBookmarked ? "bookmark" : "bookmark-outline"} size={22} color={isBookmarked ? (isDark ? "#94a3b8" : "#64748b") : (isDark ? "#64748b" : "#9ca3af")} />
+                    </Pressable>
+                  </View>
+                  
+                  <View style={{ gap: 8 }}>
+                    {(q.options || []).map((opt: any, optIdx: number) => {
+                      const isCorrect = opt.isCorrect;
+                      return (
+                        <View key={optIdx} style={[
+                          { padding: 14, borderRadius: 12 },
+                          isCorrect 
+                            ? { backgroundColor: isDark ? "rgba(16, 185, 129, 0.15)" : "rgba(16, 185, 129, 0.1)" }
+                            : { backgroundColor: "transparent" }
+                        ]}>
+                          <Text style={{ 
+                            fontSize: 15, 
+                            color: isCorrect ? (isDark ? "#34d399" : "#059669") : (isDark ? "#94a3b8" : "#4b5563"),
+                            fontWeight: isCorrect ? "500" : "400"
+                          }}>
+                            {opt.text}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+              )})}
+            </View>
+          )}
+        </ScrollView>
+      </View>
+    );
+  };
+
   const renderInsightsView = () => {
     if (!viewingInsightsQuiz) return null;
     const quiz = viewingInsightsQuiz;
@@ -1895,24 +1993,6 @@ export default function HomeScreen() {
                 </View>
                 <Feather name="chevron-right" size={18} color={textSub} />
               </Pressable>
-                  ) : (
-                    <View style={{ gap: 12 }}>
-                      <Pressable 
-                        onPress={() => playQuizDirectly({ ...quiz, questionsList: bookmarkedQs }, "all")}
-                        style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: isDark ? "#6366f1" : "#4f46e5", paddingVertical: 12, borderRadius: 12, marginBottom: 8 }}
-                      >
-                        <Ionicons name="play" size={16} color="#fff" />
-                        <Text style={{ color: "#fff", fontWeight: "600", fontSize: 14 }}>Attempt Bookmarked</Text>
-                      </Pressable>
-                      {bookmarkedQs.map((q: any) => (
-                        <View key={q.id} style={{ padding: 12, borderRadius: 12, backgroundColor: isDark ? "rgba(255,255,255,0.03)" : "#f9fafb" }}>
-                          <Text style={{ fontSize: 13, color: textMain, lineHeight: 18 }}>{q.prompt}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-                </View>
-              )}
             </View>
           );
         })()}
@@ -5071,6 +5151,8 @@ export default function HomeScreen() {
         return renderInsightsView();
       case "insights-flashcard":
         return renderFlashcardsView();
+      case "bookmarked-questions":
+        return renderBookmarkedQuestionsView();
       case "battle":
         return renderBattleLobbyView();
 
@@ -7776,7 +7858,7 @@ export default function HomeScreen() {
 
           {/* Bottom Tab Bar — Quizlet-style (hidden during focused editing and study sessions to maximize screen real estate and prevent keyboard overlaps) */}
           {!( (activeTab === "add" && creationMode !== "pick") || activeTab === ("flashcards" as any) || activeTab === ("insights-flashcard" as any) ) && (() => {
-            const effectiveTab = activeTab === "insights" ? viewingInsightsQuizFromTab : activeTab;
+            const effectiveTab = (activeTab === "insights" || activeTab === "bookmarked-questions") ? viewingInsightsQuizFromTab : activeTab;
             return (
             <View style={[
               styles.bottomTabBar,
@@ -8021,18 +8103,18 @@ export default function HomeScreen() {
             onRequestClose={() => setStudyModeModalVisible(false)}
           >
             <KeyboardAvoidingView style={{ flex: 1, backgroundColor: isDark ? "#0f172a" : "#f4f4f8" }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-              <View style={{ flex: 1, paddingTop: Platform.OS === "ios" ? 60 : 40 }}>
+              <View style={{ flex: 1, paddingTop: Platform.OS === "ios" ? 60 : 64 }}>
 
 
                   {/* Header */}
                   <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingBottom: 24 }}>
-                    <Text style={{ fontSize: 22, fontWeight: "700", color: isDark ? "#ffffff" : "#0d0f14" }}>Study Mode</Text>
+                    <Text style={{ fontSize: 24, fontWeight: "500", color: isDark ? "#ffffff" : "#0d0f14", fontFamily: "serif" }}>Study Mode</Text>
                 <Pressable onPress={() => setStudyModeModalVisible(false)} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 6 })}>
-                  <Ionicons name="close" size={26} color={isDark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.6)"} />
+                  <Feather name="x" size={24} color={isDark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.6)"} />
                 </Pressable>
               </View>
 
-              <ScrollView style={{ paddingHorizontal: 20 }}>
+              <ScrollView style={{ paddingHorizontal: 20 }} contentContainerStyle={{ paddingBottom: 100 }}>
                 {/* Spaced Repetition option */}
                 <Pressable
                   onPress={() => setSelectedStudyMode("spaced")}
@@ -8041,17 +8123,19 @@ export default function HomeScreen() {
                     backgroundColor: "transparent",
                     borderRadius: 16, padding: 18, marginBottom: 14,
                     borderWidth: 2,
-                    borderColor: selectedStudyMode === "spaced" ? "#6366f1" : (isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)"),
+                    borderColor: selectedStudyMode === "spaced" ? "#34d399" : (isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"),
                     opacity: pressed ? 0.85 : 1,
                   })}
                 >
-                  <Text style={{ fontSize: 26, marginRight: 14 }}>🧠</Text>
+                  <View style={{ width: 40, alignItems: "center", justifyContent: "center", marginRight: 14 }}>
+                    <Text style={{ fontSize: 26 }}>🧠</Text>
+                  </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 16, fontWeight: "700", color: isDark ? "#ffffff" : "#0d0f14", marginBottom: 3 }}>Spaced Repetition</Text>
+                    <Text style={{ fontSize: 16, fontWeight: "600", color: isDark ? "#ffffff" : "#0d0f14", marginBottom: 3 }}>Spaced Repetition</Text>
                     <Text style={{ fontSize: 13, color: isDark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.7)" }}>Optimizes retention with smart scheduling</Text>
                   </View>
-                  <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: selectedStudyMode === "spaced" ? "#6366f1" : (isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.2)"), alignItems: "center", justifyContent: "center" }}>
-                    {selectedStudyMode === "spaced" && <View style={{ width: 11, height: 11, borderRadius: 6, backgroundColor: "#6366f1" }} />}
+                  <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: selectedStudyMode === "spaced" ? "#34d399" : (isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.2)"), alignItems: "center", justifyContent: "center" }}>
+                    {selectedStudyMode === "spaced" && <View style={{ width: 11, height: 11, borderRadius: 6, backgroundColor: "#34d399" }} />}
                   </View>
                 </Pressable>
 
@@ -8063,17 +8147,19 @@ export default function HomeScreen() {
                     backgroundColor: "transparent",
                     borderRadius: 16, padding: 18, marginBottom: 28,
                     borderWidth: 2,
-                    borderColor: selectedStudyMode === "simple" ? "#6366f1" : (isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)"),
+                    borderColor: selectedStudyMode === "simple" ? "#34d399" : (isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"),
                     opacity: pressed ? 0.85 : 1,
                   })}
                 >
-                  <Text style={{ fontSize: 26, marginRight: 14 }}>📋</Text>
+                  <View style={{ width: 40, alignItems: "center", justifyContent: "center", marginRight: 14 }}>
+                    <Text style={{ fontSize: 26 }}>📋</Text>
+                  </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 16, fontWeight: "700", color: isDark ? "#ffffff" : "#0d0f14", marginBottom: 3 }}>Simple Review</Text>
+                    <Text style={{ fontSize: 16, fontWeight: "600", color: isDark ? "#ffffff" : "#0d0f14", marginBottom: 3 }}>Simple Review</Text>
                     <Text style={{ fontSize: 13, color: isDark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.7)" }}>Browse all cards at your own pace</Text>
                   </View>
-                  <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: selectedStudyMode === "simple" ? "#6366f1" : (isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.2)"), alignItems: "center", justifyContent: "center" }}>
-                    {selectedStudyMode === "simple" && <View style={{ width: 11, height: 11, borderRadius: 6, backgroundColor: "#6366f1" }} />}
+                  <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: selectedStudyMode === "simple" ? "#34d399" : (isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.2)"), alignItems: "center", justifyContent: "center" }}>
+                    {selectedStudyMode === "simple" && <View style={{ width: 11, height: 11, borderRadius: 6, backgroundColor: "#34d399" }} />}
                   </View>
                 </Pressable>
 
@@ -8081,17 +8167,15 @@ export default function HomeScreen() {
               </ScrollView>
 
               {/* Start Flashcards button — pinned to bottom */}
-              <View style={{ paddingHorizontal: 20, paddingBottom: 16, paddingTop: 12 }}>
+              <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingHorizontal: 20, paddingBottom: Platform.OS === "ios" ? 44 : 36, paddingTop: 16, backgroundColor: isDark ? "#0f172a" : "#f4f4f8" }}>
                 <Pressable
                   onPress={handleStart}
-                  style={({ pressed }) => ({
-                    backgroundColor: "#6366f1",
-                    borderRadius: 16, paddingVertical: 18,
-                    alignItems: "center",
-                    opacity: pressed ? 0.85 : 1,
-                  })}
+                  style={({ pressed }) => [
+                    { backgroundColor: "#ffffff", borderRadius: 12, paddingVertical: 18, alignItems: "center" },
+                    pressed && { opacity: 0.8 },
+                  ]}
                 >
-                  <Text style={{ fontSize: 16, fontWeight: "700", color: "#ffffff" }}>Start Flashcards</Text>
+                  <Text style={{ fontSize: 16, fontWeight: "700", color: "#000000" }}>Start Flashcards</Text>
                 </Pressable>
               </View>
             </View>
