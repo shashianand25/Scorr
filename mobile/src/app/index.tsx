@@ -7309,10 +7309,9 @@ export default function HomeScreen() {
                       const quizPct = attempts.length > 0 ? Math.min(Math.round((uniqueCount / qCount) * 100), 100) : null;
                       const multiplier = quiz.multiplier;
 
-                      // ── Flashcard progress ──────────────────────────────
+                      // ── Flashcard due count only ──────────────────
                       const allFlashcards = quiz.flashcards || [];
                       const fcTotal = allFlashcards.length;
-                      // Find persisted SM-2 state from flashcardDecks (keyed by temp-{quizId})
                       const linkedDeck = flashcardDecks.find((d: any) => d.id === `temp-${quiz.id}`);
                       const fcCardsWithState = fcTotal > 0
                         ? allFlashcards.map((c: any, idx: number) => {
@@ -7321,25 +7320,18 @@ export default function HomeScreen() {
                             return saved ?? c;
                           })
                         : [];
-                      const fcMastered = fcCardsWithState.filter((c: any) =>
-                        (c.sm2_repetition ?? 0) >= 2 && (c.sm2_interval ?? 0) >= 3
-                      ).length;
-                      const fcSeen = fcCardsWithState.filter((c: any) => !!c.sm2_nextReviewDate).length;
-                      const fcPct = fcTotal > 0 ? Math.min(Math.round((fcSeen / fcTotal) * 100), 100) : null;
                       const fcDue = fcCardsWithState.filter((c: any) =>
                         c.sm2_nextReviewDate && c.sm2_nextReviewDate <= Date.now()
                       ).length;
+                      const fcNew = fcTotal > 0 && fcCardsWithState.every((c: any) => !c.sm2_nextReviewDate);
 
+                      // Left-edge accent — driven by quiz mastery only
                       let cardColor = "#5b6080";
                       if (quizPct !== null) {
                         if (quizPct >= 75) cardColor = "#2dd4a7";
                         else if (quizPct >= 25) cardColor = "#8b8ff0";
                         else cardColor = "#f0a13c";
                       }
-
-                      const fcColor = fcPct !== null
-                        ? (fcPct >= 75 ? "#a855f7" : fcPct >= 25 ? "#818cf8" : "#f59e0b")
-                        : "#5b6080";
 
                       return (
                         <AnimatedPressable
@@ -7356,85 +7348,65 @@ export default function HomeScreen() {
                           }}
                           scaleTo={0.97}
                         >
+                          {/* Left accent bar */}
                           <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, backgroundColor: cardColor }} />
-                          
-                          <View style={{ padding: 18, paddingLeft: 20 }}>
-                            {/* Title row */}
-                            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
-                              <Text style={{ fontSize: 15, fontWeight: "500", color: txt, letterSpacing: -0.2, flex: 1 }}
-                                numberOfLines={1}>
+
+                          <View style={{ padding: 16, paddingLeft: 20 }}>
+
+                            {/* Row 1: Title + due badge + chevron */}
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                              <Text
+                                style={{ fontSize: 15, fontWeight: "500", color: txt, letterSpacing: -0.2, flex: 1 }}
+                                numberOfLines={1}
+                              >
                                 {quiz.title}
                               </Text>
-                              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                                {quiz.isSample && (
-                                  <View style={{ backgroundColor: isDark ? "rgba(139,143,240,0.18)" : "rgba(99,102,241,0.1)", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 }}>
-                                    <Text style={{ fontSize: 10, fontWeight: "700", color: isDark ? "#a5a8f5" : "#6366f1", letterSpacing: 0.5 }}>SAMPLE</Text>
-                                  </View>
-                                )}
-                                {quiz.category === "AI Generated" && (
-                                  <Ionicons name="sparkles" size={11} color={muted} style={{ opacity: 0.45 }} />
-                                )}
-                                <Feather name="chevron-right" size={16} color={muted} style={{ marginTop: 2 }} />
-                              </View>
-                            </View>
 
-                            {/* Meta tags */}
-                            <View style={{ flexDirection: "row", gap: 12, marginTop: 8, flexWrap: "wrap" }}>
-                              <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                                <Ionicons name="help-circle-outline" size={14} color={muted} />
-                                <Text style={{ fontSize: 12, color: muted }}>{quiz.questions} {t('actions.questions') || "questions"}</Text>
-                              </View>
-                              <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                                <Ionicons name="refresh-outline" size={14} color={muted} />
-                                <Text style={{ fontSize: 12, color: muted }}>{attempts.length} {t('actions.attempts') || "attempts"}</Text>
-                              </View>
+                              {/* Due badge — purple, only when actionable */}
                               {fcTotal > 0 && fcDue > 0 && (
-                                <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                                  <Ionicons name="albums-outline" size={14} color="#a855f7" />
-                                  <Text style={{ fontSize: 12, color: "#a855f7", fontWeight: "600" }}>{fcDue} due</Text>
-                                </View>
-                              )}
-                              {multiplier && multiplier > 1 && (
-                                <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                                  <Ionicons name="flash-outline" size={14} color={muted} />
-                                  <Text style={{ fontSize: 12, color: muted }}>{multiplier}× streak</Text>
-                                </View>
-                              )}
-                            </View>
-
-                            {/* Bottom: dual progress bars */}
-                            <View style={{ marginTop: 14, gap: 6 }}>
-                              {/* Quiz progress */}
-                              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                                <View style={{ flexDirection: "row", alignItems: "center", gap: 3, width: 72 }}>
-                                  <Ionicons name="help-circle-outline" size={11} color={quizPct !== null ? cardColor : muted} />
-                                  <Text style={{ fontSize: 11, color: quizPct !== null ? cardColor : muted, fontWeight: quizPct !== null ? "600" : "400" }}>
-                                    {quizPct !== null ? `${quizPct}%` : "—"}
+                                <View style={{
+                                  backgroundColor: isDark ? "rgba(168,85,247,0.18)" : "rgba(168,85,247,0.1)",
+                                  borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3,
+                                  borderWidth: 1, borderColor: isDark ? "rgba(168,85,247,0.4)" : "rgba(168,85,247,0.25)",
+                                }}>
+                                  <Text style={{ fontSize: 11, fontWeight: "700", color: "#a855f7" }}>
+                                    {fcDue} due
                                   </Text>
                                 </View>
-                                <View style={{ flex: 1, height: 4, backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", borderRadius: 2, marginLeft: 6 }}>
-                                  {quizPct !== null && (
-                                    <View style={{ height: "100%", borderRadius: 2, width: `${quizPct}%` as any, backgroundColor: cardColor }} />
-                                  )}
-                                </View>
-                              </View>
-                              {/* Flashcard progress */}
-                              {fcTotal > 0 && (
-                                <View style={{ flexDirection: "row", alignItems: "center" }}>
-                                  <View style={{ flexDirection: "row", alignItems: "center", gap: 3, width: 72 }}>
-                                    <Ionicons name="albums-outline" size={11} color={fcPct !== null ? fcColor : muted} />
-                                    <Text style={{ fontSize: 11, color: fcPct !== null ? fcColor : muted, fontWeight: fcPct !== null ? "600" : "400" }}>
-                                      {fcPct !== null ? `${fcPct}%` : "—"}
-                                    </Text>
-                                  </View>
-                                  <View style={{ flex: 1, height: 4, backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", borderRadius: 2, marginLeft: 6 }}>
-                                    {fcPct !== null && (
-                                      <View style={{ height: "100%", borderRadius: 2, width: `${fcPct}%` as any, backgroundColor: fcColor }} />
-                                    )}
-                                  </View>
+                              )}
+
+                              {/* New badge — flashcards exist but never studied */}
+                              {fcTotal > 0 && fcNew && (
+                                <View style={{
+                                  backgroundColor: isDark ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.08)",
+                                  borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3,
+                                  borderWidth: 1, borderColor: isDark ? "rgba(99,102,241,0.35)" : "rgba(99,102,241,0.2)",
+                                }}>
+                                  <Text style={{ fontSize: 11, fontWeight: "700", color: isDark ? "#818cf8" : "#6366f1" }}>
+                                    new
+                                  </Text>
                                 </View>
                               )}
+
+                              {quiz.isSample && (
+                                <View style={{ backgroundColor: isDark ? "rgba(139,143,240,0.18)" : "rgba(99,102,241,0.1)", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 }}>
+                                  <Text style={{ fontSize: 10, fontWeight: "700", color: isDark ? "#a5a8f5" : "#6366f1", letterSpacing: 0.5 }}>SAMPLE</Text>
+                                </View>
+                              )}
+                              {quiz.category === "AI Generated" && (
+                                <Ionicons name="sparkles" size={11} color={muted} style={{ opacity: 0.45 }} />
+                              )}
+                              <Feather name="chevron-right" size={16} color={muted} />
                             </View>
+
+                            {/* Row 2: Single plain-text meta line — no bars, no charts */}
+                            <Text style={{ fontSize: 12, color: muted, marginTop: 6 }}>
+                              {quiz.questions} {t('actions.questions') || "questions"}
+                              {attempts.length > 0 ? `  ·  ${attempts.length} ${t('actions.attempts') || "attempts"}` : ""}
+                              {quizPct !== null ? `  ·  Quiz ${quizPct}%` : ""}
+                              {multiplier && multiplier > 1 ? `  ·  ${multiplier}× streak` : ""}
+                            </Text>
+
                           </View>
                         </AnimatedPressable>
                       );
