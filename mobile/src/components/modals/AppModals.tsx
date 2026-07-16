@@ -49,9 +49,19 @@ export function AppModals({ p }: { p: any }) {
   })();
 
   const [showMoreQuizOptions, setShowMoreQuizOptions] = React.useState(false);
+  const [quizPreset, setQuizPreset] = React.useState<"marathon"|"timed"|"pop"|"exam"|"mistakes"|"custom">("marathon");
+  const [quizSetupStep, setQuizSetupStep] = React.useState<"presets"|"custom">("presets");
+
   React.useEffect(() => {
     if (!p.showQuizActions) setShowMoreQuizOptions(false);
   }, [p.showQuizActions]);
+
+  React.useEffect(() => {
+    if (p.selectedQuiz) {
+      setQuizSetupStep("presets");
+      setQuizPreset("marathon");
+    }
+  }, [p.selectedQuiz]);
 
   return (
 
@@ -766,17 +776,17 @@ export function AppModals({ p }: { p: any }) {
               {/* Drag Handle */}
               <View style={{ width: 40, height: 4, backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)", borderRadius: 2, alignSelf: "center", marginBottom: 24 }} />
               
-              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 28 }}>
-                <View>
-                  <Text style={{ fontSize: 22, fontWeight: "700", color: p.settingsDarkMode ? "#ffffff" : "#0d0f14", letterSpacing: -0.5 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 16, marginBottom: 32 }}>
+                <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: p.settingsDarkMode ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.1)", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "rgba(99,102,241,0.3)", shadowColor: "#6366f1", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12 }}>
+                  <Text style={{ fontSize: 28 }}>🎯</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 24, fontWeight: "800", color: p.settingsDarkMode ? "#ffffff" : "#0d0f14", letterSpacing: -0.5 }}>
                     Attempt #{p.selectedAttemptForModal.attemptNum}
                   </Text>
-                  <Text style={{ fontSize: 13, color: p.settingsDarkMode ? "#94a3b8" : "#64748b", marginTop: 6 }}>
+                  <Text style={{ fontSize: 14, fontWeight: "600", color: p.settingsDarkMode ? "#94a3b8" : "#64748b", marginTop: 4 }}>
                     Score: {p.selectedAttemptForModal.attempt.score}% • {p.selectedAttemptForModal.attempt.correct} correct
                   </Text>
-                </View>
-                <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: p.settingsDarkMode ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.1)", alignItems: "center", justifyContent: "center" }}>
-                  <Ionicons name="bar-chart" size={24} color="#6366f1" />
                 </View>
               </View>
               
@@ -815,19 +825,25 @@ export function AppModals({ p }: { p: any }) {
                         }
                       }
                     }}
-                    style={({ pressed }) => [
-                      { flexDirection: "row", alignItems: "center", padding: 16, borderRadius: 20, backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.03)" : "#f8fafc", borderWidth: 1, borderColor: p.settingsDarkMode ? "rgba(255,255,255,0.05)" : "#e2e8f0" },
-                      pressed && { opacity: 0.7, backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.06)" : "#f1f5f9" }
-                    ]}
+                    style={({ pressed }) => ({
+                      backgroundColor: p.settingsDarkMode ? "#172033" : "#ffffff",
+                      borderRadius: 20, padding: 20, flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+                      borderWidth: 1, borderColor: p.settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)",
+                      opacity: pressed ? 0.8 : 1
+                    })}
                   >
-                    <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(245, 158, 11, 0.12)", alignItems: "center", justifyContent: "center", marginRight: 14 }}>
-                      <Ionicons name="refresh" size={20} color="#f59e0b" />
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
+                      <Text style={{ fontSize: 24 }}>🔄</Text>
+                      <View>
+                        <Text style={{ fontSize: 16, fontWeight: "700", color: p.settingsDarkMode ? "#ffffff" : "#111827" }}>
+                          {t('profile.re_attempt_wrong') || "Re-attempt Incorrect"}
+                        </Text>
+                        <Text style={{ fontSize: 13, fontWeight: "500", color: p.settingsDarkMode ? "#94a3b8" : "#64748b", marginTop: 4 }}>
+                          {(p.selectedAttemptForModal?.attempt?.wrongQuestionIds || []).length} {t('profile.missed_questions') || "missed questions"}
+                        </Text>
+                      </View>
                     </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 16, fontWeight: "600", color: p.settingsDarkMode ? "#ffffff" : "#0f172a" }}>{t('profile.re_attempt_wrong') || "Re-attempt Incorrect"}</Text>
-                      <Text style={{ fontSize: 12, color: p.settingsDarkMode ? "#94a3b8" : "#64748b", marginTop: 2 }}>{(p.selectedAttemptForModal?.attempt?.wrongQuestionIds || []).length} {t('profile.missed_questions') || "missed questions"}</Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={18} color={p.settingsDarkMode ? "#6e727a" : "#94a3b8"} />
+                    <Ionicons name="chevron-forward" size={20} color={p.settingsDarkMode ? "#6e727a" : "#94a3b8"} />
                   </Pressable>
                 )}
                 {/* Delete Attempt Action */}
@@ -836,16 +852,18 @@ export function AppModals({ p }: { p: any }) {
                     (p.handleDeleteAttemptOnMobile || (() => {}))(p.selectedAttemptForModal.quizId, p.selectedAttemptForModal.attempt.id);
                     (p.setSelectedAttemptForModal || (() => {}))(null);
                   }}
-                  style={({ pressed }) => [
-                    { flexDirection: "row", alignItems: "center", padding: 16, borderRadius: 20, backgroundColor: p.settingsDarkMode ? "rgba(239, 68, 68, 0.05)" : "rgba(239, 68, 68, 0.05)", borderWidth: 1, borderColor: "rgba(239, 68, 68, 0.15)", marginTop: 12 },
-                    pressed && { opacity: 0.7, backgroundColor: "rgba(239, 68, 68, 0.1)" }
-                  ]}
+                  style={({ pressed }) => ({
+                    backgroundColor: p.settingsDarkMode ? "rgba(239, 68, 68, 0.05)" : "rgba(239, 68, 68, 0.05)",
+                    borderRadius: 20, padding: 20, flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+                    borderWidth: 1, borderColor: "rgba(239, 68, 68, 0.15)",
+                    opacity: pressed ? 0.8 : 1
+                  })}
                 >
-                  <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(239, 68, 68, 0.12)", alignItems: "center", justifyContent: "center", marginRight: 14 }}>
-                    <Feather name="trash-2" size={18} color="#ef4444" />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 16, fontWeight: "600", color: "#ef4444" }}>{t('profile.delete_attempt') || "Delete Attempt"}</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
+                    <Text style={{ fontSize: 24 }}>🗑️</Text>
+                    <Text style={{ fontSize: 16, fontWeight: "700", color: "#ef4444" }}>
+                      {t('profile.delete_attempt') || "Delete Attempt"}
+                    </Text>
                   </View>
                 </Pressable>
               </View>
@@ -1179,386 +1197,277 @@ export function AppModals({ p }: { p: any }) {
       </Modal>
       )}
 
+      
       {/* Quiz Options Popup Modal (Sleek Compact Format) */}
-        {p.selectedQuiz != null && (
-      <Modal
-        visible={true}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => closeOrDismiss(() => (p.setSelectedQuiz || (() => {}))(null))}
-      >
-        <KeyboardWrapper
-          style={{ flex: 1 }}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+      {p.selectedQuiz != null && (
+        <Modal
+          visible={true}
+          animationType="fade"
+          transparent={false}
+          onRequestClose={() => closeOrDismiss(() => { (p.setSelectedQuiz || (() => {}))(null); setQuizSetupStep("presets"); })}
         >
-          <Pressable style={styles.modalBackdrop} onPress={() => (p.setSelectedQuiz || (() => {}))(null)}>
-            <View style={[{
-              backgroundColor: p.settingsDarkMode ? "#1E293B" : "#ffffff",
-              borderTopLeftRadius: 28, borderTopRightRadius: 28,
-              paddingBottom: Platform.OS === "ios" ? 36 : 24,
-              paddingHorizontal: 20,
-              paddingTop: 12,
-              width: "100%",
-              maxHeight: "85%",
-              overflow: "hidden",
-              marginTop: "auto"
-            }, !p.settingsDarkMode && styles.lightModal]} onStartShouldSetResponder={() => true}>
-            {/* Drag handle */}
-            <View style={{ alignItems: "center", paddingBottom: 16 }}>
-              <View style={{ width: 36, height: 4, borderRadius: 2,
-                backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.12)" }} />
-            </View>
-
-            {/* Header */}
-            <View style={[styles.optionsHeader, !p.settingsDarkMode && styles.lightBorder]}>
-              <View style={{ flex: 1, marginRight: 8 }}>
-                <Text style={[styles.optionsTitle, !p.settingsDarkMode && styles.lightText]} numberOfLines={1}>
-                  {p.selectedQuiz?.title}
-                </Text>
-                <Text style={[styles.optionsSubtitle, !p.settingsDarkMode && styles.lightTextSub]}>
-                  {totalQuestions} Questions Available
-                </Text>
-              </View>
-              <Pressable
-                onPress={() => (p.setSelectedQuiz || (() => {}))(null)}
-                style={styles.optionsCloseButton}
-              >
-                <Feather name="x" size={20} color="#888888" />
-              </Pressable>
-            </View>
-
-            <ScrollView
-              style={styles.optionsScroll}
-              contentContainerStyle={{ paddingBottom: 20 }}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            >
-              {/* Question Selection Section */}
-              <Text style={[styles.optionsSectionTitle, !p.settingsDarkMode && styles.lightTextSub]}>Question Selection</Text>
-              <View 
-                style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 }}
-              >
-                {[
-                  { value: "all" as const, label: "All" },
-                  {
-                    value: "wrong" as const,
-                    label: "Wrong",
-                    disabled: wrongCount === 0,
-                  },
-                  { value: "range" as const, label: "Range" },
-                  {
-                    value: "unanswered" as const,
-                    label: "Unanswered",
-                    disabled: unansweredCount === 0,
-                  },
-                  { value: "random" as const, label: "Random" },
-                ].map(({ value, label, disabled }) => {
-                  const isActive = p.selectionMode === value;
-                  return (
-                    <Pressable
-                      key={value}
-                      disabled={disabled}
-                      onPress={() => (p.setSelectionMode || (() => {}))(value)}
-                      style={[
-                        styles.chipBtn,
-                        !p.settingsDarkMode && styles.lightCard,
-                        isActive && styles.chipBtnActive,
-                        disabled && styles.chipBtnDisabled,
-                      ]}
-                    >
-                      <Text style={[
-                        styles.chipText,
-                        !p.settingsDarkMode && styles.lightText,
-                        isActive && styles.chipTextActive,
-                        disabled && styles.chipTextDisabled,
-                      ]}>
-                        {label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-              {/* Unified Controls Row to Prevent Layout Shifts */}
-              <View style={[styles.compactControlsRow, !p.settingsDarkMode && styles.lightCard, { minHeight: 48 }]}>
-                {p.selectionMode === "random" ? (
-                  <>
-                    <Text style={[styles.compactControlLabel, !p.settingsDarkMode && styles.lightText]}>Random Count</Text>
-                    <Stepper
-                      value={p.randomCount}
-                      min={1}
-                      max={totalQuestions}
-                      onChange={(val) => (p.setRandomCount || (() => {}))(val)}
-                      darkMode={p.settingsDarkMode}
-                    />
-                  </>
-                ) : p.selectionMode === "range" ? (
-                  <>
-                    <Text style={[styles.compactControlLabel, !p.settingsDarkMode && styles.lightText]}>Set Range</Text>
-                    <View style={styles.rangeStepperGroup}>
-                      <Stepper
-                        value={p.rangeStart}
-                        min={1}
-                        max={p.rangeEnd}
-                        onChange={(val) => (p.setRangeStart || (() => {}))(val)}
-                        darkMode={p.settingsDarkMode}
-                      />
-                      <Text style={[styles.rangeToText, !p.settingsDarkMode && styles.lightTextSub]}>to</Text>
-                      <Stepper
-                        value={p.rangeEnd}
-                        min={p.rangeStart}
-                        max={totalQuestions}
-                        onChange={(val) => (p.setRangeEnd || (() => {}))(val)}
-                        darkMode={p.settingsDarkMode}
-                      />
-                    </View>
-                  </>
-                ) : (
-                  <>
-                    <Text style={[styles.compactControlLabel, !p.settingsDarkMode && styles.lightText]}>
-                      {p.selectionMode === "all" ? "Total Questions" : p.selectionMode === "wrong" ? "Wrong Answers" : "Unanswered"}
-                    </Text>
-                    <Stepper
-                      value={p.selectionMode === "all" ? totalQuestions : p.selectionMode === "wrong" ? wrongCount : unansweredCount}
-                      min={1}
-                      max={totalQuestions}
-                      onChange={() => {}}
-                      darkMode={p.settingsDarkMode}
-                      disabled={true}
-                    />
-                  </>
-                )}
-              </View>
-
-              {/* Timer & Gameplay Options (Sleek Combined iOS-style Card) */}
-              <Text style={[styles.optionsSectionTitle, !p.settingsDarkMode && styles.lightTextSub]}>Gameplay Configurations</Text>
-              <View style={[styles.sectionCardCompact, !p.settingsDarkMode && styles.lightCard]}>
-                {/* Time Limit Row */}
-                <View style={[styles.switchRowCompact, { alignItems: "center", zIndex: 10, position: "relative" }]}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.switchLabelCompact, !p.settingsDarkMode && styles.lightText]}>Quiz time limit</Text>
-                    <Text style={[styles.switchSubCompact, !p.settingsDarkMode && styles.lightTextSub]}>
-                      {p.timeLimitText ? `Auto-submits after ${p.timeLimitText} min` : (p.quizTimeLimit !== null ? `Auto-submits after ${p.quizTimeLimit} min` : "No time limit")}
-                    </Text>
+          <KeyboardWrapper style={{ flex: 1, backgroundColor: p.settingsDarkMode ? "#0f172a" : "#f4f4f8" }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+            <View style={{ flex: 1, paddingTop: Platform.OS === "ios" ? 60 : 64 }}>
+              
+              
+              {/* ── UNIFIED OPTIONS SCREEN ── */}
+              <>
+                <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 40 }}>
+                  <View style={{ flex: 1, marginRight: 12 }}>
+                    <Text style={{ fontSize: 24, fontWeight: "500", color: p.settingsDarkMode ? "#ffffff" : "#0d0f14", fontFamily: "serif" }}>How would you like to study?</Text>
                   </View>
+                  <Pressable onPress={() => closeOrDismiss(() => { (p.setSelectedQuiz || (() => {}))(null); setQuizSetupStep("presets"); })} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 6 })}>
+                    <Feather name="x" size={24} color={p.settingsDarkMode ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.6)"} />
+                  </Pressable>
+                </View>
 
-                  {/* Input chip + chevron */}
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                    <View style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 3,
-                      backgroundColor: p.settingsDarkMode ? "#1c2235" : "#ffffff",
-                      borderWidth: 1,
-                      borderColor: (p.timeLimitText || p.quizTimeLimit !== null)
-                        ? (p.settingsDarkMode ? "#4f52a0" : "#c7c9f5")
-                        : (p.settingsDarkMode ? "#252d40" : "#e8eaee"),
-                      borderRadius: 10,
-                      paddingHorizontal: 11,
-                      paddingVertical: 7,
-                      shadowColor: (p.timeLimitText || p.quizTimeLimit !== null) ? "#6366f1" : "#000000",
-                      shadowOffset: { width: 0, height: 2 },
-                      shadowOpacity: (p.timeLimitText || p.quizTimeLimit !== null) ? 0.25 : 0.08,
-                      shadowRadius: (p.timeLimitText || p.quizTimeLimit !== null) ? 6 : 3,
-                      elevation: (p.timeLimitText || p.quizTimeLimit !== null) ? 4 : 2,
-                    }}>
-                      <TextInput
-                        value={p.timeLimitText}
-                        onChangeText={(t) => {
-                          // Allow free typing — only digits, max 3 chars
-                          const clean = t.replace(/[^0-9]/g, "").slice(0, 3);
-                          (p.setTimeLimitText || (() => {}))(clean);
-                        }}
-                        onBlur={() => {
-                          // Commit to p.quizTimeLimit on blur
-                          const n = parseInt(p.timeLimitText, 10);
-                          if (!p.timeLimitText || isNaN(n) || n < 1) {
-                            (p.setQuizTimeLimit || (() => {}))(null);
-                            (p.setTimeLimitText || (() => {}))("");
-                          } else if (n > 180) {
-                            (p.setQuizTimeLimit || (() => {}))(180);
-                            (p.setTimeLimitText || (() => {}))("180");
-                          } else {
-                            (p.setQuizTimeLimit || (() => {}))(n);
-                          }
-                        }}
-                        placeholder="—"
-                        placeholderTextColor={p.settingsDarkMode ? "#3a4260" : "#bbbec8"}
-                        keyboardType="number-pad"
-                        maxLength={3}
-                        style={{
-                          color: p.timeLimitText
-                            ? (p.settingsDarkMode ? "#a5b4fc" : "#4f46e5")
-                            : (p.settingsDarkMode ? "#3a4260" : "#bbbec8"),
-                          fontSize: 14,
-                          fontWeight: "700",
-                          width: 30,
-                          textAlign: "center",
-                          padding: 0,
-                          margin: 0,
-                        }}
-                      />
-                      <Text style={{
-                        color: p.quizTimeLimit !== null
-                          ? (p.settingsDarkMode ? "#818cf8" : "#6366f1")
-                          : (p.settingsDarkMode ? "#3a4260" : "#bbbec8"),
-                        fontSize: 12,
-                        fontWeight: "600",
-                      }}>min</Text>
-                    </View>
-
-                    {/* Dropdown toggle chevron */}
-                    <Pressable
-                      onPress={() => (p.setShowTimeLimitDropdown || (() => {}))((v: any) => !v)}
-                      style={({ pressed }) => ({
-                        width: 30,
-                        height: 30,
-                        borderRadius: 8,
-                        alignItems: "center",
-                        justifyContent: "center",
-                        backgroundColor: p.showTimeLimitDropdown
-                          ? (p.settingsDarkMode ? "rgba(99,102,241,0.18)" : "rgba(99,102,241,0.1)")
-                          : "transparent",
-                        opacity: pressed ? 0.6 : 1,
-                      })}
-                    >
-                      <Ionicons
-                        name={p.showTimeLimitDropdown ? "chevron-up" : "chevron-down"}
-                        size={16}
-                        color={p.settingsDarkMode ? "#6366f1" : "#4f46e5"}
-                      />
-                    </Pressable>
-                  </View>
-
-                  {/* Floating Preset dropdown */}
-                  {p.showTimeLimitDropdown && (
-                    <>
-                      {/* Invisible overlay to catch outside clicks */}
-                      <Pressable
-                        style={{
-                          position: "absolute",
-                          top: -1000,
-                          bottom: -1000,
-                          left: -1000,
-                          right: -1000,
-                          zIndex: 90,
-                        }}
-                        onPress={() => (p.setShowTimeLimitDropdown || (() => {}))(false)}
-                      />
-                      <View style={{
-                        position: "absolute",
-                        top: "100%",
-                        right: 16,
-                        marginTop: 4,
-                        backgroundColor: p.settingsDarkMode ? "#1e2436" : "#ffffff",
-                        borderRadius: 12,
-                        width: 150,
-                        maxHeight: 240,
-                        shadowColor: "#000",
-                        shadowOffset: { width: 0, height: 6 },
-                        shadowOpacity: p.settingsDarkMode ? 0.4 : 0.1,
-                        shadowRadius: 16,
-                        elevation: 20,
-                        borderWidth: 1,
-                        borderColor: p.settingsDarkMode ? "#2a3142" : "#eaecf0",
-                        zIndex: 100,
-                      }}>
-                        <ScrollView
-                          showsVerticalScrollIndicator={true}
-                          contentContainerStyle={{ padding: 6 }}
-                          nestedScrollEnabled={true}
-                          scrollEnabled={true}
-                          style={{ borderRadius: 12 }}
-                        >
-                          {[null, 5, 10, 15, 30, 60].map((preset) => {
-                            const isActive = p.quizTimeLimit === preset;
-                            const label = preset === null ? "No limit" : `${preset} min`;
-                            return (
-                              <Pressable
-                                key={String(preset)}
-                                onPress={() => {
-                                  (p.setQuizTimeLimit || (() => {}))(preset);
-                                  // Sync local text state with preset value
-                                  (p.setTimeLimitText || (() => {}))(preset !== null ? String(preset) : "");
-                                  (p.setShowTimeLimitDropdown || (() => {}))(false);
-                                }}
-                                style={({ pressed }) => ({
-                                  paddingHorizontal: 12,
-                                  paddingVertical: 10,
-                                  borderRadius: 8,
-                                  backgroundColor: isActive
-                                    ? (p.settingsDarkMode ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.08)")
-                                    : (pressed ? (p.settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)") : "transparent"),
-                                  flexDirection: "row",
-                                  alignItems: "center",
-                                  justifyContent: "space-between",
-                                })}
-                              >
-                                <Text style={{
-                                  fontSize: 14,
-                                  fontWeight: isActive ? "700" : "500",
-                                  color: isActive 
-                                    ? (p.settingsDarkMode ? "#818cf8" : "#4f46e5") 
-                                    : (p.settingsDarkMode ? "#cbd5e1" : "#475569"),
-                                }}>{label}</Text>
-                                {isActive && (
-                                  <Ionicons name="checkmark" size={16} color={p.settingsDarkMode ? "#818cf8" : "#4f46e5"} />
-                                )}
-                              </Pressable>
-                            );
+                <ScrollView style={{ paddingHorizontal: 20 }} contentContainerStyle={{ paddingBottom: 100 }}>
+                  {[
+                    { id: "marathon", title: "Marathon", sub: "All questions, no timer", icon: "help-circle", color: "#3b82f6" },
+                    { id: "timed", title: "Timed", sub: "60s per question", icon: "hourglass-outline", color: "#f59e0b" },
+                    { id: "pop", title: "Pop Quiz", sub: "10 random questions", icon: "flash", color: "#ef4444" },
+                    { id: "exam", title: "Exam", sub: "Timed, shuffled, no feedback", icon: "document-text", color: "#eab308" },
+                    { id: "mistakes", title: "Mistakes", sub: "Review incorrect answers", icon: "bandage", color: "#f97316" },
+                    { id: "custom", title: "Custom", sub: "Configure your own settings", icon: "build", color: "#6366f1" },
+                  ].map((preset) => {
+                    const isActive = quizPreset === preset.id;
+                    return (
+                      <React.Fragment key={preset.id}>
+                        <Pressable
+                          onPress={() => {
+                            setQuizPreset(preset.id as any);
+                            if (preset.id === "marathon") {
+                              (p.setSelectionMode || (()=>{}))("all");
+                              (p.setQuizTimeLimit || (()=>{}))(null);
+                              (p.setTimeLimitText || (()=>{}))("");
+                              (p.setShuffleQuestions || (()=>{}))(false);
+                              (p.setShuffleAnswers || (()=>{}))(false);
+                              (p.setShowAnswerOnSubmit || (()=>{}))(true);
+                            } else if (preset.id === "timed") {
+                              (p.setSelectionMode || (()=>{}))("all");
+                              (p.setQuizTimeLimit || (()=>{}))(null);
+                              (p.setQuizPerQuestionTimer || (()=>{}))(60);
+                              (p.setTimeLimitText || (()=>{}))("");
+                              (p.setShuffleQuestions || (()=>{}))(false);
+                              (p.setShuffleAnswers || (()=>{}))(false);
+                              (p.setShowAnswerOnSubmit || (()=>{}))(true);
+                            } else if (preset.id === "pop") {
+                              (p.setSelectionMode || (()=>{}))("random");
+                              (p.setRandomCount || (()=>{}))(Math.min(10, totalQuestions));
+                              (p.setQuizTimeLimit || (()=>{}))(null);
+                              (p.setTimeLimitText || (()=>{}))("");
+                            } else if (preset.id === "exam") {
+                              (p.setSelectionMode || (()=>{}))("all");
+                              (p.setQuizTimeLimit || (()=>{}))(Math.ceil(totalQuestions));
+                              (p.setTimeLimitText || (()=>{}))(String(Math.ceil(totalQuestions)));
+                              (p.setShuffleQuestions || (()=>{}))(true);
+                              (p.setShuffleAnswers || (()=>{}))(true);
+                              (p.setShowAnswerOnSubmit || (()=>{}))(false);
+                            } else if (preset.id === "mistakes") {
+                              (p.setSelectionMode || (()=>{}))("wrong");
+                              (p.setQuizTimeLimit || (()=>{}))(null);
+                              (p.setTimeLimitText || (()=>{}))("");
+                            } else if (preset.id === "custom") {
+                              (p.setSelectionMode || (()=>{}))("range");
+                            }
+                          }}
+                          style={({ pressed }) => ({
+                            flexDirection: "row", alignItems: "center",
+                            backgroundColor: "transparent",
+                            borderRadius: 16, paddingVertical: 14, paddingHorizontal: 16, marginBottom: 10,
+                            borderWidth: 2,
+                            borderColor: isActive ? "#34d399" : (p.settingsDarkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"),
+                            opacity: pressed ? 0.85 : 1,
                           })}
-                        </ScrollView>
-                      </View>
-                    </>
-                  )}
+                        >
+                          <View style={{ width: 40, alignItems: "center", justifyContent: "center", marginRight: 14 }}>
+                            <Ionicons name={preset.icon as any} size={32} color={preset.color} />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 16, fontWeight: "600", color: p.settingsDarkMode ? "#ffffff" : "#0d0f14", marginBottom: 3 }}>{preset.title}</Text>
+                            <Text style={{ fontSize: 13, color: p.settingsDarkMode ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.7)" }}>{preset.sub}</Text>
+                          </View>
+                          <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: isActive ? "#34d399" : (p.settingsDarkMode ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.2)"), alignItems: "center", justifyContent: "center" }}>
+                            {isActive && <View style={{ width: 11, height: 11, borderRadius: 6, backgroundColor: "#34d399" }} />}
+                          </View>
+                        </Pressable>
+
+                        {/* Expandable Custom Settings */}
+                        {isActive && preset.id === "custom" && (
+                          <View style={{ marginTop: 4, marginBottom: 24, paddingHorizontal: 4 }}>
+                            <Text style={{ fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, color: p.settingsDarkMode ? "#64748b" : "#64748b", marginBottom: 16 }}>
+                              Question Selection
+                            </Text>
+
+                            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
+                              {[
+                                { value: "all" as const, label: "All" },
+                                { value: "wrong" as const, label: "Wrong", disabled: wrongCount === 0 },
+                                { value: "range" as const, label: "Range" },
+                                { value: "unanswered" as const, label: "Unanswered", disabled: unansweredCount === 0 },
+                                { value: "random" as const, label: "Random" },
+                              ].map(({ value, label, disabled }) => {
+                                const isActiveSel = p.selectionMode === value;
+                                return (
+                                  <Pressable
+                                    key={value}
+                                    disabled={disabled}
+                                    onPress={() => (p.setSelectionMode || (() => {}))(value)}
+                                    style={[
+                                      { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, backgroundColor: p.settingsDarkMode ? "#1e293b" : "#ffffff", borderWidth: 1, borderColor: "transparent" },
+                                      isActiveSel && { backgroundColor: p.settingsDarkMode ? "#475569" : "#334155", borderColor: p.settingsDarkMode ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.2)" },
+                                      disabled && { opacity: 0.4 },
+                                      !isActiveSel && p.settingsDarkMode && { backgroundColor: "#1e293b" },
+                                      !isActiveSel && !p.settingsDarkMode && { borderColor: "#e5e7eb" }
+                                    ]}
+                                  >
+                                    <Text style={[
+                                      { fontSize: 14, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#334155" },
+                                      isActiveSel && { color: "#ffffff" },
+                                    ]}>
+                                      {label}
+                                    </Text>
+                                  </Pressable>
+                                );
+                              })}
+                            </View>
+
+                            <View style={{ padding: 16, borderRadius: 16, marginBottom: 32, backgroundColor: p.settingsDarkMode ? "#171f33" : "#ffffff", borderWidth: 1, borderColor: p.settingsDarkMode ? "rgba(255,255,255,0.05)" : "#e5e7eb", minHeight: 60, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                              {p.selectionMode === "random" ? (
+                                <>
+                                  <Text style={{ fontSize: 15, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#334155" }}>Random Count</Text>
+                                  <Stepper value={p.randomCount} min={1} max={totalQuestions} onChange={(v) => (p.setRandomCount || (()=>{ }))(v)} darkMode={p.settingsDarkMode} />
+                                </>
+                              ) : p.selectionMode === "range" ? (
+                                <>
+                                  <Text style={{ fontSize: 15, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#334155" }}>Set Range</Text>
+                                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                                    <Stepper value={p.rangeStart} min={1} max={p.rangeEnd} onChange={(v) => (p.setRangeStart || (()=>{ }))(v)} darkMode={p.settingsDarkMode} />
+                                    <Text style={{ fontSize: 13, fontWeight: "600", color: p.settingsDarkMode ? "#94a3b8" : "#64748b" }}>to</Text>
+                                    <Stepper value={p.rangeEnd} min={p.rangeStart} max={totalQuestions} onChange={(v) => (p.setRangeEnd || (()=>{ }))(v)} darkMode={p.settingsDarkMode} />
+                                  </View>
+                                </>
+                              ) : (
+                                <>
+                                  <Text style={{ fontSize: 15, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#334155" }}>
+                                    {p.selectionMode === "all" ? "Total Questions" : p.selectionMode === "wrong" ? "Wrong Answers" : "Unanswered"}
+                                  </Text>
+                                  <Stepper value={p.selectionMode === "all" ? totalQuestions : p.selectionMode === "wrong" ? wrongCount : unansweredCount} min={1} max={totalQuestions} onChange={() => {}} darkMode={p.settingsDarkMode} disabled={true} />
+                                </>
+                              )}
+                            </View>
+
+                            <Text style={{ fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, color: p.settingsDarkMode ? "#64748b" : "#64748b", marginBottom: 16 }}>
+                              Gameplay Configurations
+                            </Text>
+
+                            <View style={{ borderRadius: 20, backgroundColor: p.settingsDarkMode ? "#171f33" : "#ffffff", borderWidth: 1, borderColor: p.settingsDarkMode ? "rgba(255,255,255,0.05)" : "#e5e7eb", paddingVertical: 8 }}>
+                              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, zIndex: 10 }}>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={{ fontSize: 16, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#1e293b", marginBottom: 2 }}>Quiz time limit</Text>
+                                  <Text style={{ fontSize: 13, color: p.settingsDarkMode ? "#64748b" : "#64748b" }}>
+                                    {p.timeLimitText ? `${p.timeLimitText} min` : (p.quizTimeLimit !== null ? `${p.quizTimeLimit} min` : "No time limit")}
+                                  </Text>
+                                </View>
+                                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                                  <View style={{ flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: p.settingsDarkMode ? "#1e293b" : "#f1f5f9", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 }}>
+                                    <TextInput
+                                      value={p.timeLimitText}
+                                      onChangeText={(t) => {
+                                        const clean = t.replace(/[^0-9]/g, "").slice(0, 3);
+                                        (p.setTimeLimitText || (()=>{}))(clean);
+                                      }}
+                                      onBlur={() => {
+                                        const n = parseInt(p.timeLimitText, 10);
+                                        if (!p.timeLimitText || isNaN(n) || n < 1) {
+                                          (p.setQuizTimeLimit || (()=>{}))(null);
+                                          (p.setTimeLimitText || (()=>{}))("");
+                                        } else if (n > 180) {
+                                          (p.setQuizTimeLimit || (()=>{}))(180);
+                                          (p.setTimeLimitText || (()=>{}))("180");
+                                        } else {
+                                          (p.setQuizTimeLimit || (()=>{}))(n);
+                                        }
+                                      }}
+                                      placeholder="—"
+                                      placeholderTextColor={p.settingsDarkMode ? "#475569" : "#94a3b8"}
+                                      keyboardType="number-pad"
+                                      maxLength={3}
+                                      style={{ color: p.settingsDarkMode ? "#e2e8f0" : "#334155", fontSize: 15, fontWeight: "600", width: 30, textAlign: "center", padding: 0, margin: 0 }}
+                                    />
+                                    <Text style={{ color: p.settingsDarkMode ? "#475569" : "#64748b", fontSize: 13, fontWeight: "600" }}>min</Text>
+                                  </View>
+                                  <Pressable onPress={() => (p.setShowTimeLimitDropdown || (()=>{}))((v: any) => !v)} style={({ pressed }) => ({ padding: 4, opacity: pressed ? 0.6 : 1 })}>
+                                    <Feather name={p.showTimeLimitDropdown ? "chevron-up" : "chevron-down"} size={20} color={p.settingsDarkMode ? "#64748b" : "#64748b"} />
+                                  </Pressable>
+                                </View>
+                                {p.showTimeLimitDropdown && (
+                                  <>
+                                    <Pressable style={{ position: "absolute", top: -1000, bottom: -1000, left: -1000, right: -1000, zIndex: 90 }} onPress={() => (p.setShowTimeLimitDropdown || (()=>{}))(false)} />
+                                    <View style={{ position: "absolute", top: "100%", right: 16, marginTop: 4, backgroundColor: p.settingsDarkMode ? "#1e293b" : "#ffffff", borderRadius: 12, width: 150, maxHeight: 240, shadowColor: "#000", shadowOffset: { width: 0, height: 6 }, shadowOpacity: p.settingsDarkMode ? 0.4 : 0.1, shadowRadius: 16, elevation: 20, borderWidth: 1, borderColor: p.settingsDarkMode ? "#334155" : "#eaecf0", zIndex: 100 }}>
+                                      <ScrollView showsVerticalScrollIndicator={true} contentContainerStyle={{ padding: 6 }} nestedScrollEnabled={true} scrollEnabled={true}>
+                                        {[null, 5, 10, 15, 30, 60].map((presetTime) => {
+                                          const isTimeActive = p.quizTimeLimit === presetTime;
+                                          const label = presetTime === null ? "No limit" : `${presetTime} min`;
+                                          return (
+                                            <Pressable key={String(presetTime)} onPress={() => { (p.setQuizTimeLimit || (()=>{}))(presetTime); (p.setTimeLimitText || (()=>{}))(presetTime !== null ? String(presetTime) : ""); (p.setShowTimeLimitDropdown || (()=>{}))(false); }} style={({ pressed }) => ({ paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8, backgroundColor: isTimeActive ? (p.settingsDarkMode ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.08)") : (pressed ? (p.settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)") : "transparent"), flexDirection: "row", alignItems: "center", justifyContent: "space-between" })}>
+                                              <Text style={{ fontSize: 14, fontWeight: isTimeActive ? "700" : "500", color: isTimeActive ? (p.settingsDarkMode ? "#818cf8" : "#4f46e5") : (p.settingsDarkMode ? "#cbd5e1" : "#475569") }}>{label}</Text>
+                                              {isTimeActive && <Ionicons name="checkmark" size={16} color={p.settingsDarkMode ? "#818cf8" : "#4f46e5"} />}
+                                            </Pressable>
+                                          );
+                                        })}
+                                      </ScrollView>
+                                    </View>
+                                  </>
+                                )}
+                              </View>
+                              
+                              <View style={{ height: 1, backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.05)" : "#e5e7eb", marginHorizontal: 16 }} />
+                              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 14 }}>
+                                <Text style={{ fontSize: 16, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#1e293b" }}>Shuffle question order</Text>
+                                <ToggleSwitch checked={p.shuffleQuestions} onChange={p.setShuffleQuestions} darkMode={p.settingsDarkMode} />
+                              </View>
+                              
+                              <View style={{ height: 1, backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.05)" : "#e5e7eb", marginHorizontal: 16 }} />
+                              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 14 }}>
+                                <Text style={{ fontSize: 16, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#1e293b" }}>Shuffle answer options</Text>
+                                <ToggleSwitch checked={p.shuffleAnswers} onChange={p.setShuffleAnswers} darkMode={p.settingsDarkMode} />
+                              </View>
+                              
+                              <View style={{ height: 1, backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.05)" : "#e5e7eb", marginHorizontal: 16 }} />
+                              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 14 }}>
+                                <Text style={{ fontSize: 16, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#1e293b" }}>Show answer after submit</Text>
+                                <ToggleSwitch checked={p.showAnswerOnSubmit} onChange={p.setShowAnswerOnSubmit} darkMode={p.settingsDarkMode} />
+                              </View>
+                            </View>
+                          </View>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </ScrollView>
+
+                <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingHorizontal: 20, paddingBottom: Platform.OS === "ios" ? 44 : 36, paddingTop: 16, backgroundColor: p.settingsDarkMode ? "#0f172a" : "#f4f4f8" }}>
+                  <Pressable
+                    disabled={questionCount === 0 || (quizPreset === "mistakes" && wrongCount === 0)}
+                    onPress={() => { (p.handleStartQuiz || (() => {}))(); setQuizSetupStep("presets"); }}
+                    style={({ pressed }) => [
+                      { backgroundColor: "#ffffff", borderRadius: 30, paddingVertical: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+                      (questionCount === 0 || (quizPreset === "mistakes" && wrongCount === 0)) && { backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" },
+                      pressed && { opacity: 0.8 },
+                    ]}
+                  >
+                    <Ionicons name="play" size={18} color={(questionCount === 0 || (quizPreset === "mistakes" && wrongCount === 0)) ? (p.settingsDarkMode ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.3)") : "#000000"} />
+                    <Text style={{ fontSize: 16, fontWeight: "700", color: (questionCount === 0 || (quizPreset === "mistakes" && wrongCount === 0)) ? (p.settingsDarkMode ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.3)") : "#000000" }}>Start Quiz ({questionCount} Qs)</Text>
+                  </Pressable>
                 </View>
-                <View style={[styles.switchRowSeparator, !p.settingsDarkMode && styles.lightBorderTop]} />
-
-                {/* Shuffle Questions Row */}
-                <View style={styles.switchRowCompact}>
-                  <Text style={[styles.switchLabelCompact, !p.settingsDarkMode && styles.lightText]}>Shuffle question order</Text>
-                  <ToggleSwitch checked={p.shuffleQuestions} onChange={p.setShuffleQuestions} darkMode={p.settingsDarkMode} />
-                </View>
-
-                <View style={[styles.switchRowSeparator, !p.settingsDarkMode && styles.lightBorderTop]} />
-
-                {/* Shuffle Answers Row */}
-                <View style={styles.switchRowCompact}>
-                  <Text style={[styles.switchLabelCompact, !p.settingsDarkMode && styles.lightText]}>Shuffle answer options</Text>
-                  <ToggleSwitch checked={p.shuffleAnswers} onChange={p.setShuffleAnswers} darkMode={p.settingsDarkMode} />
-                </View>
-
-                <View style={[styles.switchRowSeparator, !p.settingsDarkMode && styles.lightBorderTop]} />
-
-                {/* Show Answers instantly Row */}
-                <View style={styles.switchRowCompact}>
-                  <Text style={[styles.switchLabelCompact, !p.settingsDarkMode && styles.lightText]}>Show answer after submit</Text>
-                  <ToggleSwitch checked={p.showAnswerOnSubmit} onChange={p.setShowAnswerOnSubmit} darkMode={p.settingsDarkMode} />
-                </View>
-              </View>
-            </ScrollView>
-
-            {/* Sticky Start Button Footer */}
-            <View style={[styles.modalStickyFooter, !p.settingsDarkMode && styles.lightBorderTop]}>
-              <Pressable
-                disabled={questionCount === 0}
-                onPress={p.handleStartQuiz || (() => {})}
-                style={({ pressed }) => [
-                  styles.startQuizBtn,
-                  questionCount === 0 && styles.startQuizBtnDisabled,
-                  pressed && styles.opacityPress,
-                ]}
-              >
-                <Ionicons name="play" size={18} color="#000000" />
-                <Text style={styles.startQuizBtnText}>Start Quiz ({questionCount} Qs)</Text>
-              </Pressable>
+              </>
             </View>
-            </View>
-          </Pressable>
-        </KeyboardWrapper>
+          </KeyboardWrapper>
       </Modal>
-        )}
+      )}
 
-      {/* ── View Mode Modal ── */}
+{/* ── View Mode Modal ── */}
       {!!p.pdfViewQuiz && (
       <Modal visible={true} animationType="slide" transparent={false} onRequestClose={() => (p.setPdfViewQuiz || (() => {}))(null)}>
         <View style={{ flex: 1, backgroundColor: p.settingsDarkMode ? "#0f172a" : "#f4f4f8" }}>

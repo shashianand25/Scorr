@@ -20,7 +20,7 @@ export function Stepper({
         disabled={value <= min}
         style={({ pressed }) => [styles.stepperBtn, value <= min && styles.stepperBtnDisabled, pressed && styles.opacityPress]}
       >
-        <Feather name="minus" size={14} color={value <= min ? (darkMode ? "#444" : "#ccc") : "#8B5CF6"} />
+        <Feather name="minus" size={14} color={value <= min ? (darkMode ? "#444" : "#ccc") : (darkMode ? "#FFFFFF" : "#0d0f14")} />
       </Pressable>
 
       <View style={[styles.stepperValueContainer, !darkMode && styles.lightBorder]}>
@@ -54,7 +54,7 @@ export function Stepper({
         disabled={value >= max || disabled}
         style={({ pressed }) => [styles.stepperBtn, (value >= max || disabled) && styles.stepperBtnDisabled, pressed && styles.opacityPress]}
       >
-        <Feather name="plus" size={14} color={value >= max ? (darkMode ? "#444" : "#ccc") : "#8B5CF6"} />
+        <Feather name="plus" size={14} color={value >= max ? (darkMode ? "#444" : "#ccc") : (darkMode ? "#FFFFFF" : "#0d0f14")} />
       </Pressable>
     </View>
   );

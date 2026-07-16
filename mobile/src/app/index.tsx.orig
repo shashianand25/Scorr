@@ -668,7 +668,7 @@ export default function HomeScreen() {
 
 
 
-  const [activeTab, setActiveTab] = useState<"home" | "add" | "guide" | "menu" | "insights" | "battle" | "library" | "flashcards" | "insights-flashcard" | "bookmarked-questions">("home");
+  const [activeTab, setActiveTab] = useState<"home" | "add" | "guide" | "menu" | "insights" | "battle" | "flashcards" | "insights-flashcard" | "bookmarked-questions">("home");
   const [battleRoomCode, setBattleRoomCode] = useState("");
   const [battleRoomState, setBattleRoomState] = useState<BattleRoom | null>(null);
   const [isHost, setIsHost] = useState(false);
@@ -722,9 +722,6 @@ export default function HomeScreen() {
   const [starredQuestions, setStarredQuestions] = useState<Set<string>>(new Set());
   const [homeFilter, setHomeFilter] = useState<"all"|"progress"|"notstarted"|"done">("all");
   const [homeSearch, setHomeSearch] = useState("");
-  const [libraryTab, setLibraryTab] = useState<"flashcards" | "quizzes">("flashcards");
-  const [librarySearch, setLibrarySearch] = useState("");
-  const [jumpPage, setJumpPage] = useState(0);
   const [showFeedbackPage, setShowFeedbackPage] = useState(false);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
@@ -771,7 +768,6 @@ export default function HomeScreen() {
   const [shuffleAnswers, setShuffleAnswersRaw] = useState<boolean>(false);
   const [showAnswerOnSubmit, setShowAnswerOnSubmitRaw] = useState<boolean>(true);
   const [quizTimeLimit, setQuizTimeLimit] = useState<number | null>(null);
-  const [quizPerQuestionTimer, setQuizPerQuestionTimer] = useState<number | null>(null);
   const [timeLimitText, setTimeLimitText] = useState(""); // local text state — avoids re-render flicker while typing
   const [showTimeLimitDropdown, setShowTimeLimitDropdown] = useState(false);
 
@@ -1077,13 +1073,8 @@ export default function HomeScreen() {
   React.useEffect(() => {
     let intervalId: any = null;
 
-    const isPerQuestion = activeSession?.timePerQuestion != null;
-    const isGlobal = activeSession?.quizTimeLimit != null;
-
-    if (activeSession && (isPerQuestion || isGlobal) && !activeSession.isFinished) {
-      if (isPerQuestion) {
-        setSessionTimeLeft(activeSession.timePerQuestion);
-      } else if (sessionTimeLeft <= 0) {
+    if (activeSession && activeSession.quizTimeLimit !== null && activeSession.quizTimeLimit !== undefined && !activeSession.isFinished) {
+      if (sessionTimeLeft <= 0) {
         setSessionTimeLeft(activeSession.quizTimeLimit * 60);
       }
 
@@ -1124,7 +1115,7 @@ export default function HomeScreen() {
         tickingPlayer.seekTo(0);
       } catch (e) {}
     };
-  }, [activeSession?.quizId, activeSession?.quizTimeLimit, activeSession?.timePerQuestion ? activeSession?.currentIndex : null, activeSession?.isFinished]);
+  }, [activeSession?.quizId, activeSession?.quizTimeLimit, activeSession?.isFinished]);
 
   // Keep ref always pointing to the freshest closure (re-runs every render)
   React.useEffect(() => {
@@ -1133,40 +1124,6 @@ export default function HomeScreen() {
       // even though this runs inside a stale setInterval closure.
       setActiveSession((currentSession: any) => {
         if (!currentSession) return currentSession;
-        
-        if (currentSession.timePerQuestion != null) {
-          // Per-question timer expired
-          try { tickingPlayer.pause(); tickingPlayer.seekTo(0); } catch (e) {}
-          
-          const q = currentSession.questions[currentSession.currentIndex];
-          let newAnswers = { ...currentSession.answers };
-          let newSubmitted = [...currentSession.submitted];
-          
-          if (!newSubmitted.includes(q.id)) {
-            newSubmitted.push(q.id);
-          }
-          
-          const nextIdx = currentSession.currentIndex + 1;
-          if (nextIdx < currentSession.questions.length) {
-            // Auto-advance
-            return {
-              ...currentSession,
-              answers: newAnswers,
-              submitted: newSubmitted,
-              currentIndex: nextIdx
-            };
-          } else {
-            // Finish quiz
-            return {
-              ...currentSession,
-              answers: newAnswers,
-              submitted: newSubmitted,
-              isFinished: true
-            };
-          }
-        }
-        
-        // Global timer expired
         playSuccessSound();
 
         const questions = currentSession.questions;
@@ -1391,7 +1348,7 @@ export default function HomeScreen() {
       shuffleQuestions,
       shuffleAnswers,
       showAnswerOnSubmit,
-      timePerQuestion: quizPerQuestionTimer,
+      timePerQuestion: null,
       quizTimeLimit,
       currentIndex: 0,
       answers: {},
@@ -1958,8 +1915,7 @@ export default function HomeScreen() {
           </Text>
         </View>
 
-        {/* Stats Grid (Temporarily Hidden for UI Testing) */}
-        {/*
+        {/* Stats Grid */}
         <View style={{ flexDirection: "row", gap: 10, marginBottom: 20 }}>
           <View style={{ flex: 1.2, backgroundColor: isDark ? "#2B2560" : "#ede9fe", borderRadius: 16, padding: 16, justifyContent: "center" }}>
             <Ionicons name="trophy" size={24} color={isDark ? "#B5A8FF" : "#7c3aed"} />
@@ -1979,36 +1935,67 @@ export default function HomeScreen() {
             </View>
           </View>
         </View>
-        */}
 
         {/* Practice Modes */}
-        <Text style={{ fontSize: 16, fontWeight: "600", color: textMain, marginTop: 12, marginBottom: 12, marginLeft: 4 }}>Practice</Text>
-        <View style={{ flexDirection: "row", gap: 10, marginBottom: 32 }}>
-          <Pressable onPress={() => handleOpenQuizOptions(quiz)} style={({pressed}) => [{ flex: 1, backgroundColor: cardBg, borderRadius: 16, paddingVertical: 16, paddingHorizontal: 12, borderWidth: 1, borderColor: border, flexDirection: "row", alignItems: "center" }, pressed && {opacity: 0.8}]}>
-            <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: isDark ? "#20264A" : "#e0e7ff", alignItems: "center", justifyContent: "center", marginRight: 8 }}>
-              <Ionicons name="help-circle" size={18} color={isDark ? "#7C9DFF" : "#4338ca"} />
+        <Text style={{ fontSize: 16, fontWeight: "600", color: textMain, marginBottom: 12, marginLeft: 4 }}>Practice</Text>
+        <View style={{ flexDirection: "row", gap: 10, marginBottom: 16 }}>
+          <Pressable onPress={() => handleOpenQuizOptions(quiz)} style={({pressed}) => [{ flex: 1, backgroundColor: cardBg, borderRadius: 16, paddingVertical: 24, paddingHorizontal: 16, borderWidth: 1, borderColor: border, flexDirection: "row", alignItems: "center" }, pressed && {opacity: 0.8}]}>
+            <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: isDark ? "#20264A" : "#e0e7ff", alignItems: "center", justifyContent: "center", marginRight: 10 }}>
+              <Ionicons name="help-circle" size={20} color={isDark ? "#7C9DFF" : "#4338ca"} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 16, fontWeight: "700", color: textMain, marginBottom: 4 }} numberOfLines={1}>Quiz</Text>
+              <Text style={{ fontSize: 15, fontWeight: "600", color: textMain, marginBottom: 2 }} numberOfLines={1}>Quiz</Text>
               <Text style={{ fontSize: 12, color: isDark ? "rgba(255,255,255,0.8)" : textSub }} numberOfLines={1}>{(quiz.questionsList || []).length} Questions</Text>
             </View>
-            <Feather name="chevron-right" size={16} color={isDark ? "#FFFFFF" : "#9ca3af"} style={{ opacity: isDark ? 0.8 : 1 }} />
+            <Feather name="chevron-right" size={18} color={isDark ? "#FFFFFF" : "#9ca3af"} style={{ opacity: isDark ? 0.8 : 1 }} />
           </Pressable>
 
-          <Pressable onPress={() => setStudyModeModalVisible(true)} style={({pressed}) => [{ flex: 1, backgroundColor: cardBg, borderRadius: 16, paddingVertical: 16, paddingHorizontal: 12, borderWidth: 1, borderColor: border, flexDirection: "row", alignItems: "center" }, pressed && {opacity: 0.8}]}>
-            <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: isDark ? "#2B2560" : "#ede9fe", alignItems: "center", justifyContent: "center", marginRight: 8 }}>
-              <Ionicons name="albums" size={16} color={isDark ? "#B5A8FF" : "#7c3aed"} />
+          <Pressable onPress={() => setStudyModeModalVisible(true)} style={({pressed}) => [{ flex: 1, backgroundColor: cardBg, borderRadius: 16, paddingVertical: 24, paddingHorizontal: 16, borderWidth: 1, borderColor: border, flexDirection: "row", alignItems: "center" }, pressed && {opacity: 0.8}]}>
+            <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: isDark ? "#2B2560" : "#ede9fe", alignItems: "center", justifyContent: "center", marginRight: 10 }}>
+              <Ionicons name="albums" size={18} color={isDark ? "#B5A8FF" : "#7c3aed"} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 16, fontWeight: "700", color: textMain, marginBottom: 4 }} numberOfLines={1}>Flashcards</Text>
+              <Text style={{ fontSize: 15, fontWeight: "600", color: textMain, marginBottom: 2 }} numberOfLines={1}>Flashcards</Text>
               <Text style={{ fontSize: 12, color: isDark ? "rgba(255,255,255,0.8)" : textSub }} numberOfLines={1}>{(quiz.flashcards || []).length} Cards</Text>
             </View>
-            <Feather name="chevron-right" size={16} color={isDark ? "#FFFFFF" : "#9ca3af"} style={{ opacity: isDark ? 0.8 : 1 }} />
+            <Feather name="chevron-right" size={18} color={isDark ? "#FFFFFF" : "#9ca3af"} style={{ opacity: isDark ? 0.8 : 1 }} />
           </Pressable>
         </View>
 
+        {wrongCount > 0 && (
+          <Pressable onPress={() => playQuizDirectly(quiz, "wrong")} style={({pressed}) => [{ backgroundColor: cardBg, borderRadius: 16, padding: 16, flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 16, borderWidth: 1, borderColor: border }, pressed && {opacity: 0.8}]}>
+            <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: isDark ? "rgba(239, 68, 68, 0.15)" : "#fee2e2", alignItems: "center", justifyContent: "center" }}>
+              <Ionicons name="refresh" size={20} color={isDark ? "#f87171" : "#ef4444"} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 16, fontWeight: "600", color: textMain, marginBottom: 2 }}>Practice Incorrect</Text>
+              <Text style={{ fontSize: 12, color: textSub }}>Retake {wrongCount} missed questions</Text>
+            </View>
+            <Feather name="chevron-right" size={18} color={isDark ? "#4B5165" : "#9ca3af"} />
+          </Pressable>
+        )}
 
-
+        {/* Bookmarked Questions */}
+        {(() => {
+          const bookmarkedQs = (quiz.id === "sample_quiz" ? SAMPLE_QUIZ.questionsList : (quiz.questionsList || [])).filter((q: any) => starredQuestions.has(q.id));
+          const bookmarkCount = bookmarkedQs.length;
+          return (
+            <View style={{ marginBottom: 20 }}>
+              <Pressable onPress={() => setActiveTab("bookmarked-questions")} style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: cardBg, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: border }, pressed && { opacity: 0.7 }]}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  <Ionicons name="bookmark" size={18} color={textSub} />
+                  <Text style={{ fontSize: 15, color: textMain, fontWeight: "500" }}>Bookmarked Questions</Text>
+                  {bookmarkCount > 0 && (
+                    <View style={{ backgroundColor: isDark ? "rgba(99,102,241,0.2)" : "#e0e7ff", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                      <Text style={{ fontSize: 11, fontWeight: "700", color: isDark ? "#818cf8" : "#4f46e5" }}>{bookmarkCount}</Text>
+                    </View>
+                  )}
+                </View>
+                <Feather name="chevron-right" size={18} color={textSub} />
+              </Pressable>
+            </View>
+          );
+        })()}
 
         {/* Attempt History */}
         <Text style={{ fontSize: 12, fontWeight: "600", color: textSub, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 12, marginLeft: 4 }}>Attempt History</Text>
@@ -2033,15 +2020,17 @@ export default function HomeScreen() {
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
                       <Text style={{ fontSize: 14, fontWeight: "600", color: textMain }}>Attempt #{attemptNum}</Text>
                       {isRetry && (
-                        <View style={{ backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
-                          <Text style={{ fontSize: 10, fontWeight: "600", color: textSub }}>Retry of #{attempt.retryOfAttemptNum}</Text>
+                        <View style={{ backgroundColor: isDark ? "rgba(245,158,11,0.15)" : "#fef3c7", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                          <Text style={{ fontSize: 10, fontWeight: "600", color: isDark ? "#fcd34d" : "#d97706" }}>Retry of #{attempt.retryOfAttemptNum}</Text>
                         </View>
                       )}
                     </View>
                     <Text style={{ fontSize: 12, color: textSub }}>{attempt.correct} correct · {attempt.wrong} wrong · {attempt.skipped} skipped</Text>
                   </View>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                    <Text style={{ fontSize: 15, fontWeight: "500", color: textMain }}>{attempt.score}%</Text>
+                    <View style={{ backgroundColor: attempt.score >= 75 ? (isDark ? "rgba(74,222,128,0.15)" : "#dcfce7") : (isDark ? "rgba(245,158,11,0.15)" : "#fef3c7"), paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 }}>
+                      <Text style={{ fontSize: 13, fontWeight: "700", color: attempt.score >= 75 ? (isDark ? "#4ADE80" : "#166534") : (isDark ? "#fcd34d" : "#d97706") }}>{attempt.score}%</Text>
+                    </View>
                     <Feather name="chevron-right" size={18} color={textSub} />
                   </View>
                 </Pressable>
@@ -2687,7 +2676,8 @@ export default function HomeScreen() {
   const [selectedStudyMode, setSelectedStudyMode] = useState<"spaced" | "simple">("spaced");
   const [studyCardCount, setStudyCardCount] = useState<"auto" | 10 | 20>("auto");
   const [studyFlipped, setStudyFlipped] = useState(false);
-  const [sessionRatings, setSessionRatings] = useState({ perfect: 0, good: 0, hard: 0, again: 0 });
+  const [studyKnownCount, setStudyKnownCount] = useState(0);
+  const [studyUnknownCount, setStudyUnknownCount] = useState(0);
   const [editingDeckId, setEditingDeckId] = useState<string | null>(null);
   const flipAnim = useRef(new Animated.Value(0)).current;
   const insightsFlipAnim = useRef(new Animated.Value(0)).current;
@@ -3216,7 +3206,7 @@ export default function HomeScreen() {
               </View>
             </View>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-              {(activeSession.quizTimeLimit != null || activeSession.timePerQuestion != null) && (
+              {activeSession.quizTimeLimit != null && (
                 <View style={[styles.sessionTimerBox, sessionTimeLeft <= 30 && { backgroundColor: "rgba(239,68,68,0.12)", borderColor: "rgba(239,68,68,0.35)" }]}>
                   <Ionicons name="time-outline" size={13} color={sessionTimeLeft <= 30 ? "#ef4444" : "#00e5a0"} style={{ marginRight: 4 }} />
                   <Text style={[styles.sessionTimerText, sessionTimeLeft <= 30 && { color: "#ef4444" }]}>
@@ -3249,7 +3239,7 @@ export default function HomeScreen() {
 
         {/* Horizontal Number Progress */}
         <View style={{ marginBottom: 20 }}>
-          {activeSession.isBattle || activeSession.timePerQuestion != null ? (
+          {activeSession.isBattle ? (
             <View style={{ alignItems: "center", justifyContent: "center", paddingVertical: 8 }}>
               <Text style={{ fontSize: 16, fontWeight: "600", color: settingsDarkMode ? "#e2e8f0" : "#334155" }}>
                 Question {currentIndex + 1} of {totalQs}
@@ -3279,7 +3269,7 @@ export default function HomeScreen() {
               
               if (activeSession.showAnswerOnSubmit && isSubmitted) {
                 bgColor = isCorrect ? (settingsDarkMode ? "rgba(16, 185, 129, 0.2)" : "#d1fae5") : (settingsDarkMode ? "rgba(239, 68, 68, 0.2)" : "#fee2e2");
-                textColor = settingsDarkMode ? "#ffffff" : "#0f172a";
+                textColor = isCorrect ? (settingsDarkMode ? "#34d399" : "#10b981") : (settingsDarkMode ? "#f87171" : "#ef4444");
               } else if (!activeSession.showAnswerOnSubmit && isAnswered) {
                  // if answered but not submitted yet (like in a mock test)
                  bgColor = settingsDarkMode ? "rgba(255, 255, 255, 0.1)" : "#e2e8f0";
@@ -3322,7 +3312,7 @@ export default function HomeScreen() {
           keyExtractor={(item: any) => item.id}
           horizontal
           pagingEnabled
-          scrollEnabled={!activeSession.isBattle && activeSession.timePerQuestion == null}
+          scrollEnabled={!activeSession.isBattle}
           showsHorizontalScrollIndicator={false}
           initialScrollIndex={currentIndex}
           getItemLayout={(data, index) => ({ length: SCREEN_WIDTH, offset: SCREEN_WIDTH * index, index })}
@@ -3377,8 +3367,8 @@ export default function HomeScreen() {
                       // Determine border and background colors
                       let containerBg = settingsDarkMode ? "transparent" : "#ffffff";
                       let containerBorder = settingsDarkMode ? "rgba(255,255,255,0.15)" : "#e1e4e8";
-                      let circleBg = settingsDarkMode ? "transparent" : "#f1f5f9";
-                      let circleBorder = settingsDarkMode ? "rgba(255, 255, 255, 0.2)" : "#cbd5e1";
+                      let circleBg = settingsDarkMode ? "rgba(255, 255, 255, 0.12)" : "#f1f5f9";
+                      let circleBorder = settingsDarkMode ? "rgba(255, 255, 255, 0.25)" : "#cbd5e1";
                       let textColor = settingsDarkMode ? "#e2e8f0" : "#24292f";
 
                       if (correctHighlight) {
@@ -3386,13 +3376,13 @@ export default function HomeScreen() {
                         containerBorder = "#22c55e";
                         circleBg = "#22c55e";
                         circleBorder = "#22c55e";
-                        textColor = settingsDarkMode ? "#ffffff" : "#0f172a";
+                        textColor = "#4ade80";
                       } else if (wrongHighlight) {
                         containerBg = "rgba(239,68,68,0.15)";
                         containerBorder = "#ef4444";
                         circleBg = "#ef4444";
                         circleBorder = "#ef4444";
-                        textColor = settingsDarkMode ? "#ffffff" : "#0f172a";
+                        textColor = "#f87171";
                       } else if (isSelected && !effectiveShowResult) {
                         // Just selected, not checked yet
                         containerBg = settingsDarkMode ? "rgba(255, 255, 255, 0.05)" : "#f1f5f9";
@@ -3408,22 +3398,21 @@ export default function HomeScreen() {
                           onPress={() => handleAnswerSelect(qst, answer.id)}
                           style={({ pressed }) => [{
                             flexDirection: "row", alignItems: "center",
-                            paddingVertical: 16, paddingHorizontal: 16, borderRadius: 16,
+                            paddingVertical: 12, paddingHorizontal: 16, borderRadius: 16,
                             backgroundColor: containerBg,
-                            borderWidth: 1,
-                            borderBottomWidth: 3,
+                            borderWidth: 1.5,
                             borderColor: containerBorder,
                           }, pressed && !effectiveShowResult && { opacity: 0.7, transform: [{ scale: 0.99 }] }]}
                         >
                           <View style={{
-                            width: 28, height: 28, borderRadius: 14, overflow: "hidden",
+                            width: 34, height: 34, borderRadius: 17, overflow: "hidden",
                             backgroundColor: circleBg, borderWidth: 1, borderColor: circleBorder,
-                            alignItems: "center", justifyContent: "center", marginRight: 14,
+                            alignItems: "center", justifyContent: "center", marginRight: 16,
                           }}>
-                            <Text style={{ fontSize: 12, fontWeight: "800",
+                            <Text style={{ fontSize: 14, fontWeight: "700",
                               color: (correctHighlight || wrongHighlight) ? "#fff" :
                                 (isSelected && !effectiveShowResult) ? (settingsDarkMode ? "#000000" : "#ffffff") :
-                                (settingsDarkMode ? "#cbd5e1" : "#475569") }}>
+                                (settingsDarkMode ? "#ffffff" : "#475569") }}>
                               {String.fromCharCode(65 + idx)}
                             </Text>
                           </View>
@@ -3431,6 +3420,8 @@ export default function HomeScreen() {
                             fontWeight: "500" }}>
                             {answer.text}
                           </Text>
+                          {correctHighlight && <Text style={{ fontSize: 16, marginLeft: 8 }}>✓</Text>}
+                          {wrongHighlight && <Text style={{ fontSize: 16, marginLeft: 8 }}>✗</Text>}
                         </Pressable>
                       );
                     })}
@@ -3719,41 +3710,29 @@ export default function HomeScreen() {
     let wrongCount = 0;
     let skippedCount = 0;
     const wrongQsForQuiz: any[] = [];
-    const reportCardQs: any[] = [];
 
     questions.forEach((q: any) => {
       const selected = activeSession.answers[q.id] || [];
-      const correctIds = q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.id);
-      
-      let status = "skipped";
       if (selected.length === 0) {
         skippedCount++;
       } else {
+        const correctIds = q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.id);
         const isAllCorrect = selected.every((id: string) => correctIds.includes(id)) && selected.length === correctIds.length;
         if (isAllCorrect) {
-          status = "correct";
           correctCount++;
         } else {
-          status = "wrong";
           wrongCount++;
+          const correctText = q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.text).join(", ");
+          const selectedText = q.answers.filter((a: any) => selected.includes(a.id)).map((a: any) => a.text).join(", ");
           wrongQsForQuiz.push({
             id: q.id,
             prompt: q.prompt,
             imageUrl: q.imageUrl,
-            selected: q.answers.filter((a: any) => selected.includes(a.id)).map((a: any) => a.text).join(", "),
-            correct: q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.text).join(", "),
+            selected: selectedText,
+            correct: correctText,
           });
         }
       }
-
-      reportCardQs.push({
-        id: q.id,
-        prompt: q.prompt,
-        explanation: q.explanation,
-        status,
-        selectedTexts: q.answers.filter((a: any) => selected.includes(a.id)).map((a: any) => a.text),
-        correctTexts: q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.text),
-      });
     });
 
     const wrongQuestionIds = wrongQsForQuiz.map((wq: any) => wq.id);
@@ -3807,7 +3786,7 @@ export default function HomeScreen() {
         shuffleQuestions: activeSession.shuffleQuestions || false,
         shuffleAnswers: activeSession.shuffleAnswers || false,
         showAnswerOnSubmit: activeSession.showAnswerOnSubmit !== false,
-        timePerQuestion: activeSession.timePerQuestion || null,
+        timePerQuestion: null,
         quizTimeLimit: activeSession.quizTimeLimit || null,
         currentIndex: 0,
         answers: {},
@@ -3821,201 +3800,181 @@ export default function HomeScreen() {
     const scorePct = totalQs > 0 ? Math.round((correctCount / totalQs) * 100) : 0;
     const xpGained = correctCount * 20;
 
-    let dayStreak = 0;
-    if (battleHistory.length > 0) {
-      const sortedHistory = [...battleHistory].sort((a, b) => b.date - a.date);
-      const uniqueDays = new Set(sortedHistory.map(h => new Date(h.date).toDateString()));
-      
-      const today = new Date();
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
-      
-      const todayStr = today.toDateString();
-      const yesterdayStr = yesterday.toDateString();
-      
-      if (uniqueDays.has(todayStr) || uniqueDays.has(yesterdayStr)) {
-        let checkDate = uniqueDays.has(todayStr) ? today : yesterday;
-        while (uniqueDays.has(checkDate.toDateString())) {
-          dayStreak++;
-          checkDate.setDate(checkDate.getDate() - 1);
-        }
-      }
-    }
-
     return (
-      <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#0b1021" : "#f8fafc" }}>
-        {/* Header with Close Button */}
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 24, paddingTop: 20, paddingBottom: 0 }}>
-          <Text style={{ fontSize: 24, fontWeight: "600", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Quiz Results</Text>
-          <Pressable onPress={() => saveAndExitQuizSession(true)} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 8 })}>
-            <Ionicons name="close" size={28} color={settingsDarkMode ? "#ffffff" : "#111827"} />
-          </Pressable>
+      <ScrollView 
+        style={[styles.sessionContainer, !settingsDarkMode && styles.lightSessionContainer]} 
+        contentContainerStyle={styles.resultsScrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.resultsHeader}>
+          <View style={styles.resultsIconCircle}>
+            <Ionicons name="trophy" size={48} color="#00e5a0" />
+          </View>
+          <Text style={[styles.tabTitle, !settingsDarkMode && styles.lightText]}>Quiz Results</Text>
+          <Text style={[styles.tabSubtitle, !settingsDarkMode && styles.lightTextSub]}>Performance Summary</Text>
         </View>
 
-        <ScrollView 
-          style={{ flex: 1 }}
-          contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 100 }}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Mascot */}
-          <View style={{ alignItems: "center", marginBottom: 32, marginTop: 4 }}>
-            {/* Mascot Placeholder */}
-            <View style={{ position: "relative", alignItems: "center", justifyContent: "center" }}>
-              <MaterialCommunityIcons name="robot-happy" size={72} color="#00e5a0" />
-              <View style={{ position: "absolute", bottom: -10, flexDirection: "row", gap: 6 }}>
-                <View style={{ width: 16, height: 8, backgroundColor: "#00e5a0", borderRadius: 4, transform: [{rotate: "-20deg"}] }} />
-                <View style={{ width: 20, height: 10, backgroundColor: "#00e5a0", borderRadius: 5 }} />
-                <View style={{ width: 16, height: 8, backgroundColor: "#00e5a0", borderRadius: 4, transform: [{rotate: "20deg"}] }} />
+        {/* Score Ring / Panel */}
+        <View style={[styles.scoreSummaryCard, !settingsDarkMode && styles.lightCard]}>
+          <Text style={styles.scoreTextBig}>{scorePct}%</Text>
+          <Text style={[styles.scoreSubText, !settingsDarkMode && styles.lightText]}>
+            {correctCount} of {totalQs} Correct
+          </Text>
+          <View style={styles.xpBadge}>
+            <Text style={styles.xpBadgeText}>+{xpGained} XP GAINED</Text>
+          </View>
+        </View>
+
+        {/* Detailed Stats */}
+        <View style={styles.statsRow}>
+          <View style={[styles.miniStatCard, !settingsDarkMode && styles.lightCard]}>
+            <Text style={[styles.miniStatLabel, !settingsDarkMode && styles.lightTextSub]}>Correct</Text>
+            <Text style={[styles.miniStatValue, { color: "#00e5a0" }]}>{correctCount}</Text>
+          </View>
+          <View style={[styles.miniStatCard, !settingsDarkMode && styles.lightCard]}>
+            <Text style={[styles.miniStatLabel, !settingsDarkMode && styles.lightTextSub]}>Wrong</Text>
+            <Text style={[styles.miniStatValue, { color: "#ef4444" }]}>{wrongCount}</Text>
+          </View>
+          <View style={[styles.miniStatCard, !settingsDarkMode && styles.lightCard]}>
+            <Text style={[styles.miniStatLabel, !settingsDarkMode && styles.lightTextSub]}>Skipped</Text>
+            <Text style={[styles.miniStatValue, !settingsDarkMode && styles.lightText]}>{skippedCount}</Text>
+          </View>
+        </View>
+
+        {/* Collapsible Wrong Answers Review */}
+        {wrongQsForQuiz.length > 0 && (
+          <View style={{ width: "100%", marginVertical: 12 }}>
+            <Pressable
+              onPress={() => setShowWrongReview(!showWrongReview)}
+              style={({ pressed }) => [
+                styles.actionBtnRow,
+                !settingsDarkMode && styles.lightCard,
+                { justifyContent: "space-between", height: 48 },
+                pressed && styles.opacityPress
+              ]}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <Ionicons name="eye-outline" size={18} color={settingsDarkMode ? "#cccccc" : "#0d0f14"} />
+                <Text style={[styles.actionBtnRowText, !settingsDarkMode && styles.lightText]}>Review Incorrect Questions ({wrongQsForQuiz.length})</Text>
               </View>
-            </View>
-          </View>
+              <Feather name={showWrongReview ? "chevron-up" : "chevron-down"} size={18} color={settingsDarkMode ? "#cccccc" : "#0d0f14"} />
+            </Pressable>
 
-          {/* Score Box */}
-          <View style={{ alignItems: "center", marginBottom: 24 }}>
-            <Text style={{ fontSize: 48, fontWeight: "800", color: "#84cc16" }}>{scorePct}%</Text>
-            <Text style={{ fontSize: 15, color: settingsDarkMode ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.6)", marginTop: 4 }}>
-              {correctCount} out of {totalQs} correct
-            </Text>
-          </View>
-
-          {/* Stats Grid */}
-          <View style={{ flexDirection: "row", gap: 12, marginBottom: 12 }}>
-            <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#172033" : "#ffffff", borderRadius: 16, padding: 20, flexDirection: "row", alignItems: "center", gap: 14, borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
-              <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "#84cc16", alignItems: "center", justifyContent: "center" }}>
-                <Ionicons name="checkmark-sharp" size={22} color="#ffffff" />
-              </View>
-              <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>{correctCount} Correct</Text>
-            </View>
-            <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#172033" : "#ffffff", borderRadius: 16, padding: 20, flexDirection: "row", alignItems: "center", gap: 14, borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
-              <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "#ef4444", alignItems: "center", justifyContent: "center" }}>
-                <Ionicons name="close-sharp" size={22} color="#ffffff" />
-              </View>
-              <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>{wrongCount} Incorrect</Text>
-            </View>
-          </View>
-
-          {/* Answered Box */}
-          <View style={{ backgroundColor: settingsDarkMode ? "#172033" : "#ffffff", borderRadius: 16, padding: 20, flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 24, borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
-            <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "#0284c7", alignItems: "center", justifyContent: "center" }}>
-              <Text style={{ fontSize: 16, fontWeight: "700", color: "#ffffff" }}>{totalQs}</Text>
-            </View>
-            <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>{totalQs} Answered</Text>
-          </View>
-
-          {/* Streak Box */}
-          <View style={{ backgroundColor: settingsDarkMode ? "#172033" : "#ffffff", borderRadius: 16, padding: 20, flexDirection: "row", alignItems: "center", gap: 16, marginBottom: 16, borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
-            <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: "rgba(245, 158, 11, 0.2)", alignItems: "center", justifyContent: "center" }}>
-              <Ionicons name="flame" size={24} color="#f59e0b" />
-            </View>
-            <Text style={{ fontSize: 16, fontWeight: "600", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Streak: {dayStreak} day{dayStreak !== 1 ? 's' : ''}</Text>
-          </View>
-
-          {/* Report Card Button */}
-          <Pressable 
-            onPress={() => setShowWrongReview(true)}
-            style={({pressed}) => ({ backgroundColor: settingsDarkMode ? "#172033" : "#ffffff", borderRadius: 16, padding: 20, flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16, borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", opacity: pressed ? 0.8 : 1 })}
-          >
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
-              <Text style={{ fontSize: 24 }}>📝</Text>
-              <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Review Answers</Text>
-            </View>
-            <Feather name="chevron-right" size={22} color={settingsDarkMode ? "#ffffff" : "#111827"} />
-          </Pressable>
-
-          {/* Report Card Modal */}
-          <Modal visible={showWrongReview} animationType="slide" transparent={false} onRequestClose={() => setShowWrongReview(false)}>
-            <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#0b1021" : "#f8fafc" }}>
-              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 24, paddingTop: 60, paddingBottom: 20, borderBottomWidth: 1, borderBottomColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
-                <Text style={{ fontSize: 20, fontWeight: "600", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Report Card</Text>
-                <Pressable onPress={() => setShowWrongReview(false)} style={{ padding: 8 }}>
-                  <Ionicons name="close" size={28} color={settingsDarkMode ? "#ffffff" : "#111827"} />
-                </Pressable>
-              </View>
-              <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 20, paddingBottom: 100 }}>
-                {reportCardQs.map((q: any, idx: number) => (
-                  <View key={q.id} style={{ backgroundColor: settingsDarkMode ? "#161b2e" : "#ffffff", borderRadius: 16, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
-                    <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827", marginBottom: 16, lineHeight: 24 }}>
-                      {idx + 1}. {q.prompt}
-                    </Text>
-                    <View style={{ height: 1, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)", marginBottom: 16 }} />
-                    
-                    <Text style={{ fontSize: 13, fontWeight: "700", color: settingsDarkMode ? "#ffffff" : "#111827", marginBottom: 12 }}>
-                      Your answer:
-                    </Text>
-                    <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
-                      <View style={{ flex: 1 }}>
-                        {q.status === "skipped" ? (
-                          <Text style={{ fontSize: 15, color: settingsDarkMode ? "#ef4444" : "#dc2626", marginBottom: 16 }}>
-                            Skipped
-                          </Text>
-                        ) : (
-                          q.selectedTexts.map((text: string, i: number) => (
-                            <View key={i} style={{ flexDirection: "row", alignItems: "flex-start", marginBottom: i < q.selectedTexts.length - 1 ? 8 : 0 }}>
-                              {q.status === "wrong" && <Ionicons name="close" size={16} color="#ef4444" style={{ marginTop: 2, marginRight: 8 }} />}
-                              {q.status === "correct" && <Ionicons name="checkmark" size={16} color="#4ade80" style={{ marginTop: 2, marginRight: 8 }} />}
-                              <Text style={{ flex: 1, fontSize: 15, color: settingsDarkMode ? (q.status === "wrong" ? "#fca5a5" : "#cbd5e1") : (q.status === "wrong" ? "#b91c1c" : "#334155"), lineHeight: 22 }}>
-                                {text}
-                              </Text>
-                            </View>
-                          ))
-                        )}
-                      </View>
-                      <View style={{ marginLeft: 16 }}>
-                        {q.status === "wrong" ? (
-                          <Ionicons name="close-circle" size={24} color="#ef4444" />
-                        ) : q.status === "correct" ? (
-                          <Ionicons name="checkmark-circle" size={24} color="#4ade80" />
-                        ) : null}
-                      </View>
-                    </View>
-                    
-                    <Text style={{ fontSize: 13, fontWeight: "700", color: settingsDarkMode ? "#ffffff" : "#111827", marginBottom: 12 }}>
-                      Correct Answer:
-                    </Text>
-                    <View style={{ backgroundColor: "#65a30d", borderRadius: 8, padding: 16, marginBottom: q.explanation ? 16 : 0 }}>
-                      {q.correctTexts.map((text: string, i: number) => (
-                        <Text key={i} style={{ fontSize: 15, color: "#ffffff", fontWeight: "500", lineHeight: 22, marginBottom: i < q.correctTexts.length - 1 ? 8 : 0 }}>
-                          {text}
-                        </Text>
-                      ))}
-                    </View>
-
-                    {q.explanation && (
-                      <View>
-                        <Text style={{ fontSize: 13, fontWeight: "700", color: settingsDarkMode ? "#ffffff" : "#111827", marginBottom: 8 }}>
-                          Tip to remember:
-                        </Text>
-                        <Text style={{ fontSize: 14, color: settingsDarkMode ? "#cbd5e1" : "#475569", lineHeight: 20 }}>
-                          {q.explanation}
-                        </Text>
-                      </View>
+            {showWrongReview && (
+              <View style={[styles.guideStepCard, { marginTop: 8, marginBottom: 0 }, !settingsDarkMode && styles.lightCard]}>
+                {wrongQsForQuiz.map((q: any, idx: number) => (
+                  <View key={`${q.id}-${idx}`} style={[styles.wrongQuestionItem, idx === wrongQsForQuiz.length - 1 && { borderBottomWidth: 0 }, !settingsDarkMode && styles.lightBorder]}>
+                    <Text style={[styles.wrongQuestionPrompt, !settingsDarkMode && styles.lightText]}>{idx + 1}. {q.prompt}</Text>
+                    {q.imageUrl && (
+                      <Image source={{ uri: q.imageUrl }} style={{ width: "100%", height: 120, borderRadius: 8, marginTop: 8, marginBottom: 8, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }} resizeMode="contain" />
                     )}
+                    <Text style={styles.wrongAnswerText}>Your answer: {q.selected || "(Skipped)"}</Text>
+                    <Text style={styles.correctAnswerText}>Correct: {q.correct}</Text>
                   </View>
                 ))}
-              </ScrollView>
-            </View>
-          </Modal>
+              </View>
+            )}
+          </View>
+        )}
 
-        </ScrollView>
+        {/* Action Buttons */}
+        <View style={{ gap: 12, marginTop: 12, width: "100%", paddingBottom: 40 }}>
+          {wrongQsForQuiz.length > 0 && (
+            <Pressable
+              onPress={handleReattemptWrong}
+              style={({ pressed }) => [
+                styles.startQuizBtn,
+                { backgroundColor: settingsDarkMode ? "rgba(59, 130, 246, 0.15)" : "rgba(59, 130, 246, 0.1)", shadowOpacity: 0 },
+                pressed && styles.opacityPress
+              ]}
+            >
+              <Ionicons name="refresh" size={18} color={settingsDarkMode ? "#60a5fa" : "#2563eb"} />
+              <Text style={[styles.startQuizBtnText, { color: settingsDarkMode ? "#60a5fa" : "#2563eb" }]}>Re-attempt Wrong Questions</Text>
+            </Pressable>
+          )}
 
-        {/* Bottom Pinned Continue Button */}
-        <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingHorizontal: 24, paddingVertical: 20, paddingTop: 10, backgroundColor: settingsDarkMode ? "#0b1021" : "#f8fafc" }}>
           <Pressable
-            onPress={() => saveAndExitQuizSession(true)}
-            style={({ pressed }) => ({
-              backgroundColor: "#ffffff",
-              borderRadius: 16,
-              height: 56,
-              alignItems: "center",
-              justifyContent: "center",
-              opacity: pressed ? 0.8 : 1,
-              shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8
-            })}
+            onPress={handleRetakeEntire}
+            style={({ pressed }) => [
+              styles.startQuizBtn,
+              { backgroundColor: settingsDarkMode ? "rgba(99, 102, 241, 0.15)" : "rgba(99, 102, 241, 0.1)", shadowOpacity: 0 },
+              pressed && styles.opacityPress
+            ]}
           >
-            <Text style={{ fontSize: 16, fontWeight: "600", color: "#111827" }}>Continue</Text>
+            <Ionicons name="play" size={18} color={settingsDarkMode ? "#818cf8" : "#4f46e5"} />
+            <Text style={[styles.startQuizBtnText, { color: settingsDarkMode ? "#818cf8" : "#4f46e5" }]}>Retake Entire Quiz</Text>
+          </Pressable>
+
+          {/* ── Cross-mode CTA: nudge toward flashcards if score is low ── */}
+          {(() => {
+            const origQuiz = quizzes.find((q: any) => q.id === activeSession?.quizId) ||
+              (activeSession?.quizId === "sample_quiz" ? { ...sampleQuiz, flashcards: sampleQuiz?.flashcards || [] } : null);
+            const hasFlashcards = (origQuiz?.flashcards || []).length > 0;
+            if (!hasFlashcards) return null;
+            const isDark = settingsDarkMode;
+            if (scorePct < 80) {
+              return (
+                <Pressable
+                  onPress={() => {
+                    saveAndExitQuizSession(false);
+                    // Navigate to insights then open flashcard study mode
+                    if (origQuiz) {
+                      setViewingInsightsQuiz(origQuiz);
+                      setViewingInsightsQuizFromTab("home");
+                      setActiveTab("insights" as any);
+                      setTimeout(() => setStudyModeModalVisible(true), 350);
+                    }
+                  }}
+                  style={({ pressed }) => ({
+                    flexDirection: "row", alignItems: "center", justifyContent: "center",
+                    gap: 10, height: 52, borderRadius: 14,
+                    backgroundColor: isDark ? "rgba(168,85,247,0.18)" : "rgba(168,85,247,0.1)",
+                    borderWidth: 1, borderColor: isDark ? "rgba(168,85,247,0.4)" : "rgba(168,85,247,0.25)",
+                    opacity: pressed ? 0.8 : 1,
+                  })}
+                >
+                  <Ionicons name="albums" size={18} color="#a855f7" />
+                  <Text style={{ fontSize: 14, fontWeight: "700", color: "#a855f7" }}>
+                    Reinforce with Flashcards →
+                  </Text>
+                </Pressable>
+              );
+            }
+            return (
+              <Pressable
+                onPress={() => {
+                  saveAndExitQuizSession(false);
+                  if (origQuiz) {
+                    setViewingInsightsQuiz(origQuiz);
+                    setViewingInsightsQuizFromTab("home");
+                    setActiveTab("insights" as any);
+                    setTimeout(() => setStudyModeModalVisible(true), 350);
+                  }
+                }}
+                style={({ pressed }) => ({
+                  flexDirection: "row", alignItems: "center", justifyContent: "center",
+                  gap: 10, height: 48, borderRadius: 14,
+                  backgroundColor: "transparent",
+                  borderWidth: 1, borderColor: isDark ? "rgba(168,85,247,0.3)" : "rgba(168,85,247,0.2)",
+                  opacity: pressed ? 0.7 : 1,
+                })}
+              >
+                <Ionicons name="albums-outline" size={16} color={isDark ? "#c084fc" : "#9333ea"} />
+                <Text style={{ fontSize: 13, fontWeight: "600", color: isDark ? "#c084fc" : "#9333ea" }}>
+                  Review Flashcards
+                </Text>
+              </Pressable>
+            );
+          })()}
+
+          <Pressable
+            onPress={() => saveAndExitQuizSession()}
+            style={[styles.startQuizBtn, { backgroundColor: settingsDarkMode ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.06)", shadowOpacity: 0 }]}
+          >
+            <Text style={[styles.startQuizBtnText, { color: settingsDarkMode ? "#ffffff" : "#0d0f14" }]}>Exit to Library</Text>
           </Pressable>
         </View>
-      </View>
+      </ScrollView>
     );
   };
 
@@ -4052,17 +4011,12 @@ export default function HomeScreen() {
     setStudyTypedAnswer("");
     setStudyChecked(false);
     setIsPreviewMode(false);
-    setSessionRatings({ perfect: 0, good: 0, hard: 0, again: 0 });
   };
 
 
 
   const handleSM2Rating = (rating: "again" | "hard" | "good" | "easy" | "perfect") => {
     if (!studyingDeck || studyQueue.length === 0 || selectedRating !== null) return;
-    
-    // Convert "easy" to "perfect" for our tracking
-    const trackingRating = rating === "easy" ? "perfect" : rating;
-    setSessionRatings(prev => ({ ...prev, [trackingRating]: prev[trackingRating] + 1 }));
     
     setSelectedRating(rating);
     Animated.timing(swipeX, {
@@ -5199,320 +5153,8 @@ export default function HomeScreen() {
         return renderFlashcardsView();
       case "bookmarked-questions":
         return renderBookmarkedQuestionsView();
-      case "library": {
-        // ── Library Screen ────────────────────────────────────────
-        const isDark = settingsDarkMode;
-        const bg = "#0B0F1E";
-        const cardBg = "#141930";
-        const iconBg = "#1E2340";
-        const accentPurple = "#B5A8FF";
-        const accentPillBg = "#2B2560";
-        const muted = "#8B8FA8";
-        const txt = "#ffffff";
-        const border = "rgba(255,255,255,0.08)";
-
-        // Group items by recency
-        const groupByTime = (items: any[], getDate: (item: any) => number) => {
-          const now = Date.now();
-          const oneWeek = 7 * 24 * 60 * 60 * 1000;
-          const twoWeeks = 14 * 24 * 60 * 60 * 1000;
-          const groups: { label: string; items: any[] }[] = [
-            { label: "This week", items: [] },
-            { label: "Last week", items: [] },
-            { label: "Older", items: [] },
-          ];
-          items.forEach(item => {
-            const date = getDate(item);
-            if (date === 0 || now - date < oneWeek) groups[0].items.push(item);
-            else if (now - date < twoWeeks) groups[1].items.push(item);
-            else groups[2].items.push(item);
-          });
-          return groups.filter(g => g.items.length > 0);
-        };
-
-        const filteredDecks = flashcardDecks.filter((d: any) =>
-          !librarySearch || d.title.toLowerCase().includes(librarySearch.toLowerCase())
-        );
-
-        const filteredQuizzes = [...quizzes].reverse().filter((q: any) =>
-          !librarySearch || q.title.toLowerCase().includes(librarySearch.toLowerCase())
-        );
-
-        const deckGroups = groupByTime(filteredDecks, (d: any) => {
-          const attempts = d.attempts || [];
-          return attempts.length > 0 ? (attempts[attempts.length - 1].date || 0) : 0;
-        });
-
-        const quizGroups = groupByTime(filteredQuizzes, (q: any) => {
-          const attempts = q.attempts || [];
-          return attempts.length > 0 ? (attempts[0].date || 0) : 0;
-        });
-
-        const renderFlashcardRow = (deck: any) => {
-          const cardCount = (deck.cards || []).length;
-          const dueCount = (deck.cards || []).filter((c: any) =>
-            !c.sm2_nextReviewDate || c.sm2_nextReviewDate <= Date.now()
-          ).length;
-          const hasDue = dueCount > 0 && (deck.cards || []).some((c: any) => c.sm2_nextReviewDate);
-          return (
-            <AnimatedPressable
-              key={deck.id}
-              onPress={() => startStudy(deck)}
-              style={{
-                flexDirection: "row", alignItems: "center",
-                paddingVertical: 13, paddingHorizontal: 14,
-                backgroundColor: cardBg, borderRadius: 14,
-                marginBottom: 8, borderWidth: 1, borderColor: border,
-              }}
-              scaleTo={0.97}
-            >
-              <View style={{
-                width: 48, height: 48, borderRadius: 12,
-                backgroundColor: iconBg, alignItems: "center", justifyContent: "center",
-                marginRight: 12,
-              }}>
-                <Ionicons name="copy-outline" size={22} color={accentPurple} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 15, fontWeight: "500", color: txt, marginBottom: 3 }} numberOfLines={1}>
-                  {deck.title}
-                </Text>
-                <Text style={{ fontSize: 12, color: muted }}>
-                  {`Flashcard set · ${cardCount} terms · by you`}
-                </Text>
-              </View>
-              {hasDue ? (
-                <View style={{
-                  backgroundColor: accentPillBg, borderRadius: 20,
-                  paddingHorizontal: 10, paddingVertical: 4, marginLeft: 8,
-                }}>
-                  <Text style={{ fontSize: 11, fontWeight: "700", color: accentPurple }}>
-                    {dueCount} due
-                  </Text>
-                </View>
-              ) : (
-                <Feather name="chevron-right" size={18} color={muted} />
-              )}
-            </AnimatedPressable>
-          );
-        };
-
-        const renderQuizRow = (quiz: any) => {
-          const attempts = quiz.attempts || [];
-          const lastScore = attempts.length > 0 ? attempts[0].score : null;
-          const wrongCount = (quiz.wrongQuestions || []).length;
-          return (
-            <AnimatedPressable
-              key={quiz.id}
-              onPress={() => {
-                setViewingInsightsQuiz(quiz);
-                setViewingInsightsQuizFromTab("library");
-                setActiveTab("insights");
-              }}
-              style={{
-                flexDirection: "row", alignItems: "center",
-                paddingVertical: 13, paddingHorizontal: 14,
-                backgroundColor: cardBg, borderRadius: 14,
-                marginBottom: 8, borderWidth: 1, borderColor: border,
-              }}
-              scaleTo={0.97}
-            >
-              <View style={{
-                width: 48, height: 48, borderRadius: 12,
-                backgroundColor: iconBg, alignItems: "center", justifyContent: "center",
-                marginRight: 12,
-              }}>
-                <Ionicons name="flash-outline" size={22} color={accentPurple} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 15, fontWeight: "500", color: txt, marginBottom: 3 }} numberOfLines={1}>
-                  {quiz.title}
-                </Text>
-                <Text style={{ fontSize: 12, color: muted }}>
-                  {`Quiz · ${quiz.questions || 0} questions`}
-                  {attempts.length > 0 ? ` · ${attempts.length} attempt${attempts.length > 1 ? "s" : ""}` : ""}
-                  {lastScore !== null ? ` · ${lastScore}%` : ""}
-                </Text>
-              </View>
-              {wrongCount > 0 ? (
-                <View style={{
-                  backgroundColor: accentPillBg, borderRadius: 20,
-                  paddingHorizontal: 10, paddingVertical: 4, marginLeft: 8,
-                }}>
-                  <Text style={{ fontSize: 11, fontWeight: "700", color: accentPurple }}>
-                    {wrongCount} due
-                  </Text>
-                </View>
-              ) : (
-                <Feather name="chevron-right" size={18} color={muted} />
-              )}
-            </AnimatedPressable>
-          );
-        };
-
-        return (
-          <View style={{ flex: 1, backgroundColor: bg }}>
-            {/* ── Top Bar ── */}
-            <View style={{
-              flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-              paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16,
-            }}>
-              <Text style={{ fontSize: 24, fontWeight: "700", color: txt }}>Library</Text>
-              <AnimatedPressable
-                onPress={() => setShowAddMenu(true)}
-                style={{
-                  width: 36, height: 36, borderRadius: 18,
-                  backgroundColor: accentPillBg,
-                  alignItems: "center", justifyContent: "center",
-                }}
-                scaleTo={0.9}
-              >
-                <Ionicons name="add" size={22} color={accentPurple} />
-              </AnimatedPressable>
-            </View>
-
-            {/* ── Pill Toggle ── */}
-            <View style={{
-              flexDirection: "row", marginHorizontal: 20, marginBottom: 14,
-              backgroundColor: "#141930", borderRadius: 999, padding: 4,
-              alignSelf: "flex-start",
-            }}>
-              {(["flashcards", "quizzes"] as const).map(tab => (
-                <Pressable
-                  key={tab}
-                  onPress={() => { setLibraryTab(tab); setLibrarySearch(""); }}
-                  style={{
-                    paddingHorizontal: 20, paddingVertical: 8, borderRadius: 999,
-                    backgroundColor: libraryTab === tab ? accentPillBg : "transparent",
-                    borderWidth: libraryTab === tab ? 1 : 0,
-                    borderColor: libraryTab === tab ? accentPurple : "transparent",
-                  }}
-                >
-                  <Text style={{
-                    fontSize: 13, fontWeight: "600",
-                    color: libraryTab === tab ? accentPurple : muted,
-                  }}>
-                    {tab === "flashcards" ? "Flashcards" : "Quizzes"}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-
-            {/* ── Search Bar ── */}
-            <View style={{
-              flexDirection: "row", alignItems: "center", gap: 10,
-              marginHorizontal: 20, marginBottom: 16,
-              backgroundColor: "#141930", borderRadius: 12,
-              paddingHorizontal: 14, paddingVertical: 10,
-              borderWidth: 1, borderColor: "rgba(255,255,255,0.08)",
-            }}>
-              <Ionicons name="search-outline" size={16} color={muted} />
-              <TextInput
-                placeholder={libraryTab === "flashcards" ? "Search flashcards..." : "Search quizzes..."}
-                placeholderTextColor={muted}
-                value={librarySearch}
-                onChangeText={setLibrarySearch}
-                style={{ flex: 1, fontSize: 14, color: txt, padding: 0 }}
-              />
-              {librarySearch.length > 0 && (
-                <Pressable onPress={() => setLibrarySearch("")}>
-                  <Ionicons name="close-circle" size={16} color={muted} />
-                </Pressable>
-              )}
-            </View>
-
-            {/* ── Content List ── */}
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 120 }}
-            >
-              {libraryTab === "flashcards" ? (
-                filteredDecks.length === 0 ? (
-                  <View style={{ alignItems: "center", paddingTop: 64, gap: 14 }}>
-                    <View style={{
-                      width: 72, height: 72, borderRadius: 36,
-                      backgroundColor: accentPillBg, alignItems: "center", justifyContent: "center",
-                    }}>
-                      <Ionicons name="copy-outline" size={32} color={accentPurple} />
-                    </View>
-                    <Text style={{ fontSize: 18, fontWeight: "600", color: txt }}>No flashcard decks yet</Text>
-                    <Text style={{ fontSize: 13, color: muted, textAlign: "center" }}>Tap + to create one</Text>
-                    <AnimatedPressable
-                      onPress={() => setShowAddMenu(true)}
-                      style={{
-                        backgroundColor: accentPurple, borderRadius: 12,
-                        paddingVertical: 14, paddingHorizontal: 32, marginTop: 8,
-                      }}
-                      scaleTo={0.96}
-                    >
-                      <Text style={{ color: "#0B0F1E", fontWeight: "700", fontSize: 15 }}>+ New Deck</Text>
-                    </AnimatedPressable>
-                  </View>
-                ) : (
-                  <>
-                    {deckGroups.map(group => (
-                      <View key={group.label}>
-                        <Text style={{
-                          fontSize: 11, fontWeight: "600", color: muted,
-                          textTransform: "uppercase", letterSpacing: 1,
-                          marginBottom: 10, marginTop: 6,
-                        }}>
-                          {group.label}
-                        </Text>
-                        {group.items.map(renderFlashcardRow)}
-                      </View>
-                    ))}
-                  </>
-                )
-              ) : (
-                filteredQuizzes.length === 0 ? (
-                  <View style={{ alignItems: "center", paddingTop: 64, gap: 14 }}>
-                    <View style={{
-                      width: 72, height: 72, borderRadius: 36,
-                      backgroundColor: accentPillBg, alignItems: "center", justifyContent: "center",
-                    }}>
-                      <Ionicons name="flash-outline" size={32} color={accentPurple} />
-                    </View>
-                    <Text style={{ fontSize: 18, fontWeight: "600", color: txt }}>No quizzes yet</Text>
-                    <Text style={{ fontSize: 13, color: muted, textAlign: "center" }}>
-                      Create a quiz from any deck or PDF
-                    </Text>
-                    <AnimatedPressable
-                      onPress={() => setShowAddMenu(true)}
-                      style={{
-                        backgroundColor: accentPurple, borderRadius: 12,
-                        paddingVertical: 14, paddingHorizontal: 32, marginTop: 8,
-                      }}
-                      scaleTo={0.96}
-                    >
-                      <Text style={{ color: "#0B0F1E", fontWeight: "700", fontSize: 15 }}>+ New Quiz</Text>
-                    </AnimatedPressable>
-                  </View>
-                ) : (
-                  <>
-                    {quizGroups.map(group => (
-                      <View key={group.label}>
-                        <Text style={{
-                          fontSize: 11, fontWeight: "600", color: muted,
-                          textTransform: "uppercase", letterSpacing: 1,
-                          marginBottom: 10, marginTop: 6,
-                        }}>
-                          {group.label}
-                        </Text>
-                        {group.items.map(renderQuizRow)}
-                      </View>
-                    ))}
-                  </>
-                )
-              )}
-            </ScrollView>
-          </View>
-        );
-      }
-
       case "battle":
         return renderBattleLobbyView();
-
 
 
       case "add": {
@@ -6549,120 +6191,238 @@ export default function HomeScreen() {
             const sep     = isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)";
 
             return (
-              <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: settingsDarkMode ? "#0b1021" : "#f8fafc", zIndex: 99 }}>
-                {/* Header with Close Button */}
-                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 24, paddingTop: 60, paddingBottom: 20 }}>
-                  <Text style={{ fontSize: 24, fontWeight: "600", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Next steps</Text>
-                  <Pressable onPress={handleGoBack} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 8 })}>
-                    <Ionicons name="close" size={28} color={settingsDarkMode ? "#ffffff" : "#111827"} />
-                  </Pressable>
-                </View>
+              <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+                backgroundColor: bg, zIndex: 99 }}>
+                <ScrollView
+                  contentContainerStyle={{ flexGrow: 1, paddingBottom: 48 }}
+                  showsVerticalScrollIndicator={false}
+                >
 
-                <ScrollView contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
-                  {/* Performance Breakdown Box */}
-                  <View style={{ backgroundColor: settingsDarkMode ? "#172033" : "#ffffff", borderRadius: 16, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
-                    {/* Perfectly */}
-                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
-                        <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#84cc16", alignItems: "center", justifyContent: "center" }}>
-                          <Ionicons name="checkmark-sharp" size={18} color="#ffffff" />
-                        </View>
-                        <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Perfectly</Text>
-                      </View>
-                      <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>{sessionRatings.perfect}</Text>
+                  {/* ── Hero ──────────────────────────────────────── */}
+                  <View style={{ alignItems: "center", paddingTop: 72, paddingBottom: 28, paddingHorizontal: 24 }}>
+                    {/* Glowing emoji ring */}
+                    <View style={{
+                      width: 100, height: 100, borderRadius: 50,
+                      backgroundColor: isDark ? "rgba(0,212,170,0.1)" : "rgba(0,212,170,0.12)",
+                      borderWidth: 1.5, borderColor: "rgba(0,212,170,0.35)",
+                      alignItems: "center", justifyContent: "center",
+                      marginBottom: 24,
+                      shadowColor: "#00d4aa", shadowOffset: { width: 0, height: 0 },
+                      shadowOpacity: 0.4, shadowRadius: 20, elevation: 8,
+                    }}>
+                      <Text style={{ fontSize: 46 }}>🎉</Text>
                     </View>
-                    {/* Well */}
-                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
-                        <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#84cc16", alignItems: "center", justifyContent: "center" }}>
-                          <Ionicons name="checkmark-sharp" size={18} color="#ffffff" />
-                        </View>
-                        <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Well</Text>
+
+                    <Text style={{ fontSize: 30, fontWeight: "800", color: txt,
+                      textAlign: "center", letterSpacing: -0.5, marginBottom: 8 }}>
+                      You're all caught up!
+                    </Text>
+                    <Text style={{ fontSize: 15, color: muted, textAlign: "center", lineHeight: 22, marginBottom: 18 }}>
+                      All due cards have been reviewed.
+                    </Text>
+
+                    {/* Next review pill */}
+                    {nextReviewMs ? (
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 7,
+                        backgroundColor: isDark ? "rgba(0,212,170,0.1)" : "rgba(0,212,170,0.1)",
+                        borderRadius: 24, paddingHorizontal: 18, paddingVertical: 9,
+                        borderWidth: 1, borderColor: "rgba(0,212,170,0.3)" }}>
+                        <Ionicons name="time-outline" size={15} color="#00d4aa" />
+                        <Text style={{ fontSize: 14, color: "#00d4aa", fontWeight: "700" }}>
+                          Next review in {formatCountdown(nextReviewMs)}
+                        </Text>
                       </View>
-                      <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.5)" }}>{sessionRatings.good}</Text>
+                    ) : null}
+                  </View>
+
+                  {/* ── Stat tiles ────────────────────────────────── */}
+                  <View style={{ flexDirection: "row", paddingHorizontal: 20, gap: 12, marginBottom: 14 }}>
+                    {/* Reviewed */}
+                    <View style={{ flex: 1, backgroundColor: surface, borderRadius: 20,
+                      padding: 18, borderWidth: 1, borderColor: border,
+                      shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: isDark ? 0.3 : 0.06, shadowRadius: 8, elevation: 3 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 12 }}>
+                        <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: "#00d4aa" }} />
+                        <Text style={{ fontSize: 11, fontWeight: "700", color: "#00d4aa",
+                          letterSpacing: 1.1, textTransform: "uppercase" }}>Reviewed</Text>
+                      </View>
+                      <Text style={{ fontSize: 32, fontWeight: "800", color: txt, lineHeight: 36 }}>
+                        {reviewedCards}
+                      </Text>
+                      <Text style={{ fontSize: 12, color: muted, marginTop: 3, marginBottom: 14 }}>
+                        of {totalCards} cards
+                      </Text>
+                      <View style={{ height: 4, backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "#e8f0fe",
+                        borderRadius: 2 }}>
+                        <View style={{ height: 4, borderRadius: 2, backgroundColor: "#00d4aa",
+                          width: `${reviewedPct}%` as any }} />
+                      </View>
                     </View>
-                    {/* Not quite */}
-                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
-                        <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#ef4444", alignItems: "center", justifyContent: "center" }}>
-                          <Ionicons name="close-sharp" size={18} color="#ffffff" />
-                        </View>
-                        <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Not quite</Text>
+
+                    {/* Mastered */}
+                    <View style={{ flex: 1, backgroundColor: surface, borderRadius: 20,
+                      padding: 18, borderWidth: 1, borderColor: border,
+                      shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: isDark ? 0.3 : 0.06, shadowRadius: 8, elevation: 3 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 12 }}>
+                        <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: "#818cf8" }} />
+                        <Text style={{ fontSize: 11, fontWeight: "700", color: "#818cf8",
+                          letterSpacing: 1.1, textTransform: "uppercase" }}>Mastered</Text>
                       </View>
-                      <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.5)" }}>{sessionRatings.hard}</Text>
-                    </View>
-                    {/* Not at all */}
-                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 12 }}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
-                        <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#ef4444", alignItems: "center", justifyContent: "center" }}>
-                          <Ionicons name="close-sharp" size={18} color="#ffffff" />
-                        </View>
-                        <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Not at all</Text>
+                      <Text style={{ fontSize: 32, fontWeight: "800", color: txt, lineHeight: 36 }}>
+                        {masteredCards}
+                      </Text>
+                      <Text style={{ fontSize: 12, color: muted, marginTop: 3, marginBottom: 14 }}>
+                        of {totalCards} cards
+                      </Text>
+                      <View style={{ height: 4, backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "#e8f0fe",
+                        borderRadius: 2 }}>
+                        <View style={{ height: 4, borderRadius: 2, backgroundColor: "#818cf8",
+                          width: `${masteredPct}%` as any }} />
                       </View>
-                      <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>{sessionRatings.again}</Text>
                     </View>
                   </View>
 
-                  {/* Actions */}
-                  <View style={{ gap: 12 }}>
-                    <Pressable onPress={handleGoBack} style={({pressed}) => ({ backgroundColor: settingsDarkMode ? "#172033" : "#ffffff", borderRadius: 16, padding: 20, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", opacity: pressed ? 0.8 : 1 })}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
-                        <Text style={{ fontSize: 24 }}>📝</Text>
-                        <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Review Flashcards</Text>
+                  {/* ── Coming up ─────────────────────────────────── */}
+                  {upcomingCards.length > 0 && (
+                    <View style={{ marginHorizontal: 20, backgroundColor: surface, borderRadius: 20,
+                      borderWidth: 1, borderColor: border, marginBottom: 20, overflow: "hidden",
+                      shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: isDark ? 0.3 : 0.06, shadowRadius: 8, elevation: 3 }}>
+                      {/* Section header */}
+                      <View style={{ paddingHorizontal: 18, paddingTop: 16, paddingBottom: 12,
+                        borderBottomWidth: 1, borderBottomColor: sep }}>
+                        <Text style={{ fontSize: 11, fontWeight: "700", letterSpacing: 1.1,
+                          textTransform: "uppercase", color: muted }}>Coming Up</Text>
                       </View>
-                      <Feather name="chevron-right" size={22} color={settingsDarkMode ? "#ffffff" : "#111827"} />
-                    </Pressable>
+                      {upcomingCards.slice(0, 5).map((c: any, i: number) => (
+                        <View key={c.id || i} style={{ flexDirection: "row", alignItems: "center",
+                          paddingHorizontal: 18, paddingVertical: 13,
+                          borderTopWidth: i === 0 ? 0 : 1, borderTopColor: sep }}>
+                          <View style={{ width: 6, height: 6, borderRadius: 3,
+                            backgroundColor: "#00d4aa", marginRight: 14, flexShrink: 0, opacity: 0.7 }} />
+                          <Text style={{ flex: 1, fontSize: 14, color: txt, lineHeight: 20 }}
+                            numberOfLines={1}>
+                            {c.front || c.question || c.prompt || "Card"}
+                          </Text>
+                          <View style={{ backgroundColor: isDark ? "rgba(255,255,255,0.07)" : "#f1f5f9",
+                            borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4,
+                            marginLeft: 12, flexShrink: 0 }}>
+                            <Text style={{ fontSize: 12, color: muted, fontWeight: "500" }}>
+                              {formatRelative(c.sm2_nextReviewDate)}
+                            </Text>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  )}
 
-                    <Pressable onPress={() => startStudy(studyingDeck, customStudyMode)} style={({pressed}) => ({ backgroundColor: settingsDarkMode ? "#172033" : "#ffffff", borderRadius: 16, padding: 20, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", opacity: pressed ? 0.8 : 1 })}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
-                        <Text style={{ fontSize: 24 }}>📇</Text>
-                        <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Study Flashcards Again</Text>
-                      </View>
-                      <Feather name="chevron-right" size={22} color={settingsDarkMode ? "#ffffff" : "#111827"} />
-                    </Pressable>
+                  {/* ── Actions ───────────────────────────────────── */}
+                  <View style={{ paddingHorizontal: 20, gap: 10 }}>
 
-                    <Pressable 
-                      onPress={() => {
-                        setStudyingDeck(null);
-                        setActiveTab("insights" as any);
-                        setTimeout(() => handleOpenQuizOptions(viewingInsightsQuiz || quizzes[0] || {} as any), 300);
-                      }} 
-                      style={({pressed}) => ({ backgroundColor: settingsDarkMode ? "#172033" : "#ffffff", borderRadius: 16, padding: 20, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", opacity: pressed ? 0.8 : 1 })}
+                    {/* Review All — primary teal CTA */}
+                    <Pressable
+                      onPress={handleReviewAll}
+                      style={({ pressed }) => ({
+                        flexDirection: "row", alignItems: "center", justifyContent: "center",
+                        gap: 10, height: 58, borderRadius: 18,
+                        backgroundColor: "#00d4aa",
+                        opacity: pressed ? 0.85 : 1,
+                        shadowColor: "#00d4aa", shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.4, shadowRadius: 12, elevation: 6,
+                      })}
                     >
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
-                        <Text style={{ fontSize: 24 }}>❓</Text>
-                        <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Play Quiz</Text>
-                      </View>
-                      <Feather name="chevron-right" size={22} color={settingsDarkMode ? "#ffffff" : "#111827"} />
+                      <Ionicons name="refresh-circle-outline" size={22} color="#000" />
+                      <Text style={{ fontSize: 16, fontWeight: "800", color: "#000", letterSpacing: 0.2 }}>
+                        Review All Cards
+                      </Text>
                     </Pressable>
 
-                    <Pressable onPress={() => console.log("Review prompted")} style={({pressed}) => ({ backgroundColor: settingsDarkMode ? "#172033" : "#ffffff", borderRadius: 16, padding: 20, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", opacity: pressed ? 0.8 : 1 })}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
-                        <Text style={{ fontSize: 24 }}>👍</Text>
-                        <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Give us a 5 star review</Text>
-                      </View>
-                      <Feather name="chevron-right" size={22} color={settingsDarkMode ? "#ffffff" : "#111827"} />
+                    {/* Learn New — indigo */}
+                    {newCards.length > 0 && (
+                      <Pressable
+                        onPress={handleLearnNew}
+                        style={({ pressed }) => ({
+                          flexDirection: "row", alignItems: "center", justifyContent: "center",
+                          gap: 10, height: 56, borderRadius: 18,
+                          backgroundColor: "#6366f1",
+                          opacity: pressed ? 0.85 : 1,
+                          shadowColor: "#6366f1", shadowOffset: { width: 0, height: 4 },
+                          shadowOpacity: 0.3, shadowRadius: 10, elevation: 5,
+                        })}
+                      >
+                        <Ionicons name="book-outline" size={20} color="#fff" />
+                        <Text style={{ fontSize: 16, fontWeight: "700", color: "#fff" }}>
+                          Learn New Cards ({newCards.length})
+                        </Text>
+                      </Pressable>
+                    )}
+
+                    {/* Preview Next — subtle filled */}
+                    {previewCandidates.length > 0 && (
+                      <Pressable
+                        onPress={handlePreviewNext}
+                        style={({ pressed }) => ({
+                          flexDirection: "row", alignItems: "center", justifyContent: "center",
+                          gap: 10, height: 52, borderRadius: 18,
+                          backgroundColor: isDark ? "rgba(255,255,255,0.07)" : "#e8eaf6",
+                          borderWidth: 1, borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(99,102,241,0.15)",
+                          opacity: pressed ? 0.7 : 1,
+                        })}
+                      >
+                        <Ionicons name="eye-outline" size={18} color={isDark ? "#94a3b8" : "#6366f1"} />
+                        <Text style={{ fontSize: 15, fontWeight: "600",
+                          color: isDark ? "#cbd5e1" : "#4338ca" }}>
+                          Preview Next {previewCandidates.length}
+                        </Text>
+                      </Pressable>
+                    )}
+
+                    {/* ── Cross-mode CTA: nudge toward quiz after flashcard session ── */}
+                    {viewingInsightsQuiz && (viewingInsightsQuiz.questionsList || []).length > 0 && (() => {
+                      const isDark = settingsDarkMode;
+                      const origQuiz = viewingInsightsQuiz;
+                      const hasAttempts = (origQuiz.attempts || []).length > 0;
+                      return (
+                        <Pressable
+                          onPress={() => {
+                            setStudyingDeck(null);
+                            setActiveTab("insights" as any);
+                            setTimeout(() => handleOpenQuizOptions(origQuiz), 300);
+                          }}
+                          style={({ pressed }) => ({
+                            flexDirection: "row", alignItems: "center", justifyContent: "center",
+                            gap: 10, height: 52, borderRadius: 18,
+                            backgroundColor: isDark ? "rgba(99,102,241,0.18)" : "rgba(99,102,241,0.1)",
+                            borderWidth: 1, borderColor: isDark ? "rgba(99,102,241,0.4)" : "rgba(99,102,241,0.2)",
+                            opacity: pressed ? 0.8 : 1,
+                          })}
+                        >
+                          <Ionicons name="help-circle" size={18} color={isDark ? "#818cf8" : "#6366f1"} />
+                          <Text style={{ fontSize: 14, fontWeight: "700", color: isDark ? "#818cf8" : "#4f46e5" }}>
+                            {hasAttempts ? "Test Yourself with Quiz →" : "Start Quiz →"}
+                          </Text>
+                        </Pressable>
+                      );
+                    })()}
+
+                    {/* Back — text only */}
+                    <Pressable
+                      onPress={handleGoBack}
+                      style={({ pressed }) => ({
+                        flexDirection: "row", alignItems: "center", justifyContent: "center",
+                        gap: 6, height: 44, opacity: pressed ? 0.5 : 1,
+                      })}
+                    >
+                      <Ionicons name="chevron-back" size={16} color={muted} />
+                      <Text style={{ fontSize: 14, fontWeight: "500", color: muted }}>
+                        {viewingInsightsQuiz ? "Back to Quiz" : "Back to Deck"}
+                      </Text>
                     </Pressable>
                   </View>
-                </ScrollView>
 
-                {/* Bottom Pinned Done Button */}
-                <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingHorizontal: 24, paddingVertical: 20, paddingTop: 10, backgroundColor: settingsDarkMode ? "#0b1021" : "#f8fafc" }}>
-                  <Pressable
-                    onPress={handleGoBack}
-                    style={({ pressed }) => ({
-                      backgroundColor: "#ffffff",
-                      borderRadius: 16,
-                      height: 56,
-                      alignItems: "center",
-                      justifyContent: "center",
-                      opacity: pressed ? 0.8 : 1,
-                      shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8
-                    })}
-                  >
-                    <Text style={{ fontSize: 16, fontWeight: "600", color: "#111827" }}>Done</Text>
-                  </Pressable>
-                </View>
+                </ScrollView>
               </View>
             );
           }
@@ -7441,353 +7201,336 @@ export default function HomeScreen() {
 
 
       default:
-        // ── Redesigned Home Screen ────────────────────────────────
+        // "home" quizzes list view
         return (() => {
-          const isDark = settingsDarkMode;
-          const bg = "#0B0F1E";
-          const cardBg = "#141930";
-          const iconBg = "#1E2340";
-          const accentPurple = "#B5A8FF";
-          const accentPillBg = "#2B2560";
-          const muted = "#8B8FA8";
-          const txt = "#ffffff";
-          const border = "rgba(255,255,255,0.08)";
+          const isDark   = settingsDarkMode;
+          const bg       = isDark ? "#0f172a" : "#f4f4f8";
+          const cardBg   = isDark ? "#1e293b" : "#ffffff";
+          const border   = isDark ? "#1e1e2e" : "rgba(0,0,0,0.07)";
+          const muted    = isDark ? "#ffffff" : "#666677";
+          const txt      = isDark ? "#ffffff" : "#0d0f14";
 
-          // ── "Jump Back In" — in-progress quizzes & decks ──────────────
-          const inProgressQuizzes = quizzes.filter((q: any) => {
+          const totalQuestionsInAllQuizzes = quizzes.reduce((acc: number, q: any) => acc + (q.questions || 1), 0);
+          const totalCorrectInAllQuizzes = quizzes.reduce((acc: number, q: any) => acc + (q.uniqueCorrectIds || []).length, 0);
+          const overallProgressPct = totalQuestionsInAllQuizzes > 0 
+            ? Math.min(Number(((totalCorrectInAllQuizzes / totalQuestionsInAllQuizzes) * 100).toFixed(1)), 100) 
+            : 0;
+
+          const filtered = quizzes.filter(q => {
             const attempts = q.attempts || [];
             const uniqueCount = (q.uniqueCorrectIds || []).length;
             const qCount = q.questions || 1;
-            return attempts.length > 0 && uniqueCount < qCount;
+            const isCompleted = uniqueCount >= qCount;
+            if (homeSearch && !q.title.toLowerCase().includes(homeSearch.toLowerCase())) return false;
+            if (homeFilter === "progress") return attempts.length > 0 && !isCompleted;
+            if (homeFilter === "notstarted") return attempts.length === 0;
+            if (homeFilter === "done") return isCompleted && attempts.length > 0;
+            return true;
+          }).reverse();
+
+          if (!sampleDismissed) {
+            const attempts = sampleQuiz.attempts || [];
+            const uniqueCount = (sampleQuiz.uniqueCorrectIds || []).length;
+            const qCount = sampleQuiz.questions || 1;
+            const isCompleted = uniqueCount >= qCount;
+            let showSample = true;
+            if (homeSearch && !sampleQuiz.title.toLowerCase().includes(homeSearch.toLowerCase())) showSample = false;
+            if (homeFilter === "progress" && (attempts.length === 0 || isCompleted)) showSample = false;
+            if (homeFilter === "notstarted" && attempts.length > 0) showSample = false;
+            if (homeFilter === "done" && (!isCompleted || attempts.length === 0)) showSample = false;
+            if (showSample) {
+              filtered.push(sampleQuiz);
+            }
+          }
+
+          let combinedQuizzes = (!sampleDismissed && sampleQuiz) ? [...quizzes, sampleQuiz] : quizzes;
+          
+          // Apply search filter before counting
+          if (homeSearch) {
+            const lowerSearch = homeSearch.toLowerCase();
+            combinedQuizzes = combinedQuizzes.filter(q => q.title.toLowerCase().includes(lowerSearch));
+          }
+
+          const allCount = combinedQuizzes.length;
+          let progressCount = 0;
+          let notStartedCount = 0;
+          let doneCount = 0;
+
+          combinedQuizzes.forEach(q => {
+            const attempts = q.attempts || [];
+            const uniqueCount = (q.uniqueCorrectIds || []).length;
+            const qCount = q.questions || 1;
+            const isCompleted = uniqueCount >= qCount;
+            
+            if (attempts.length === 0) notStartedCount++;
+            else if (isCompleted && attempts.length > 0) doneCount++;
+            else progressCount++;
           });
 
-          const inProgressDecks = flashcardDecks.filter((d: any) => {
-            const cards = d.cards || [];
-            return cards.some((c: any) => c.sm2_nextReviewDate);
-          });
-
-          type JumpItem = {
-            id: string;
-            title: string;
-            type: "quiz" | "flashcard";
-            progress: number;
-            progressLabel: string;
-            raw: any;
-          };
-
-          const jumpItems: JumpItem[] = [
-            ...inProgressQuizzes.slice(0, 4).map((q: any): JumpItem => {
-              const uniqueCount = (q.uniqueCorrectIds || []).length;
-              const qCount = q.questions || 1;
-              const pct = Math.min(Math.round((uniqueCount / qCount) * 100), 100);
-              return {
-                id: q.id,
-                title: q.title,
-                type: "quiz",
-                progress: uniqueCount / qCount,
-                progressLabel: `Quiz ${pct}%`,
-                raw: q,
-              };
-            }),
-            ...inProgressDecks.slice(0, 3).map((d: any): JumpItem => {
-              const cards = d.cards || [];
-              const total = cards.length;
-              const studied = cards.filter((c: any) => !!c.sm2_nextReviewDate).length;
-              return {
-                id: d.id,
-                title: d.title,
-                type: "flashcard",
-                progress: total > 0 ? studied / total : 0,
-                progressLabel: `${studied} / ${total} cards`,
-                raw: d,
-              };
-            }),
+          const chips: { key: "all"|"progress"|"notstarted"|"done"; label: string; count: number }[] = [
+            { key: "all",        label: t('home.filter_all') || "All", count: allCount },
+            { key: "progress",   label: t('home.filter_progress') || "In progress", count: progressCount },
+            { key: "notstarted", label: t('home.filter_notstarted') || "Not started", count: notStartedCount },
+            { key: "done",       label: t('home.filter_completed') || "Completed", count: doneCount },
           ];
-
-          // ── "Recents" — most recently accessed items ────────────────────
-          type RecentItem = {
-            id: string;
-            title: string;
-            type: "quiz" | "flashcard";
-            subtitle: string;
-            raw: any;
-            lastDate: number;
-          };
-
-          const recentQuizzes: RecentItem[] = quizzes.map((q: any): RecentItem => ({
-            id: q.id,
-            title: q.title,
-            type: "quiz",
-            subtitle: `${q.questions || 0} questions · by you`,
-            raw: q,
-            lastDate: q.attempts?.length > 0 ? (q.attempts[0].date || 0) : 0,
-          }));
-
-          const recentDecks: RecentItem[] = flashcardDecks.map((d: any): RecentItem => ({
-            id: d.id,
-            title: d.title,
-            type: "flashcard",
-            subtitle: `${(d.cards || []).length} cards · by you`,
-            raw: d,
-            lastDate: d.attempts?.length > 0 ? (d.attempts[d.attempts.length - 1].date || 0) : 0,
-          }));
-
-          const recentItems = [...recentQuizzes, ...recentDecks]
-            .sort((a, b) => b.lastDate - a.lastDate)
-            .slice(0, 5);
-
-          const hasContent = recentItems.length > 0 || jumpItems.length > 0;
-
-          const userInitial = firebaseUser ? getUserInitial(firebaseUser) : "?";
-
-          const handleJumpItemPress = (item: JumpItem) => {
-            if (item.type === "quiz") {
-              setViewingInsightsQuiz(item.raw);
-              setViewingInsightsQuizFromTab("home");
-              setActiveTab("insights");
-            } else {
-              startStudy(item.raw);
-            }
-          };
-
-          const handleRecentPress = (item: RecentItem) => {
-            if (item.type === "quiz") {
-              setViewingInsightsQuiz(item.raw);
-              setViewingInsightsQuizFromTab("home");
-              setActiveTab("insights");
-            } else {
-              startStudy(item.raw);
-            }
-          };
 
           return (
             <View style={{ flex: 1, backgroundColor: bg }}>
-
-              {/* ── Top Bar ── */}
-              <View style={{
-                flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between",
-                paddingHorizontal: 20, paddingTop: 18, paddingBottom: 10,
-              }}>
-                <Text style={{
-                  fontSize: 28, fontWeight: "800", color: "#ffffff",
-                  letterSpacing: -0.5,
-                }}>Scorr</Text>
-
-                <View style={{ alignItems: "center", gap: 5 }}>
-                  <AnimatedPressable
-                    onPress={() => setActiveTab("menu")}
-                    style={{
-                      width: 40, height: 40, borderRadius: 20,
-                      backgroundColor: "#22C55E",
-                      alignItems: "center", justifyContent: "center", overflow: "hidden",
-                    }}
-                    scaleTo={0.9}
-                  >
-                    {firebaseUser?.photoURL ? (
-                      <Image source={{ uri: firebaseUser.photoURL }} style={{ width: 40, height: 40, borderRadius: 20 }} />
-                    ) : (
-                      <Text style={{ fontSize: 18, fontWeight: "700", color: "#ffffff" }}>
-                        {userInitial}
-                      </Text>
-                    )}
-                  </AnimatedPressable>
-                  <Pressable onPress={() => setActiveTab("menu")} hitSlop={8}>
-                    <Ionicons name="settings-outline" size={13} color={muted} />
-                  </Pressable>
+              {/* ── Search & Profile ── */}
+              <View style={{ marginHorizontal: 20, marginTop: 24, marginBottom: 12, flexDirection: "row", alignItems: "center", gap: 20 }}>
+                {/* Search */}
+                <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10,
+                  backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.04)", 
+                  borderRadius: 16,
+                  paddingHorizontal: 12, paddingVertical: 6 }}>
+                  <Ionicons name="search-outline" size={18} color={muted} />
+                  <TextInput
+                    placeholder="Search"
+                    placeholderTextColor={muted}
+                    value={homeSearch}
+                    onChangeText={setHomeSearch}
+                    style={{ flex: 1, fontSize: 15, color: txt, fontWeight: "400" }}
+                  />
+                  {homeSearch.length > 0 && (
+                    <Pressable onPress={() => setHomeSearch("")}>
+                      <Ionicons name="close-circle" size={18} color={muted} />
+                    </Pressable>
+                  )}
                 </View>
+                
+                {/* Profile */}
+                <Pressable
+                  onPress={() => setActiveTab("menu")}
+                  style={({ pressed }) => [{ width: 48, height: 48, borderRadius: 24,
+                    backgroundColor: "rgba(99,102,241,0.12)",
+                    borderWidth: 1, borderColor: isDark ? "#2a2a4a" : "rgba(99,102,241,0.2)",
+                    alignItems: "center", justifyContent: "center", overflow: "hidden" },
+                    pressed && styles.pressedScale]}
+                >
+                  {firebaseUser?.photoURL ? (
+                    <Image source={{ uri: firebaseUser.photoURL }}
+                      style={{ width: 48, height: 48, borderRadius: 24 }} />
+                  ) : firebaseUser ? (
+                    <Text style={{ fontSize: 18, fontWeight: "700", color: "#6366f1" }}>
+                      {getUserInitial(firebaseUser)}
+                    </Text>
+                  ) : (
+                    <Ionicons name="person-outline" size={24} color="#6366f1" />
+                  )}
+                </Pressable>
               </View>
 
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
-
-                {/* ── Empty State ── */}
-                {!hasContent && (
-                  <View style={{ alignItems: "center", paddingTop: 88, paddingHorizontal: 32, gap: 16 }}>
-                    <View style={{
-                      width: 88, height: 88, borderRadius: 44,
-                      backgroundColor: accentPillBg,
-                      alignItems: "center", justifyContent: "center",
-                      shadowColor: accentPurple, shadowOffset: { width: 0, height: 0 },
-                      shadowOpacity: 0.4, shadowRadius: 24,
-                    }}>
-                      <Ionicons name="sparkles" size={40} color={accentPurple} />
-                    </View>
-                    <Text style={{ fontSize: 20, fontWeight: "600", color: txt, textAlign: "center", marginTop: 8 }}>
-                      Nothing here yet
-                    </Text>
-                    <Text style={{ fontSize: 14, color: muted, textAlign: "center", lineHeight: 20 }}>
-                      Create a flashcard deck or import a PDF to get started
-                    </Text>
-                    <AnimatedPressable
-                      onPress={() => setShowAddMenu(true)}
-                      style={{
-                        backgroundColor: accentPurple, borderRadius: 12,
-                        paddingVertical: 16, marginTop: 10,
-                        width: SCREEN_WIDTH - 64, alignItems: "center",
-                        shadowColor: accentPurple, shadowOffset: { width: 0, height: 6 },
-                        shadowOpacity: 0.35, shadowRadius: 16,
-                      }}
-                      scaleTo={0.96}
-                    >
-                      <Text style={{ color: "#0B0F1E", fontWeight: "700", fontSize: 15 }}>
-                        + Create your first deck
+              {/* ── Filter chips ── */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ flexGrow: 0, flexShrink: 0, marginBottom: 16 }}
+                contentContainerStyle={{ gap: 8, paddingHorizontal: 20, paddingTop: 14, alignItems: "center" }}
+              >
+                {chips.map(c => {
+                  const isActive = homeFilter === c.key;
+                  return (
+                    <Pressable key={c.key} onPress={() => setHomeFilter(c.key)}
+                      style={({ pressed }) => [{
+                        flexDirection: "row", alignItems: "center", gap: 4,
+                        paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
+                        backgroundColor: isActive ? "#8b8ff0" : "transparent",
+                        borderWidth: 1, borderColor: isActive ? "#8b8ff0" : border,
+                        alignSelf: "flex-start",
+                      }, pressed && styles.pressedScale]}>
+                      <Text style={{ fontSize: 11, letterSpacing: 0.5, fontWeight: isActive ? "500" : "400",
+                        color: isActive ? "#1a1640" : muted }}>
+                        {c.label}
                       </Text>
-                    </AnimatedPressable>
-                  </View>
-                )}
+                      <View style={{
+                        paddingHorizontal: isActive ? 7 : 4, paddingVertical: 1, borderRadius: 10,
+                        backgroundColor: isActive ? "rgba(26,22,64,0.25)" : (isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)")
+                      }}>
+                        <Text style={{ fontSize: isActive ? 11 : 9, fontWeight: isActive ? "500" : "700", color: isActive ? "#1a1640" : muted }}>
+                          {c.count}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
 
-                {/* ── Section 1: Jump Back In ── */}
-                {jumpItems.length > 0 && (
-                  <View style={{ marginBottom: 32, marginTop: 8 }}>
-                    <Text style={{
-                      fontSize: 18, fontWeight: "600", color: txt,
-                      paddingHorizontal: 20, marginBottom: 14,
+
+              {/* ── Quiz list ── */}
+              <ScrollView showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: 20, gap: 12, paddingTop: 4, paddingBottom: 120 }}>
+                {!dataLoaded ? (
+                  // ── Skeleton cards while AsyncStorage / Firebase loads ──
+                  [0, 1, 2].map((i) => (
+                    <View key={i} style={{
+                      backgroundColor: cardBg, borderWidth: 1, borderColor: border,
+                      borderRadius: 18, overflow: "hidden", padding: 18, paddingLeft: 20, gap: 10,
+                      opacity: 1 - i * 0.2,
                     }}>
-                      Jump back in
-                    </Text>
+                      <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, backgroundColor: isDark ? "#2a2a4a" : "#e0e0f0" }} />
+                      <View style={{ height: 14, width: "60%", borderRadius: 7, backgroundColor: isDark ? "#1e293b" : "#ebebf0" }} />
+                      <View style={{ flexDirection: "row", gap: 12, marginTop: 4 }}>
+                        <View style={{ height: 10, width: 60, borderRadius: 5, backgroundColor: isDark ? "#1e293b" : "#ebebf0" }} />
+                        <View style={{ height: 10, width: 50, borderRadius: 5, backgroundColor: isDark ? "#1e293b" : "#ebebf0" }} />
+                        <View style={{ height: 10, width: 55, borderRadius: 5, backgroundColor: isDark ? "#1e293b" : "#ebebf0" }} />
+                      </View>
+                      <View style={{ flexDirection: "row", alignItems: "center", marginTop: 6, gap: 12 }}>
+                        <View style={{ height: 10, width: 28, borderRadius: 5, backgroundColor: isDark ? "#1e293b" : "#ebebf0" }} />
+                        <View style={{ flex: 1, height: 2, borderRadius: 2, backgroundColor: isDark ? "#1e293b" : "#ebebf0" }} />
+                      </View>
+                    </View>
+                  ))
+                ) : (
+                  <>
+                    {filtered.map((quiz, i) => {
+                      const attempts = quiz.attempts || [];
+                      const uniqueCount = (quiz.uniqueCorrectIds || []).length;
+                      const qCount = quiz.questions || 1;
+                      const quizPct = attempts.length > 0 ? Math.min(Math.round((uniqueCount / qCount) * 100), 100) : null;
+                      const multiplier = quiz.multiplier;
 
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      decelerationRate="fast"
-                      snapToInterval={SCREEN_WIDTH - 52}
-                      snapToAlignment="start"
-                      contentContainerStyle={{ paddingHorizontal: 20, gap: 12 }}
-                      onScroll={(e) => {
-                        const page = Math.round(e.nativeEvent.contentOffset.x / (SCREEN_WIDTH - 52));
-                        setJumpPage(Math.max(0, Math.min(page, jumpItems.length - 1)));
-                      }}
-                      scrollEventThrottle={16}
-                    >
-                      {jumpItems.map((item) => (
-                        <View
-                          key={item.id}
-                          style={{
-                            width: SCREEN_WIDTH - 64,
-                            backgroundColor: cardBg,
-                            borderRadius: 16,
-                            padding: 16,
-                            borderWidth: 1,
-                            borderColor: border,
+                      // ── Flashcard due count only ──────────────────
+                      const allFlashcards = quiz.flashcards || [];
+                      const fcTotal = allFlashcards.length;
+                      const linkedDeck = flashcardDecks.find((d: any) => d.id === `temp-${quiz.id}`);
+                      const fcCardsWithState = fcTotal > 0
+                        ? allFlashcards.map((c: any, idx: number) => {
+                            const cardId = c.id || `fc-${idx}`;
+                            const saved = linkedDeck?.cards?.find((sc: any) => sc.id === cardId);
+                            return saved ?? c;
+                          })
+                        : [];
+                      const fcDue = fcCardsWithState.filter((c: any) =>
+                        c.sm2_nextReviewDate && c.sm2_nextReviewDate <= Date.now()
+                      ).length;
+                      const fcNew = fcTotal > 0 && fcCardsWithState.every((c: any) => !c.sm2_nextReviewDate);
+
+                      // Left-edge accent — driven by quiz mastery only
+                      let cardColor = "#5b6080";
+                      if (quizPct !== null) {
+                        if (quizPct >= 75) cardColor = "#2dd4a7";
+                        else if (quizPct >= 25) cardColor = "#8b8ff0";
+                        else cardColor = "#f0a13c";
+                      }
+
+                      return (
+                        <AnimatedPressable
+                          key={`${quiz.id}-${i}`}
+                          onPress={() => {
+                            setViewingInsightsQuiz(quiz);
+                            setViewingInsightsQuizFromTab(activeTab);
+                            setActiveTab("insights");
                           }}
+                          style={{
+                            backgroundColor: cardBg,
+                            borderWidth: 1, borderColor: border,
+                            borderRadius: 18, overflow: "hidden",
+                          }}
+                          scaleTo={0.97}
                         >
-                          <Text
-                            style={{ fontSize: 16, fontWeight: "700", color: txt, marginBottom: 10 }}
-                            numberOfLines={2}
-                          >
-                            {item.title}
-                          </Text>
+                          {/* Left accent bar */}
+                          <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, backgroundColor: cardColor }} />
 
-                          <View style={{
-                            flexDirection: "row", alignItems: "center",
-                            backgroundColor: accentPillBg, borderRadius: 20,
-                            paddingHorizontal: 10, paddingVertical: 4,
-                            alignSelf: "flex-start", marginBottom: 16,
-                          }}>
-                            <Text style={{ fontSize: 11, fontWeight: "600", color: accentPurple }}>
-                              {item.type === "flashcard" ? "🃏 Flashcards" : "⚡ Quiz"}
+                          <View style={{ padding: 16, paddingLeft: 20 }}>
+
+                            {/* Row 1: Title + due badge + chevron */}
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                              <Text
+                                style={{ fontSize: 15, fontWeight: "500", color: txt, letterSpacing: -0.2, flex: 1 }}
+                                numberOfLines={1}
+                              >
+                                {quiz.title}
+                              </Text>
+
+                              {/* Due badge — purple, only when actionable */}
+                              {fcTotal > 0 && fcDue > 0 && (
+                                <View style={{
+                                  backgroundColor: isDark ? "rgba(168,85,247,0.18)" : "rgba(168,85,247,0.1)",
+                                  borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3,
+                                  borderWidth: 1, borderColor: isDark ? "rgba(168,85,247,0.4)" : "rgba(168,85,247,0.25)",
+                                }}>
+                                  <Text style={{ fontSize: 11, fontWeight: "700", color: "#a855f7" }}>
+                                    {fcDue} due
+                                  </Text>
+                                </View>
+                              )}
+
+                              {/* New badge — flashcards exist but never studied */}
+                              {fcTotal > 0 && fcNew && (
+                                <View style={{
+                                  backgroundColor: isDark ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.08)",
+                                  borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3,
+                                  borderWidth: 1, borderColor: isDark ? "rgba(99,102,241,0.35)" : "rgba(99,102,241,0.2)",
+                                }}>
+                                  <Text style={{ fontSize: 11, fontWeight: "700", color: isDark ? "#818cf8" : "#6366f1" }}>
+                                    new
+                                  </Text>
+                                </View>
+                              )}
+
+                              {quiz.isSample && (
+                                <View style={{ backgroundColor: isDark ? "rgba(139,143,240,0.18)" : "rgba(99,102,241,0.1)", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 }}>
+                                  <Text style={{ fontSize: 10, fontWeight: "700", color: isDark ? "#a5a8f5" : "#6366f1", letterSpacing: 0.5 }}>SAMPLE</Text>
+                                </View>
+                              )}
+                              {quiz.category === "AI Generated" && (
+                                <Ionicons name="sparkles" size={11} color={muted} style={{ opacity: 0.45 }} />
+                              )}
+                              <Feather name="chevron-right" size={16} color={muted} />
+                            </View>
+
+                            {/* Row 2: Single plain-text meta line — no bars, no charts */}
+                            <Text style={{ fontSize: 12, color: muted, marginTop: 6 }}>
+                              {quiz.questions} {t('actions.questions') || "questions"}
+                              {attempts.length > 0 ? `  ·  ${attempts.length} ${t('actions.attempts') || "attempts"}` : ""}
+                              {quizPct !== null ? `  ·  Quiz ${quizPct}%` : ""}
+                              {multiplier && multiplier > 1 ? `  ·  ${multiplier}× streak` : ""}
                             </Text>
+
                           </View>
+                        </AnimatedPressable>
+                      );
+                    })}
 
-                          <View style={{
-                            height: 6, backgroundColor: "rgba(255,255,255,0.1)",
-                            borderRadius: 3, marginBottom: 7, overflow: "hidden",
-                          }}>
-                            <View style={{
-                              height: 6,
-                              width: `${Math.round(Math.min(item.progress, 1) * 100)}%`,
-                              backgroundColor: accentPurple, borderRadius: 3,
-                            }} />
-                          </View>
-
-                          <Text style={{ fontSize: 12, color: muted, marginBottom: 16 }}>
-                            {item.progressLabel}
-                          </Text>
-
-                          <AnimatedPressable
-                            onPress={() => handleJumpItemPress(item)}
-                            style={{
-                              backgroundColor: accentPurple, borderRadius: 12,
-                              paddingVertical: 13, alignItems: "center",
-                            }}
-                            scaleTo={0.96}
-                          >
-                            <Text style={{ color: "#0B0F1E", fontSize: 14, fontWeight: "700" }}>Continue</Text>
-                          </AnimatedPressable>
+                    {quizzes.length === 0 && !homeSearch && (
+                      <View style={{ alignItems: "center", paddingTop: 48, paddingHorizontal: 24, gap: 10 }}>
+                        <Ionicons name="document-text-outline" size={32} color={muted} style={{ opacity: 0.5 }} />
+                        <Text style={{ fontSize: 13, color: muted, textAlign: "center", lineHeight: 19, opacity: 0.8 }}>
+                          {"Create a .txt, .docx or .pdf file → tap + to import → start practicing"}
+                        </Text>
+                        <View style={{ flexDirection: "row", gap: 12, marginTop: 4 }}>
+                          <Pressable onPress={() => setActiveTab("guide")} style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}>
+                            <Text style={{ fontSize: 13, color: "#6366f1", fontWeight: "600" }}>Watch tutorial</Text>
+                          </Pressable>
+                          <Text style={{ fontSize: 13, color: muted, opacity: 0.4 }}>·</Text>
+                          <Pressable onPress={() => setShowAddMenu(true)} style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}>
+                            <Text style={{ fontSize: 13, color: "#6366f1", fontWeight: "600" }}>Import file</Text>
+                          </Pressable>
                         </View>
-                      ))}
-                    </ScrollView>
-
-                    {jumpItems.length > 1 && (
-                      <View style={{ flexDirection: "row", justifyContent: "center", gap: 6, marginTop: 14 }}>
-                        {jumpItems.map((_, idx) => (
-                          <View
-                            key={idx}
-                            style={{
-                              width: idx === jumpPage ? 18 : 6, height: 6, borderRadius: 3,
-                              backgroundColor: idx === jumpPage ? accentPurple : "rgba(255,255,255,0.18)",
-                            }}
-                          />
-                        ))}
                       </View>
                     )}
-                  </View>
+
+                    {filtered.length === 0 && homeSearch ? (
+                      <View style={{ alignItems: "center", paddingTop: 60, gap: 12 }}>
+                        <Ionicons name="search-outline" size={36} color={muted} />
+                        <Text style={{ fontSize: 14, color: muted, textAlign: "center" }}>
+                          {t('home.empty_search') || "No quizzes match your search"}
+                        </Text>
+                      </View>
+                    ) : null}
+
+                    {filtered.length === 0 && !homeSearch && quizzes.length > 0 && (
+                      <View style={{ alignItems: "center", paddingTop: 60, gap: 12 }}>
+                        <Ionicons name="document-text-outline" size={36} color={muted} />
+                        <Text style={{ fontSize: 14, color: muted, textAlign: "center" }}>
+                          {t('home.empty_active') || "No active quizzes"}
+                        </Text>
+                      </View>
+                    )}
+                  </>
                 )}
-
-                {/* ── Section 2: Recents ── */}
-                {recentItems.length > 0 && (
-                  <View style={{ paddingHorizontal: 20 }}>
-                    <View style={{
-                      flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-                      marginBottom: 14,
-                    }}>
-                      <Text style={{ fontSize: 18, fontWeight: "600", color: txt }}>Recents</Text>
-                      <Pressable
-                        onPress={() => setActiveTab("library" as any)}
-                        style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
-                      >
-                        <Text style={{ fontSize: 13, fontWeight: "600", color: accentPurple }}>See all</Text>
-                      </Pressable>
-                    </View>
-
-                    {recentItems.map((item) => (
-                      <AnimatedPressable
-                        key={item.id}
-                        onPress={() => handleRecentPress(item)}
-                        style={{
-                          flexDirection: "row", alignItems: "center",
-                          paddingVertical: 11, marginBottom: 2,
-                        }}
-                        scaleTo={0.97}
-                      >
-                        <View style={{
-                          width: 48, height: 48, borderRadius: 12,
-                          backgroundColor: iconBg, alignItems: "center", justifyContent: "center",
-                          marginRight: 14,
-                        }}>
-                          <Ionicons
-                            name={item.type === "flashcard" ? "copy-outline" : "flash-outline"}
-                            size={22}
-                            color={accentPurple}
-                          />
-                        </View>
-
-                        <View style={{ flex: 1 }}>
-                          <Text
-                            style={{ fontSize: 15, fontWeight: "500", color: txt, marginBottom: 3 }}
-                            numberOfLines={1}
-                          >
-                            {item.title}
-                          </Text>
-                          <Text style={{ fontSize: 12, color: muted }}>{item.subtitle}</Text>
-                        </View>
-
-                        <Feather name="chevron-right" size={18} color={muted} />
-                      </AnimatedPressable>
-                    ))}
-                  </View>
-                )}
-
               </ScrollView>
+
             </View>
           );
         })();
@@ -8038,7 +7781,15 @@ export default function HomeScreen() {
   };
 
 
+  const SWIPE_TABS = ["home", "battle", "menu"];
+  const swipeScrollRef = useRef<ScrollView>(null);
 
+  useEffect(() => {
+    if (SWIPE_TABS.includes(activeTab) && swipeScrollRef.current) {
+      const idx = SWIPE_TABS.indexOf(activeTab);
+      swipeScrollRef.current.scrollTo({ x: idx * Dimensions.get("window").width, animated: false });
+    }
+  }, [activeTab]);
 
   if (showAuthScreen) {
     return (
@@ -8074,13 +7825,40 @@ export default function HomeScreen() {
         renderActiveSessionView()
       ) : (
         <>
+          {/* Dynamic Screen Area */}
           <View style={styles.screenContainer}>
-            {renderContent()}
+            {SWIPE_TABS.includes(activeTab) ? (
+              <ScrollView
+                ref={swipeScrollRef}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                bounces={false}
+                contentOffset={{ x: SWIPE_TABS.includes(activeTab) ? SWIPE_TABS.indexOf(activeTab) * Dimensions.get("window").width : 0, y: 0 }}
+                scrollEventThrottle={16}
+                onMomentumScrollEnd={(e) => {
+                  const screenWidth = Dimensions.get("window").width;
+                  const pageIndex = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
+                  const newTab = SWIPE_TABS[pageIndex];
+                  if (newTab && newTab !== activeTab) {
+                    setActiveTab(newTab as any);
+                  }
+                }}
+              >
+                {SWIPE_TABS.map((tab) => (
+                  <View key={tab} style={{ width: Dimensions.get("window").width }}>
+                    {renderContent(tab)}
+                  </View>
+                ))}
+              </ScrollView>
+            ) : (
+              renderContent()
+            )}
           </View>
 
           {/* Bottom Tab Bar — Quizlet-style (hidden during focused editing and study sessions to maximize screen real estate and prevent keyboard overlaps) */}
           {!( (activeTab === "add" && creationMode !== "pick") || activeTab === ("flashcards" as any) || activeTab === ("insights-flashcard" as any) ) && (() => {
-            const effectiveTab = (activeTab === "insights" || activeTab === "bookmarked-questions") ? viewingInsightsQuizFromTab : activeTab === "library" ? "library" : activeTab;
+            const effectiveTab = (activeTab === "insights" || activeTab === "bookmarked-questions") ? viewingInsightsQuizFromTab : activeTab;
             return (
             <View style={[
               styles.bottomTabBar,
@@ -8093,8 +7871,8 @@ export default function HomeScreen() {
               {/* Home */}
               <AnimatedPressable onPress={() => setActiveTab("home")} style={styles.tabItem} scaleTo={0.88}>
                 <IconHome size={24}
-                  color={effectiveTab === "home" ? "#B5A8FF" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"} />
-                <Text style={[styles.tabLabel, { color: effectiveTab === "home" ? "#B5A8FF" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)" }]}>{t('tabs.home')}</Text>
+                  color={effectiveTab === "home" ? "#818cf8" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"} />
+                <Text style={[styles.tabLabel, effectiveTab === "home" && styles.tabLabelActive, { color: effectiveTab === "home" ? "#818cf8" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)" }]}>{t('tabs.home')}</Text>
               </AnimatedPressable>
 
 
@@ -8108,21 +7886,21 @@ export default function HomeScreen() {
                 <Text style={[styles.tabLabel, { color: settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)" }]}>Create</Text>
               </AnimatedPressable>
 
-              {/* Library */}
+              {/* Battle */}
               <AnimatedPressable
-                onPress={() => setActiveTab("library" as any)}
+                onPress={() => setActiveTab("battle")}
                 style={styles.tabItem}
                 scaleTo={0.88}
               >
-                <Ionicons name="library-outline" size={24} color={effectiveTab === "library" ? "#B5A8FF" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"} />
-                <Text style={[styles.tabLabel, effectiveTab === "library" && { color: "#B5A8FF" }, { color: effectiveTab === "library" ? "#B5A8FF" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)" }]}>Library</Text>
+                <IconSwords size={24} color={effectiveTab === "battle" ? "#818cf8" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"} />
+                <Text style={[styles.tabLabel, effectiveTab === "battle" && styles.tabLabelActive, { color: effectiveTab === "battle" ? "#818cf8" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)" }]}>Battle</Text>
               </AnimatedPressable>
 
               {/* Profile */}
               <AnimatedPressable onPress={() => setActiveTab("menu")} style={styles.tabItem} scaleTo={0.88}>
                 <IconUser size={24}
-                  color={effectiveTab === "menu" ? "#B5A8FF" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"} />
-                <Text style={[styles.tabLabel, { color: effectiveTab === "menu" ? "#B5A8FF" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)" }]}>{t('tabs.profile')}</Text>
+                  color={effectiveTab === "menu" ? "#818cf8" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"} />
+                <Text style={[styles.tabLabel, effectiveTab === "menu" && styles.tabLabelActive, { color: effectiveTab === "menu" ? "#818cf8" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)" }]}>{t('tabs.profile')}</Text>
               </AnimatedPressable>
 
             </View>
@@ -8177,7 +7955,7 @@ export default function HomeScreen() {
         rangeStart, setRangeStart, rangeEnd, setRangeEnd,
         shuffleQuestions, setShuffleQuestions, shuffleAnswers, setShuffleAnswers,
         showAnswerOnSubmit, setShowAnswerOnSubmit, autoSlideEnabled, setAutoSlideEnabled,
-        quizTimeLimit, setQuizTimeLimit, quizPerQuestionTimer, setQuizPerQuestionTimer, timeLimitText, setTimeLimitText,
+        quizTimeLimit, setQuizTimeLimit, timeLimitText, setTimeLimitText,
         showTimeLimitDropdown, setShowTimeLimitDropdown, triggerConfettiBurst,
         neonUserReadyRef, setCreationMode, setCreationStep, setFcTitle, setFcCards,
         setFcCurrentIdx, setCardType, setEditingDeckId, updateMobileQuiz, deleteMobileQuiz,
@@ -8342,10 +8120,10 @@ export default function HomeScreen() {
                   onPress={() => setSelectedStudyMode("spaced")}
                   style={({ pressed }) => ({
                     flexDirection: "row", alignItems: "center",
-                    backgroundColor: "transparent",
+                    backgroundColor: selectedStudyMode === "spaced" ? (isDark ? "rgba(139,92,246,0.15)" : "rgba(139,92,246,0.08)") : "transparent",
                     borderRadius: 16, padding: 18, marginBottom: 14,
                     borderWidth: 2,
-                    borderColor: selectedStudyMode === "spaced" ? "#34d399" : (isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"),
+                    borderColor: selectedStudyMode === "spaced" ? "#8b5cf6" : (isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"),
                     opacity: pressed ? 0.85 : 1,
                   })}
                 >
@@ -8356,8 +8134,8 @@ export default function HomeScreen() {
                     <Text style={{ fontSize: 16, fontWeight: "600", color: isDark ? "#ffffff" : "#0d0f14", marginBottom: 3 }}>Spaced Repetition</Text>
                     <Text style={{ fontSize: 13, color: isDark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.7)" }}>Optimizes retention with smart scheduling</Text>
                   </View>
-                  <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: selectedStudyMode === "spaced" ? "#34d399" : (isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.2)"), alignItems: "center", justifyContent: "center" }}>
-                    {selectedStudyMode === "spaced" && <View style={{ width: 11, height: 11, borderRadius: 6, backgroundColor: "#34d399" }} />}
+                  <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: selectedStudyMode === "spaced" ? "#8b5cf6" : (isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.2)"), alignItems: "center", justifyContent: "center" }}>
+                    {selectedStudyMode === "spaced" && <View style={{ width: 11, height: 11, borderRadius: 6, backgroundColor: "#8b5cf6" }} />}
                   </View>
                 </Pressable>
 
