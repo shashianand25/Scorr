@@ -25,6 +25,7 @@ import { Feather, Ionicons, FontAwesome6, MaterialCommunityIcons } from "@expo/v
 import IconHome from "tabler-icons-react-native/icons-js/IconHome";
 import IconSwords from "tabler-icons-react-native/icons-js/IconSwords";
 import IconUser from "tabler-icons-react-native/icons-js/IconUser";
+import IconFolder from "tabler-icons-react-native/icons-js/IconFolder";
 import { CustomChartIcon } from "../components/ui/CustomChartIcon";
 
 import { GestureHandlerRootView, FlingGestureHandler, Directions, State } from "react-native-gesture-handler";
@@ -37,7 +38,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Buffer } from "buffer";
 import * as mammoth from "mammoth/mammoth.browser.js";
 import { signInWithGoogle, signInWithEmail, signUpWithEmail, signOutUser, onAuth, deleteAccount, resetPassword, type User } from "../lib/firebase";
-import { syncUserToNeon, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz, deleteUserFromNeon, sendFeedback, saveBattleHistory, fetchBattleHistory, parsePdfFromBackend } from "../lib/api";
+import { syncUserToNeon, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz, deleteUserFromNeon, sendFeedback, saveBattleHistory, fetchBattleHistory, parsePdfFromBackend, parsePptFromBackend } from "../lib/api";
 import { getUserErrorMessage } from "../utils/errors";
 import { createBattleRoom, joinBattleRoom, updateBattleScore, finishBattle, markPlayerFinished, listenToBattleRoom, getBattleRoom, type BattleRoom } from "../lib/multiplayer";
 import NetInfo from "@react-native-community/netinfo";
@@ -148,88 +149,79 @@ const STEPS = [
   { icon: "shuffle-outline",       label: "Shuffling answers" },
 ] as const;
 
-function AIGeneratingScreen() {
-  const progress  = React.useRef(new Animated.Value(0)).current;
-  const [step, setStep] = React.useState(0);
-  const [dots, setDots]  = React.useState(".");
+function AIGeneratingScreen({ onCancel }: { onCancel?: () => void }) {
+  const sway = React.useRef(new Animated.Value(0)).current;
+  const blink = React.useRef(new Animated.Value(1)).current;
 
   React.useEffect(() => {
-    // Animate progress bar from 0 → ~88% over ~25s, then stall
-    Animated.timing(progress, {
-      toValue: 0.88,
-      duration: 25000,
-      useNativeDriver: false,
-    }).start();
+    // Subtle sway animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(sway, { toValue: -1, duration: 2500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(sway, { toValue: 1, duration: 2500, easing: Easing.inOut(Easing.sin), useNativeDriver: true })
+      ])
+    ).start();
 
-    // Cycle steps every ~5s
-    const stepTimer = setInterval(() => setStep(s => Math.min(s + 1, STEPS.length - 1)), 5000);
-
-    // Animate dots
-    const dotTimer = setInterval(() =>
-      setDots(d => d.length >= 3 ? "." : d + "."), 500);
-
-    return () => { clearInterval(stepTimer); clearInterval(dotTimer); };
+    // Blink text
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(blink, { toValue: 0.4, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(blink, { toValue: 1, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true })
+      ])
+    ).start();
   }, []);
 
-  const barWidth = progress.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] });
+  const swayRotateFront = sway.interpolate({ inputRange: [-1, 1], outputRange: ["-18deg", "-12deg"] });
+  const swayTranslateXFront = sway.interpolate({ inputRange: [-1, 1], outputRange: [-2, 2] });
 
   return (
     <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: "#0f172a", alignItems: "center", justifyContent: "center", zIndex: 99999, paddingHorizontal: 32 }}>
+      backgroundColor: "#0A0B14", alignItems: "center", justifyContent: "center", zIndex: 99999, paddingHorizontal: 32 }}>
+      
+      {/* Back button */}
+      <SafeAreaView style={{ position: "absolute", top: 0, left: 0, right: 0 }}>
+        <Pressable onPress={onCancel} style={{ padding: 24 }}>
+          <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
+        </Pressable>
+      </SafeAreaView>
 
-      {/* Glowing icon */}
-      <View style={{ width: 96, height: 96, borderRadius: 48,
-        backgroundColor: "rgba(168,85,247,0.1)", alignItems: "center", justifyContent: "center", marginBottom: 36,
-        shadowColor: "#a855f7", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.9, shadowRadius: 48, elevation: 24 }}>
-        <Ionicons name="sparkles" size={44} color="#a855f7" />
-      </View>
-
-      <Text style={{ fontSize: 22, fontWeight: "800", color: "#fff", letterSpacing: -0.4, marginBottom: 6, textAlign: "center" }}>
-        Generating your quiz{dots}
-      </Text>
-      <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.4)", marginBottom: 36, textAlign: "center", lineHeight: 18 }}>
-        This may take a moment for large files
-      </Text>
-
-      {/* Progress bar */}
-      <View style={{ width: "100%", marginBottom: 40 }}>
-        <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
-          <Text style={{ fontSize: 11, color: "rgba(168,85,247,0.7)", fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.6 }}>Progress</Text>
+      <View style={{ alignItems: "center", marginTop: -60 }}>
+        {/* Animated Stacked Cards Icon */}
+        <View style={{ width: 100, height: 100, alignItems: "center", justifyContent: "center", marginBottom: 30 }}>
+          {/* Back Card (Cyan) */}
+          <View style={{
+            position: "absolute", width: 50, height: 70, borderRadius: 8,
+            backgroundColor: "#48CAE4",
+            transform: [{ rotate: "15deg" }, { translateX: 12 }, { translateY: 4 }],
+          }} />
+          {/* Front Card (Blue) animated */}
+          <Animated.View style={{
+            position: "absolute", width: 56, height: 76, borderRadius: 8,
+            backgroundColor: "#4263EB",
+            transform: [
+              { rotate: swayRotateFront }, 
+              { translateX: swayTranslateXFront },
+              { translateY: -4 }
+            ]
+          }} />
         </View>
-        <View style={{ height: 6, backgroundColor: "rgba(168,85,247,0.15)", borderRadius: 3, overflow: "hidden" }}>
-          <Animated.View style={{ height: 6, borderRadius: 3,
-            backgroundColor: "#a855f7", width: barWidth,
-            shadowColor: "#a855f7", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 6 }} />
-        </View>
-      </View>
 
-      {/* Steps */}
-      <View style={{ width: "100%", gap: 14 }}>
-        {STEPS.map((s, i) => {
-          const done    = i < step;
-          const active  = i === step;
-          const pending = i > step;
-          return (
-            <View key={i} style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
-              <View style={{ width: 34, height: 34, borderRadius: 17,
-                backgroundColor: done ? "#a855f7" : active ? "rgba(168,85,247,0.2)" : "rgba(255,255,255,0.05)",
-                borderWidth: active ? 1.5 : 0, borderColor: "#a855f7",
-                alignItems: "center", justifyContent: "center" }}>
-                {done
-                  ? <Ionicons name="checkmark" size={16} color="#fff" />
-                  : <Ionicons name={s.icon as any} size={16}
-                      color={active ? "#a855f7" : "rgba(255,255,255,0.2)"} />}
-              </View>
-              <Text style={{ fontSize: 14, fontWeight: active ? "700" : "400",
-                color: done ? "#a855f7" : active ? "#fff" : "rgba(255,255,255,0.25)" }}>
-                {s.label}
-              </Text>
-              {active && (
-                <View style={{ marginLeft: "auto", width: 7, height: 7, borderRadius: 3.5, backgroundColor: "#a855f7" }} />
-              )}
-            </View>
-          );
-        })}
+        {/* Blinking Text */}
+        <Animated.Text style={{
+          fontSize: 32, fontWeight: "700", color: "#B5A8FF", // using a pleasant purple/blue
+          textAlign: "center", marginBottom: 24, opacity: blink,
+          lineHeight: 40
+        }}>
+          <Text style={{ color: "#67E8F9" }}>Generating your{"\n"}</Text>
+          <Text style={{ color: "#B5A8FF" }}>flashcards...</Text>
+        </Animated.Text>
+
+        {/* Subtitle */}
+        <Text style={{
+          fontSize: 17, color: "rgba(255,255,255,0.9)", textAlign: "center", fontWeight: "600", lineHeight: 26, paddingHorizontal: 10
+        }}>
+          The conversion may take a while depending on{"\n"}the size of your upload
+        </Text>
       </View>
     </View>
   );
@@ -722,7 +714,7 @@ export default function HomeScreen() {
   const [starredQuestions, setStarredQuestions] = useState<Set<string>>(new Set());
   const [homeFilter, setHomeFilter] = useState<"all"|"progress"|"notstarted"|"done">("all");
   const [homeSearch, setHomeSearch] = useState("");
-  const [libraryTab, setLibraryTab] = useState<"flashcards" | "quizzes">("flashcards");
+  const [libraryTab, setLibraryTab] = useState<"courses" | "uploads">("courses");
   const [librarySearch, setLibrarySearch] = useState("");
   const [jumpPage, setJumpPage] = useState(0);
   const [showFeedbackPage, setShowFeedbackPage] = useState(false);
@@ -1983,7 +1975,7 @@ export default function HomeScreen() {
 
         {/* Practice Modes */}
         <Text style={{ fontSize: 16, fontWeight: "600", color: textMain, marginTop: 12, marginBottom: 12, marginLeft: 4 }}>Practice</Text>
-        <View style={{ flexDirection: "row", gap: 10, marginBottom: 32 }}>
+        <View style={{ flexDirection: "row", gap: 10, marginBottom: 24 }}>
           <Pressable onPress={() => handleOpenQuizOptions(quiz)} style={({pressed}) => [{ flex: 1, backgroundColor: cardBg, borderRadius: 16, paddingVertical: 16, paddingHorizontal: 12, borderWidth: 1, borderColor: border, flexDirection: "row", alignItems: "center" }, pressed && {opacity: 0.8}]}>
             <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: isDark ? "#20264A" : "#e0e7ff", alignItems: "center", justifyContent: "center", marginRight: 8 }}>
               <Ionicons name="help-circle" size={18} color={isDark ? "#7C9DFF" : "#4338ca"} />
@@ -2006,6 +1998,22 @@ export default function HomeScreen() {
             <Feather name="chevron-right" size={16} color={isDark ? "#FFFFFF" : "#9ca3af"} style={{ opacity: isDark ? 0.8 : 1 }} />
           </Pressable>
         </View>
+        <Pressable 
+          onPress={() => handleHostBattle(quiz.id)} 
+          style={({pressed}) => [{ 
+            backgroundColor: cardBg, borderRadius: 16, paddingVertical: 16, paddingHorizontal: 12, 
+            borderWidth: 1, borderColor: border, flexDirection: "row", alignItems: "center", marginBottom: 32
+          }, pressed && {opacity: 0.8}]}
+        >
+          <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: isDark ? "rgba(244,63,94,0.15)" : "#ffe4e6", alignItems: "center", justifyContent: "center", marginRight: 12 }}>
+            <Ionicons name="flame" size={18} color={isDark ? "#FB7185" : "#e11d48"} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 16, fontWeight: "700", color: textMain, marginBottom: 4 }} numberOfLines={1}>Multiplayer Battle</Text>
+            <Text style={{ fontSize: 12, color: isDark ? "rgba(255,255,255,0.8)" : textSub }} numberOfLines={1}>Challenge a friend in real-time</Text>
+          </View>
+          <Feather name="chevron-right" size={16} color={isDark ? "#FFFFFF" : "#9ca3af"} style={{ opacity: isDark ? 0.8 : 1 }} />
+        </Pressable>
 
 
 
@@ -4638,323 +4646,6 @@ export default function HomeScreen() {
           )}
         </ScrollView>
 
-        {/* ── Quiz Selector Modal ── */}
-        {showBattleQuizSelector && (
-        <Modal visible={true} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowBattleQuizSelector(false)}>
-          <View style={{ flex: 1, backgroundColor: isDark ? "#0d0f1a" : "#f4f4f8", paddingTop: Platform.OS === 'ios' ? 0 : 40 }}>
-            <View style={{
-              flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-              padding: 20, borderBottomWidth: 1, borderBottomColor: cardBorder
-            }}>
-              <Text style={{ fontSize: 18, fontWeight: "800", color: txt }}>⚔️ Select a Quiz</Text>
-              <Pressable onPress={() => setShowBattleQuizSelector(false)}
-                style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)",
-                  alignItems: "center", justifyContent: "center" }}>
-                <Ionicons name="close" size={20} color={muted} />
-              </Pressable>
-            </View>
-            <FlatList
-              data={(!sampleDismissed && sampleQuiz) ? [sampleQuiz, ...quizzes].reverse() : [...quizzes].reverse()}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={{ padding: 16, gap: 10 }}
-              renderItem={({ item }) => (
-                <Pressable
-                  onPress={() => handleHostBattle(item.id)}
-                  style={({ pressed }) => [{
-                    backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "#ffffff",
-                    borderWidth: 1, borderColor: cardBorder,
-                    borderRadius: 16, padding: 18,
-                    flexDirection: "row", alignItems: "center", gap: 14,
-                    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: isDark ? 0 : 0.04, shadowRadius: 8, elevation: isDark ? 0 : 1,
-                  }, pressed && { opacity: 0.8, borderColor: isDark ? "rgba(99,102,241,0.4)" : "rgba(99,102,241,0.3)" }]}
-                >
-                  <View style={{
-                    width: 46, height: 46, borderRadius: 12,
-                    backgroundColor: isDark ? "rgba(99,102,241,0.12)" : "rgba(99,102,241,0.09)",
-                    alignItems: "center", justifyContent: "center"
-                  }}>
-                    <Text style={{ fontSize: 22 }}>📝</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 15, fontWeight: "700", color: txt, marginBottom: 3 }}>{item.title}</Text>
-                    <Text style={{ fontSize: 12, color: muted, fontWeight: "500" }}>{item.questions} questions · {item.category}</Text>
-                  </View>
-                  <Feather name="chevron-right" size={16} color={mutedSub} />
-                </Pressable>
-              )}
-              ListEmptyComponent={
-                <View style={{ alignItems: "center", marginTop: 60, gap: 12 }}>
-                  <Text style={{ fontSize: 40 }}>📭</Text>
-                  <Text style={{ textAlign: "center", color: muted, fontSize: 15, fontWeight: "500" }}>No quizzes yet.{"\n"}Create one to host a battle!</Text>
-                </View>
-              }
-            />
-          </View>
-        </Modal>
-        )}
-
-        {/* ── Battle Options Modal ── */}
-        {showBattleOptions && (
-        <Modal visible={true} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { if (!battleCreating) setShowBattleOptions(false); }}>
-          <View style={{ flex: 1, backgroundColor: isDark ? "#0f172a" : "#f4f4f8" }}>
-            {/* Header */}
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-              padding: 20, borderBottomWidth: 1, borderBottomColor: cardBorder }}>
-              <Text style={{ fontSize: 18, fontWeight: "800", color: txt }}>⚙️ Battle Options</Text>
-              <Pressable onPress={() => { if (!battleCreating) setShowBattleOptions(false); }}
-                style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)",
-                  alignItems: "center", justifyContent: "center", opacity: battleCreating ? 0.3 : 1 }}>
-                <Ionicons name="close" size={20} color={txt} />
-              </Pressable>
-            </View>
-            <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 140 }} showsVerticalScrollIndicator={false}>
-              {/* Quiz info */}
-              {battleOptionsQuiz && (
-                <View style={{ backgroundColor: isDark ? "rgba(99,102,241,0.1)" : "rgba(99,102,241,0.07)",
-                  borderRadius: 14, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: isDark ? "rgba(99,102,241,0.2)" : "rgba(99,102,241,0.15)" }}>
-                  <Text style={{ fontSize: 16, fontWeight: "800", color: txt, marginBottom: 4 }}>{battleOptionsQuiz.title}</Text>
-                  <Text style={{ fontSize: 13, color: txt }}>{battleOptionsQuiz.questions} questions available</Text>
-                </View>
-              )}
-
-              {/* Question Selection */}
-              <Text style={{ fontSize: 12, fontWeight: "700", color: txt, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Question Selection</Text>
-              <View style={{ flexDirection: "row", gap: 10, marginBottom: 16 }}>
-                {([{ value: "all" as const, label: "All" }, { value: "random" as const, label: "Random" }, { value: "range" as const, label: "Range" }]).map(({ value, label }) => {
-                  const isActive = battleSelectionMode === value;
-                  return (
-                    <Pressable key={value} onPress={() => setBattleSelectionMode(value)}
-                      style={[{
-                        flex: 1, paddingVertical: 11, borderRadius: 12, alignItems: "center",
-                        borderWidth: 1.5,
-                        backgroundColor: isActive ? (isDark ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.1)") : cardBg,
-                        borderColor: isActive ? (isDark ? "rgba(99,102,241,0.5)" : "rgba(99,102,241,0.4)") : cardBorder,
-                      }]}
-                    >
-                      <Text style={{ fontSize: 14, fontWeight: "700", color: isActive ? (isDark ? "#818cf8" : "#6366f1") : txt }}>{label}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              {/* Random count stepper */}
-              {battleSelectionMode === "random" && (
-                <View style={{ backgroundColor: cardBg,
-                  borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: cardBorder,
-                  flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                  <Text style={{ fontSize: 15, fontWeight: "600", color: txt }}>Number of questions</Text>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                    <Pressable onPress={() => setBattleRandomCount(Math.max(1, battleRandomCount - 1))}
-                      style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" }}>
-                      <Text style={{ fontSize: 18, color: txt, fontWeight: "700" }}>−</Text>
-                    </Pressable>
-                    <TextInput 
-                      style={{ fontSize: 18, fontWeight: "800", color: txt, minWidth: 32, textAlign: "center", padding: 0 }}
-                      keyboardType="number-pad"
-                      value={battleRandomCount === 0 ? "" : String(battleRandomCount)}
-                      onChangeText={(text) => {
-                        const cleaned = text.replace(/[^0-9]/g, '');
-                        if (!cleaned) { setBattleRandomCount(0); return; }
-                        const maxQ = battleOptionsQuiz?.questionsList?.length || battleOptionsQuiz?.questions || 50;
-                        setBattleRandomCount(Math.max(1, Math.min(maxQ, parseInt(cleaned, 10))));
-                      }}
-                    />
-                    <Pressable onPress={() => setBattleRandomCount(Math.min((battleOptionsQuiz?.questionsList?.length || battleOptionsQuiz?.questions || 50), battleRandomCount + 1))}
-                      style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" }}>
-                      <Text style={{ fontSize: 18, color: txt, fontWeight: "700" }}>+</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              )}
-
-              {/* Range count steppers */}
-              {battleSelectionMode === "range" && (
-                <View style={{ backgroundColor: cardBg,
-                  borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: cardBorder,
-                  flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                  <Text style={{ fontSize: 15, fontWeight: "600", color: txt }}>Question Range</Text>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <View style={{ flexDirection: "row", alignItems: "center" }}>
-                      <Pressable onPress={() => setBattleRangeStart(Math.max(1, battleRangeStart - 1))}
-                        style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" }}>
-                        <Text style={{ fontSize: 16, color: txt, fontWeight: "700" }}>−</Text>
-                      </Pressable>
-                      <TextInput 
-                        style={{ fontSize: 16, fontWeight: "800", color: txt, minWidth: 32, textAlign: "center", padding: 0 }}
-                        keyboardType="number-pad"
-                        value={battleRangeStart === 0 ? "" : String(battleRangeStart)}
-                        onChangeText={(text) => {
-                          const cleaned = text.replace(/[^0-9]/g, '');
-                          if (!cleaned) { setBattleRangeStart(0); return; }
-                          setBattleRangeStart(Math.max(1, Math.min(battleRangeEnd, parseInt(cleaned, 10))));
-                        }}
-                      />
-                      <Pressable onPress={() => setBattleRangeStart(Math.min(battleRangeEnd, battleRangeStart + 1))}
-                        style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" }}>
-                        <Text style={{ fontSize: 16, color: txt, fontWeight: "700" }}>+</Text>
-                      </Pressable>
-                    </View>
-                    <Text style={{ fontSize: 14, color: txt, marginHorizontal: 2 }}>to</Text>
-                    <View style={{ flexDirection: "row", alignItems: "center" }}>
-                      <Pressable onPress={() => setBattleRangeEnd(Math.max(battleRangeStart, battleRangeEnd - 1))}
-                        style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" }}>
-                        <Text style={{ fontSize: 16, color: txt, fontWeight: "700" }}>−</Text>
-                      </Pressable>
-                      <TextInput 
-                        style={{ fontSize: 16, fontWeight: "800", color: txt, minWidth: 32, textAlign: "center", padding: 0 }}
-                        keyboardType="number-pad"
-                        value={battleRangeEnd === 0 ? "" : String(battleRangeEnd)}
-                        onChangeText={(text) => {
-                          const cleaned = text.replace(/[^0-9]/g, '');
-                          if (!cleaned) { setBattleRangeEnd(0); return; }
-                          const maxQ = battleOptionsQuiz?.questionsList?.length || battleOptionsQuiz?.questions || 100;
-                          setBattleRangeEnd(Math.max(battleRangeStart, Math.min(maxQ, parseInt(cleaned, 10))));
-                        }}
-                      />
-                      <Pressable onPress={() => setBattleRangeEnd(Math.min(battleOptionsQuiz?.questionsList?.length || battleOptionsQuiz?.questions || 100, battleRangeEnd + 1))}
-                        style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" }}>
-                        <Text style={{ fontSize: 16, color: txt, fontWeight: "700" }}>+</Text>
-                      </Pressable>
-                    </View>
-                  </View>
-                </View>
-              )}
-
-              {/* Time per question */}
-              <Text style={{ fontSize: 12, fontWeight: "700", color: txt, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10, marginTop: 4 }}>Time per Question</Text>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
-                {([null, 15, 20, 30, 45, 60] as (number | null)[]).map((t) => {
-                  const isActive = battleTimePerQuestion === t;
-                  const label = t === null ? "No Limit" : `${t}s`;
-                  return (
-                    <Pressable key={String(t)} onPress={() => setBattleTimePerQuestion(t)}
-                      style={[{
-                        paddingVertical: 9, paddingHorizontal: 16, borderRadius: 10, borderWidth: 1.5,
-                        backgroundColor: isActive ? (isDark ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.1)") : cardBg,
-                        borderColor: isActive ? (isDark ? "rgba(99,102,241,0.5)" : "rgba(99,102,241,0.4)") : cardBorder,
-                      }]}
-                    >
-                      <Text style={{ fontSize: 13, fontWeight: "700",
-                        color: isActive ? (isDark ? "#818cf8" : "#6366f1") : txt }}>
-                        {label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              {/* Toggles */}
-              <Text style={{ fontSize: 12, fontWeight: "700", color: txt, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Gameplay Options</Text>
-              <View style={{ backgroundColor: cardBg,
-                borderRadius: 14, borderWidth: 1, borderColor: cardBorder, overflow: "hidden" }}>
-                {[
-                  { label: "Shuffle question order", sub: "Questions appear in random order", value: battleShuffleQ, set: setBattleShuffleQ },
-                  { label: "Shuffle answer options", sub: "Answer choices appear randomized", value: battleShuffleA, set: setBattleShuffleA },
-                ].map((row, i) => (
-                  <View key={row.label}>
-                    {i > 0 && <View style={{ height: 1, backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "#f1f5f9", marginLeft: 16 }} />}
-                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 16 }}>
-                      <View style={{ flex: 1, marginRight: 12 }}>
-                        <Text style={{ fontSize: 15, fontWeight: "600", color: txt, marginBottom: 2 }}>{row.label}</Text>
-                        <Text style={{ fontSize: 12, color: txt }}>{row.sub}</Text>
-                      </View>
-                      <ToggleSwitch checked={row.value} onChange={row.set} darkMode={isDark} />
-                    </View>
-                  </View>
-                ))}
-              </View>
-            </ScrollView>
-
-            {/* Sticky Start Button */}
-            <View style={{ position: "absolute", bottom: 0, left: 0, right: 0,
-              padding: 20, paddingBottom: Platform.OS === "ios" ? 36 : 20,
-              backgroundColor: isDark ? "#0f172a" : "#f4f4f8",
-              borderTopWidth: 1, borderTopColor: cardBorder }}>
-              <Pressable
-                onPress={handleStartBattle}
-                disabled={battleCreating}
-                style={({ pressed }) => [{
-                  backgroundColor: "#6366f1",
-                  paddingVertical: 16, borderRadius: 14, alignItems: "center", justifyContent: "center",
-                  flexDirection: "row", gap: 10,
-                  opacity: battleCreating ? 0.85 : 1,
-                }, pressed && !battleCreating && { opacity: 0.8, transform: [{ scale: 0.98 }] }]}
-              >
-                {battleCreating ? (
-                  <>
-                    <ActivityIndicator size="small" color="#fff" />
-                    <Text style={{ color: "#fff", fontSize: 16, fontWeight: "800" }}>Creating Room…</Text>
-                  </>
-                ) : (
-                  <Text style={{ color: "#fff", fontSize: 16, fontWeight: "800" }}>⚔️  Create Battle Room</Text>
-                )}
-              </Pressable>
-            </View>
-          </View>
-        </Modal>
-        )}
-
-        {/* ── Battle History Modal ── */}
-        {showBattleHistory && (
-        <Modal visible={true} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowBattleHistory(false)}>
-          <View style={{ flex: 1, backgroundColor: isDark ? "#0d0f1a" : "#f4f4f8", paddingTop: Platform.OS === 'ios' ? 0 : 40 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-              padding: 20, borderBottomWidth: 1, borderBottomColor: cardBorder }}>
-              <Text style={{ fontSize: 18, fontWeight: "800", color: txt }}>📜 Battle History</Text>
-              <Pressable onPress={() => setShowBattleHistory(false)}
-                style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)",
-                  alignItems: "center", justifyContent: "center" }}>
-                <Ionicons name="close" size={20} color={muted} />
-              </Pressable>
-            </View>
-            {battleHistory.length === 0 ? (
-              <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 14 }}>
-                <Text style={{ fontSize: 48 }}>⚔️</Text>
-                <Text style={{ fontSize: 18, fontWeight: "800", color: txt }}>No battles yet</Text>
-                <Text style={{ fontSize: 14, color: muted, textAlign: "center" }}>Complete your first battle{"\n"}to see your history here!</Text>
-              </View>
-            ) : (
-              <FlatList
-                data={[...battleHistory].sort((a, b) => b.date - a.date)}
-                keyExtractor={(_, i) => String(i)}
-                contentContainerStyle={{ padding: 16, gap: 10 }}
-                renderItem={({ item }) => {
-                  const d = new Date(item.date);
-                  const dateStr = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-                  return (
-                    <View style={{
-                      backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "#ffffff",
-                      borderRadius: 16, padding: 16,
-                      borderWidth: 1, borderColor: item.won ? (isDark ? "rgba(34,197,94,0.2)" : "rgba(34,197,94,0.15)") : cardBorder,
-                      flexDirection: "row", alignItems: "center", gap: 14,
-                    }}>
-                      <Text style={{ fontSize: 28 }}>{item.won ? "🏆" : "💀"}</Text>
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 14, fontWeight: "700", color: txt, marginBottom: 2 }} numberOfLines={1}>{item.quizTitle}</Text>
-                        <Text style={{ fontSize: 12, color: muted }}>vs {item.opponentName} · {dateStr}</Text>
-                      </View>
-                      <View style={{ alignItems: "flex-end", gap: 4 }}>
-                <View style={{ backgroundColor: item.won ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.12)",
-                          borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 }}>
-                          <Text style={{ fontSize: 11, fontWeight: "800", color: item.won ? "#22c55e" : "#ef4444" }}>
-                            {item.won ? "WIN" : "LOSS"}
-                          </Text>
-                        </View>
-                        <Text style={{ fontSize: 13, fontWeight: "700", color: muted }}>{item.myScore} – {item.opponentScore}</Text>
-                        {item.myScore === item.opponentScore && item.myTime != null && item.opponentTime != null && (
-                          <Text style={{ fontSize: 10, color: item.won ? "#22c55e" : "#ef4444", fontWeight: "600", marginTop: -2 }}>
-                            {item.won ? "+" : "-"}{(Math.abs(item.opponentTime - item.myTime) / 1000).toFixed(1)}s
-                          </Text>
-                        )}
-                      </View>
-                    </View>
-                  );
-                }}
-              />
-            )}
-          </View>
-        </Modal>
-        )}
       </KeyboardWrapper>
     );
   };
@@ -5200,315 +4891,247 @@ export default function HomeScreen() {
       case "bookmarked-questions":
         return renderBookmarkedQuestionsView();
       case "library": {
-        // ── Library Screen ────────────────────────────────────────
-        const isDark = settingsDarkMode;
-        const bg = "#0B0F1E";
-        const cardBg = "#141930";
-        const iconBg = "#1E2340";
-        const accentPurple = "#B5A8FF";
-        const accentPillBg = "#2B2560";
-        const muted = "#8B8FA8";
-        const txt = "#ffffff";
-        const border = "rgba(255,255,255,0.08)";
+        // ── My Library ────────────────────────────────────────────
+        const bg       = "#0B0F1A";
+        const toggleBg = "#1A1E2E";
+        const activeBg = "#252A3D";
+        const muted    = "#8B8FA8";
+        const txt      = "#ffffff";
+        const border   = "rgba(255,255,255,0.12)";
+        const accentPurple = "#8AB4F8";
+        const accentPillBg = "#1E3A5F";
 
-        // Group items by recency
-        const groupByTime = (items: any[], getDate: (item: any) => number) => {
-          const now = Date.now();
-          const oneWeek = 7 * 24 * 60 * 60 * 1000;
-          const twoWeeks = 14 * 24 * 60 * 60 * 1000;
-          const groups: { label: string; items: any[] }[] = [
-            { label: "This week", items: [] },
-            { label: "Last week", items: [] },
-            { label: "Older", items: [] },
-          ];
-          items.forEach(item => {
-            const date = getDate(item);
-            if (date === 0 || now - date < oneWeek) groups[0].items.push(item);
-            else if (now - date < twoWeeks) groups[1].items.push(item);
-            else groups[2].items.push(item);
-          });
-          return groups.filter(g => g.items.length > 0);
-        };
-
-        const filteredDecks = flashcardDecks.filter((d: any) =>
-          !librarySearch || d.title.toLowerCase().includes(librarySearch.toLowerCase())
-        );
+        const isCoursesTab = libraryTab === "courses";
 
         const filteredQuizzes = [...quizzes].reverse().filter((q: any) =>
           !librarySearch || q.title.toLowerCase().includes(librarySearch.toLowerCase())
         );
+        const filteredDecks = flashcardDecks.filter((d: any) =>
+          !librarySearch || d.title.toLowerCase().includes(librarySearch.toLowerCase())
+        );
 
-        const deckGroups = groupByTime(filteredDecks, (d: any) => {
-          const attempts = d.attempts || [];
-          return attempts.length > 0 ? (attempts[attempts.length - 1].date || 0) : 0;
-        });
+        const groupByTime = (items: any[], getDate: (item: any) => number) => {
+          const now = Date.now();
+          const oneWeek  = 7  * 24 * 60 * 60 * 1000;
+          const twoWeeks = 14 * 24 * 60 * 60 * 1000;
+          const groups: { label: string; items: any[] }[] = [
+            { label: "This week", items: [] },
+            { label: "Last week", items: [] },
+            { label: "Older",     items: [] },
+          ];
+          items.forEach(item => {
+            const date = getDate(item);
+            if (date === 0 || now - date < oneWeek)   groups[0].items.push(item);
+            else if (now - date < twoWeeks)            groups[1].items.push(item);
+            else                                       groups[2].items.push(item);
+          });
+          return groups.filter(g => g.items.length > 0);
+        };
 
         const quizGroups = groupByTime(filteredQuizzes, (q: any) => {
-          const attempts = q.attempts || [];
-          return attempts.length > 0 ? (attempts[0].date || 0) : 0;
+          const a = q.attempts || []; return a.length > 0 ? (a[0].date || 0) : 0;
+        });
+        const deckGroups = groupByTime(filteredDecks, (d: any) => {
+          const a = d.attempts || []; return a.length > 0 ? (a[a.length - 1].date || 0) : 0;
         });
 
-        const renderFlashcardRow = (deck: any) => {
-          const cardCount = (deck.cards || []).length;
-          const dueCount = (deck.cards || []).filter((c: any) =>
-            !c.sm2_nextReviewDate || c.sm2_nextReviewDate <= Date.now()
-          ).length;
-          const hasDue = dueCount > 0 && (deck.cards || []).some((c: any) => c.sm2_nextReviewDate);
+        const hasItems = isCoursesTab ? filteredQuizzes.length > 0 : filteredDecks.length > 0;
+
+        const renderRow = (item: any, type: "quiz" | "deck") => {
+          const isQuiz     = type === "quiz";
+          const icoName    = "copy-outline";
+          const icoColor   = isQuiz ? "#8AB4F8" : "#67E8F9";
+          const iconBgCol  = isQuiz ? "#1A2240" : "#0D3040";
+          const attempts   = item.attempts || [];
+          const wrongCount = (item.wrongQuestions || []).length;
+          const linkedDeck = isQuiz ? flashcardDecks.find((d: any) => d.id === `temp-${item.id}`) : null;
+          
+          let cardCount = 0;
+          let dueCount = 0;
+          
+          if (isQuiz) {
+            const allFlashcards = item.flashcards || [];
+            cardCount = allFlashcards.length;
+            const fcCardsWithState = cardCount > 0 
+              ? allFlashcards.map((c: any, idx: number) => {
+                  const cardId = c.id || `fc-${idx}`;
+                  const saved = linkedDeck?.cards?.find((sc: any) => sc.id === cardId);
+                  return saved ?? c;
+                })
+              : [];
+            dueCount = fcCardsWithState.filter((c: any) => !c.sm2_nextReviewDate || c.sm2_nextReviewDate <= Date.now()).length;
+          } else {
+            cardCount = (item.cards || []).length;
+            dueCount = (item.cards || []).filter((c: any) => !c.sm2_nextReviewDate || c.sm2_nextReviewDate <= Date.now()).length;
+          }
+
+          const questionCount = item.questions || 0;
+          let subtitleParts: string[] = [];
+          if (isQuiz) {
+            subtitleParts = [
+              `${questionCount} question${questionCount !== 1 ? "s" : ""}`,
+              `${cardCount} card${cardCount !== 1 ? "s" : ""}`,
+              `${dueCount} due`
+            ];
+          } else {
+            subtitleParts = [
+              `Flashcard set`,
+              `${cardCount} term${cardCount !== 1 ? "s" : ""}`,
+              `by you`
+            ];
+          }
+          const subtitle = subtitleParts.join("  ·  ");
+
           return (
-            <AnimatedPressable
-              key={deck.id}
-              onPress={() => startStudy(deck)}
-              style={{
-                flexDirection: "row", alignItems: "center",
-                paddingVertical: 13, paddingHorizontal: 14,
-                backgroundColor: cardBg, borderRadius: 14,
-                marginBottom: 8, borderWidth: 1, borderColor: border,
+            <Pressable
+              key={item.id}
+              onPress={() => {
+                if (isQuiz) {
+                  setViewingInsightsQuiz(item);
+                  setViewingInsightsQuizFromTab("library");
+                  setActiveTab("insights");
+                } else {
+                  startStudy(item);
+                }
               }}
-              scaleTo={0.97}
+              style={({ pressed }) => ({
+                flexDirection: "row", alignItems: "center",
+                paddingVertical: 12,
+                opacity: pressed ? 0.65 : 1,
+              })}
             >
+              {/* Flashcard stack icon */}
               <View style={{
-                width: 48, height: 48, borderRadius: 12,
-                backgroundColor: iconBg, alignItems: "center", justifyContent: "center",
-                marginRight: 12,
+                width: 46, height: 46, borderRadius: 12,
+                backgroundColor: "#1C2B3A",
+                borderWidth: 1, borderColor: "rgba(255,255,255,0.08)",
+                alignItems: "center", justifyContent: "center",
+                marginRight: 14, flexShrink: 0,
               }}>
-                <Ionicons name="copy-outline" size={22} color={accentPurple} />
+                {/* Back card — dark gray, rotated */}
+                <View style={{
+                  position: "absolute",
+                  width: 13, height: 17,
+                  borderRadius: 3,
+                  backgroundColor: "#374151",
+                  transform: [{ rotate: "-12deg" }, { translateX: -4 }, { translateY: 3 }],
+                }} />
+                {/* Front card — blue/teal */}
+                <View style={{
+                  position: "absolute",
+                  width: 13, height: 17,
+                  borderRadius: 3,
+                  backgroundColor: icoColor,
+                  transform: [{ translateX: 3 }, { translateY: -2 }],
+                }} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 15, fontWeight: "500", color: txt, marginBottom: 3 }} numberOfLines={1}>
-                  {deck.title}
+                <Text style={{ fontSize: 15, fontWeight: "600", color: txt, marginBottom: 4 }} numberOfLines={1}>
+                  {item.title}
                 </Text>
-                <Text style={{ fontSize: 12, color: muted }}>
-                  {`Flashcard set · ${cardCount} terms · by you`}
-                </Text>
+                <Text style={{ fontSize: 13, color: "#D1D5DB", fontWeight: "500" }}>{subtitle}</Text>
               </View>
-              {hasDue ? (
-                <View style={{
-                  backgroundColor: accentPillBg, borderRadius: 20,
-                  paddingHorizontal: 10, paddingVertical: 4, marginLeft: 8,
-                }}>
-                  <Text style={{ fontSize: 11, fontWeight: "700", color: accentPurple }}>
-                    {dueCount} due
-                  </Text>
-                </View>
-              ) : (
-                <Feather name="chevron-right" size={18} color={muted} />
-              )}
-            </AnimatedPressable>
+            </Pressable>
           );
         };
 
-        const renderQuizRow = (quiz: any) => {
-          const attempts = quiz.attempts || [];
-          const lastScore = attempts.length > 0 ? attempts[0].score : null;
-          const wrongCount = (quiz.wrongQuestions || []).length;
-          return (
-            <AnimatedPressable
-              key={quiz.id}
-              onPress={() => {
-                setViewingInsightsQuiz(quiz);
-                setViewingInsightsQuizFromTab("library");
-                setActiveTab("insights");
-              }}
-              style={{
-                flexDirection: "row", alignItems: "center",
-                paddingVertical: 13, paddingHorizontal: 14,
-                backgroundColor: cardBg, borderRadius: 14,
-                marginBottom: 8, borderWidth: 1, borderColor: border,
-              }}
-              scaleTo={0.97}
-            >
-              <View style={{
-                width: 48, height: 48, borderRadius: 12,
-                backgroundColor: iconBg, alignItems: "center", justifyContent: "center",
-                marginRight: 12,
-              }}>
-                <Ionicons name="flash-outline" size={22} color={accentPurple} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 15, fontWeight: "500", color: txt, marginBottom: 3 }} numberOfLines={1}>
-                  {quiz.title}
+        const renderGroups = (groups: { label: string; items: any[] }[], type: "quiz" | "deck") => (
+          <>
+            {groups.map(group => (
+              <View key={group.label}>
+                <Text style={{ fontSize: 13, color: muted, marginBottom: 6, marginTop: 8 }}>
+                  {group.label}
                 </Text>
-                <Text style={{ fontSize: 12, color: muted }}>
-                  {`Quiz · ${quiz.questions || 0} questions`}
-                  {attempts.length > 0 ? ` · ${attempts.length} attempt${attempts.length > 1 ? "s" : ""}` : ""}
-                  {lastScore !== null ? ` · ${lastScore}%` : ""}
-                </Text>
+                {group.items.map(item => renderRow(item, type))}
               </View>
-              {wrongCount > 0 ? (
-                <View style={{
-                  backgroundColor: accentPillBg, borderRadius: 20,
-                  paddingHorizontal: 10, paddingVertical: 4, marginLeft: 8,
-                }}>
-                  <Text style={{ fontSize: 11, fontWeight: "700", color: accentPurple }}>
-                    {wrongCount} due
-                  </Text>
-                </View>
-              ) : (
-                <Feather name="chevron-right" size={18} color={muted} />
-              )}
-            </AnimatedPressable>
-          );
-        };
+            ))}
+          </>
+        );
 
         return (
           <View style={{ flex: 1, backgroundColor: bg }}>
-            {/* ── Top Bar ── */}
-            <View style={{
-              flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-              paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16,
-            }}>
-              <Text style={{ fontSize: 24, fontWeight: "700", color: txt }}>Library</Text>
-              <AnimatedPressable
-                onPress={() => setShowAddMenu(true)}
-                style={{
-                  width: 36, height: 36, borderRadius: 18,
-                  backgroundColor: accentPillBg,
-                  alignItems: "center", justifyContent: "center",
-                }}
-                scaleTo={0.9}
-              >
-                <Ionicons name="add" size={22} color={accentPurple} />
-              </AnimatedPressable>
+
+            <View style={{ paddingHorizontal: 20, paddingTop: 28, paddingBottom: 16 }}>
+              <Text style={{ fontSize: 28, fontWeight: "600", color: txt }}>My Library</Text>
             </View>
 
-            {/* ── Pill Toggle ── */}
+            <View style={{ height: 1, backgroundColor: "rgba(255,255,255,0.08)", marginHorizontal: 20, marginBottom: 20 }} />
+
             <View style={{
-              flexDirection: "row", marginHorizontal: 20, marginBottom: 14,
-              backgroundColor: "#141930", borderRadius: 999, padding: 4,
-              alignSelf: "flex-start",
+              flexDirection: "row", marginHorizontal: 20, marginBottom: 16,
+              backgroundColor: toggleBg, borderRadius: 12, padding: 4,
             }}>
-              {(["flashcards", "quizzes"] as const).map(tab => (
+              {(["courses", "uploads"] as const).map(tab => (
                 <Pressable
                   key={tab}
                   onPress={() => { setLibraryTab(tab); setLibrarySearch(""); }}
                   style={{
-                    paddingHorizontal: 20, paddingVertical: 8, borderRadius: 999,
-                    backgroundColor: libraryTab === tab ? accentPillBg : "transparent",
-                    borderWidth: libraryTab === tab ? 1 : 0,
-                    borderColor: libraryTab === tab ? accentPurple : "transparent",
+                    flex: 1, paddingVertical: 11, borderRadius: 10,
+                    backgroundColor: libraryTab === tab ? activeBg : "transparent",
+                    alignItems: "center",
                   }}
                 >
-                  <Text style={{
-                    fontSize: 13, fontWeight: "600",
-                    color: libraryTab === tab ? accentPurple : muted,
-                  }}>
-                    {tab === "flashcards" ? "Flashcards" : "Quizzes"}
+                  <Text style={{ fontSize: 15, fontWeight: "600", color: libraryTab === tab ? txt : muted }}>
+                    {tab === "courses" ? "Courses" : "Uploads"}
                   </Text>
                 </Pressable>
               ))}
             </View>
 
-            {/* ── Search Bar ── */}
             <View style={{
               flexDirection: "row", alignItems: "center", gap: 10,
-              marginHorizontal: 20, marginBottom: 16,
-              backgroundColor: "#141930", borderRadius: 12,
-              paddingHorizontal: 14, paddingVertical: 10,
-              borderWidth: 1, borderColor: "rgba(255,255,255,0.08)",
+              marginHorizontal: 20, marginBottom: 8,
+              borderRadius: 12, borderWidth: 1, borderColor: border,
+              paddingHorizontal: 14, paddingVertical: 12,
             }}>
-              <Ionicons name="search-outline" size={16} color={muted} />
+              <Ionicons name="search-outline" size={18} color={muted} />
               <TextInput
-                placeholder={libraryTab === "flashcards" ? "Search flashcards..." : "Search quizzes..."}
+                placeholder="Search Library..."
                 placeholderTextColor={muted}
                 value={librarySearch}
                 onChangeText={setLibrarySearch}
-                style={{ flex: 1, fontSize: 14, color: txt, padding: 0 }}
+                style={{ flex: 1, fontSize: 15, color: txt, padding: 0 }}
               />
               {librarySearch.length > 0 && (
                 <Pressable onPress={() => setLibrarySearch("")}>
-                  <Ionicons name="close-circle" size={16} color={muted} />
+                  <Ionicons name="close-circle" size={18} color={muted} />
                 </Pressable>
               )}
             </View>
 
-            {/* ── Content List ── */}
             <ScrollView
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 120 }}
             >
-              {libraryTab === "flashcards" ? (
-                filteredDecks.length === 0 ? (
-                  <View style={{ alignItems: "center", paddingTop: 64, gap: 14 }}>
-                    <View style={{
-                      width: 72, height: 72, borderRadius: 36,
-                      backgroundColor: accentPillBg, alignItems: "center", justifyContent: "center",
-                    }}>
-                      <Ionicons name="copy-outline" size={32} color={accentPurple} />
-                    </View>
-                    <Text style={{ fontSize: 18, fontWeight: "600", color: txt }}>No flashcard decks yet</Text>
-                    <Text style={{ fontSize: 13, color: muted, textAlign: "center" }}>Tap + to create one</Text>
-                    <AnimatedPressable
-                      onPress={() => setShowAddMenu(true)}
-                      style={{
-                        backgroundColor: accentPurple, borderRadius: 12,
-                        paddingVertical: 14, paddingHorizontal: 32, marginTop: 8,
-                      }}
-                      scaleTo={0.96}
-                    >
-                      <Text style={{ color: "#0B0F1E", fontWeight: "700", fontSize: 15 }}>+ New Deck</Text>
-                    </AnimatedPressable>
-                  </View>
-                ) : (
-                  <>
-                    {deckGroups.map(group => (
-                      <View key={group.label}>
-                        <Text style={{
-                          fontSize: 11, fontWeight: "600", color: muted,
-                          textTransform: "uppercase", letterSpacing: 1,
-                          marginBottom: 10, marginTop: 6,
-                        }}>
-                          {group.label}
-                        </Text>
-                        {group.items.map(renderFlashcardRow)}
-                      </View>
-                    ))}
-                  </>
-                )
-              ) : (
-                filteredQuizzes.length === 0 ? (
-                  <View style={{ alignItems: "center", paddingTop: 64, gap: 14 }}>
-                    <View style={{
-                      width: 72, height: 72, borderRadius: 36,
-                      backgroundColor: accentPillBg, alignItems: "center", justifyContent: "center",
-                    }}>
-                      <Ionicons name="flash-outline" size={32} color={accentPurple} />
-                    </View>
-                    <Text style={{ fontSize: 18, fontWeight: "600", color: txt }}>No quizzes yet</Text>
-                    <Text style={{ fontSize: 13, color: muted, textAlign: "center" }}>
-                      Create a quiz from any deck or PDF
-                    </Text>
-                    <AnimatedPressable
-                      onPress={() => setShowAddMenu(true)}
-                      style={{
-                        backgroundColor: accentPurple, borderRadius: 12,
-                        paddingVertical: 14, paddingHorizontal: 32, marginTop: 8,
-                      }}
-                      scaleTo={0.96}
-                    >
-                      <Text style={{ color: "#0B0F1E", fontWeight: "700", fontSize: 15 }}>+ New Quiz</Text>
-                    </AnimatedPressable>
-                  </View>
-                ) : (
-                  <>
-                    {quizGroups.map(group => (
-                      <View key={group.label}>
-                        <Text style={{
-                          fontSize: 11, fontWeight: "600", color: muted,
-                          textTransform: "uppercase", letterSpacing: 1,
-                          marginBottom: 10, marginTop: 6,
-                        }}>
-                          {group.label}
-                        </Text>
-                        {group.items.map(renderQuizRow)}
-                      </View>
-                    ))}
-                  </>
-                )
-              )}
+              {!hasItems ? (
+                <View style={{ alignItems: "center", paddingTop: 64, gap: 14 }}>
+                  <Ionicons name={isCoursesTab ? "flash-outline" : "copy-outline"} size={40} color={muted} />
+                  <Text style={{ fontSize: 16, fontWeight: "600", color: txt }}>
+                    {librarySearch ? "No results found" : isCoursesTab ? "No courses yet" : "No uploads yet"}
+                  </Text>
+                  <Text style={{ fontSize: 13, color: muted, textAlign: "center" }}>
+                    {isCoursesTab ? "Create a quiz from any PDF or text" : "Create a flashcard deck to get started"}
+                  </Text>
+                  <Pressable
+                    onPress={() => setShowAddMenu(true)}
+                    style={({ pressed }) => ({
+                      marginTop: 8, backgroundColor: "#4A6FFF",
+                      borderRadius: 12, paddingVertical: 14, paddingHorizontal: 32,
+                      opacity: pressed ? 0.8 : 1,
+                    })}
+                  >
+                    <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>+ Create new</Text>
+                  </Pressable>
+                </View>
+              ) : isCoursesTab
+                  ? renderGroups(quizGroups, "quiz")
+                  : renderGroups(deckGroups, "deck")
+              }
             </ScrollView>
           </View>
         );
       }
+
 
       case "battle":
         return renderBattleLobbyView();
@@ -7441,205 +7064,177 @@ export default function HomeScreen() {
 
 
       default:
-        // ── Redesigned Home Screen ────────────────────────────────
+        // ── Home Screen (Hybrid Design) ──────────────────────────────
         return (() => {
-          const isDark = settingsDarkMode;
-          const bg = "#0B0F1E";
-          const cardBg = "#141930";
-          const iconBg = "#1E2340";
-          const accentPurple = "#B5A8FF";
-          const accentPillBg = "#2B2560";
-          const muted = "#8B8FA8";
-          const txt = "#ffffff";
-          const border = "rgba(255,255,255,0.08)";
+          const bg         = "#0B0F1E";
+          const cardBg     = "#141930";
+          const searchBg   = "#1A1F38";
+          const accentBlue = "#4A6FFF";
+          const accentGrn  = "#4ADE80";
+          const accentOrng = "#F97316";
+          const accentPurp = "#B5A8FF";
+          const pillBg     = "#2B2560";
+          const muted      = "#8B8FA8";
+          const txt        = "#ffffff";
+          const border     = "rgba(255,255,255,0.07)";
+          const iconBg     = "#1C2448";
 
-          // ── "Jump Back In" — in-progress quizzes & decks ──────────────
+          // ── Jump Back In data ─────────────────────────────────────
           const inProgressQuizzes = quizzes.filter((q: any) => {
-            const attempts = q.attempts || [];
             const uniqueCount = (q.uniqueCorrectIds || []).length;
             const qCount = q.questions || 1;
-            return attempts.length > 0 && uniqueCount < qCount;
+            return (q.attempts || []).length > 0 && uniqueCount < qCount;
           });
+          const inProgressDecks = flashcardDecks.filter((d: any) =>
+            (d.cards || []).some((c: any) => c.sm2_nextReviewDate)
+          );
 
-          const inProgressDecks = flashcardDecks.filter((d: any) => {
-            const cards = d.cards || [];
-            return cards.some((c: any) => c.sm2_nextReviewDate);
-          });
-
-          type JumpItem = {
-            id: string;
-            title: string;
-            type: "quiz" | "flashcard";
-            progress: number;
-            progressLabel: string;
-            raw: any;
-          };
-
+          type JumpItem = { id: string; title: string; type: "quiz"|"flashcard"; progress: number; label: string; raw: any; };
           const jumpItems: JumpItem[] = [
             ...inProgressQuizzes.slice(0, 4).map((q: any): JumpItem => {
-              const uniqueCount = (q.uniqueCorrectIds || []).length;
-              const qCount = q.questions || 1;
-              const pct = Math.min(Math.round((uniqueCount / qCount) * 100), 100);
-              return {
-                id: q.id,
-                title: q.title,
-                type: "quiz",
-                progress: uniqueCount / qCount,
-                progressLabel: `Quiz ${pct}%`,
-                raw: q,
-              };
+              const done = (q.uniqueCorrectIds || []).length;
+              const total = q.questions || 1;
+              return { id: q.id, title: q.title, type: "quiz", progress: done / total,
+                label: `${Math.round((done / total) * 100)}% complete`, raw: q };
             }),
             ...inProgressDecks.slice(0, 3).map((d: any): JumpItem => {
               const cards = d.cards || [];
-              const total = cards.length;
               const studied = cards.filter((c: any) => !!c.sm2_nextReviewDate).length;
-              return {
-                id: d.id,
-                title: d.title,
-                type: "flashcard",
-                progress: total > 0 ? studied / total : 0,
-                progressLabel: `${studied} / ${total} cards`,
-                raw: d,
-              };
+              return { id: d.id, title: d.title, type: "flashcard", progress: cards.length > 0 ? studied / cards.length : 0,
+                label: `${studied}/${cards.length} cards sorted`, raw: d };
             }),
           ];
 
-          // ── "Recents" — most recently accessed items ────────────────────
-          type RecentItem = {
-            id: string;
-            title: string;
-            type: "quiz" | "flashcard";
-            subtitle: string;
-            raw: any;
-            lastDate: number;
-          };
+          // ── Recents data ──────────────────────────────────────────
+          type RecentItem = { id: string; title: string; type: "quiz"|"flashcard"; sub: string; raw: any; ts: number; };
+          const allRecents: RecentItem[] = [
+            ...quizzes.map((q: any): RecentItem => {
+              const linkedDeck = flashcardDecks.find((d: any) => d.id === `temp-${q.id}`);
+              const allFlashcards = q.flashcards || [];
+              const cardCount = allFlashcards.length;
+              const fcCardsWithState = cardCount > 0 
+                ? allFlashcards.map((c: any, idx: number) => {
+                    const cardId = c.id || `fc-${idx}`;
+                    const saved = linkedDeck?.cards?.find((sc: any) => sc.id === cardId);
+                    return saved ?? c;
+                  })
+                : [];
+              const due = fcCardsWithState.filter((c: any) => !c.sm2_nextReviewDate || c.sm2_nextReviewDate <= Date.now()).length;
+              return {
+                id: q.id, title: q.title, type: "quiz",
+                sub: `${q.questions || 0} questions  ·  ${cardCount} cards  ·  ${due} due`, raw: q,
+                ts: (q.attempts || []).length > 0 ? (q.attempts[0].date || 0) : 0,
+              };
+            }),
+            ...flashcardDecks.map((d: any): RecentItem => ({
+              id: d.id, title: d.title, type: "flashcard",
+              sub: `Flashcard set  ·  ${(d.cards || []).length} terms  ·  by you`, raw: d,
+              ts: (d.attempts || []).length > 0 ? (d.attempts[d.attempts.length - 1].date || 0) : 0,
+            })),
+          ].sort((a, b) => b.ts - a.ts).slice(0, 6);
 
-          const recentQuizzes: RecentItem[] = quizzes.map((q: any): RecentItem => ({
-            id: q.id,
-            title: q.title,
-            type: "quiz",
-            subtitle: `${q.questions || 0} questions · by you`,
-            raw: q,
-            lastDate: q.attempts?.length > 0 ? (q.attempts[0].date || 0) : 0,
-          }));
-
-          const recentDecks: RecentItem[] = flashcardDecks.map((d: any): RecentItem => ({
-            id: d.id,
-            title: d.title,
-            type: "flashcard",
-            subtitle: `${(d.cards || []).length} cards · by you`,
-            raw: d,
-            lastDate: d.attempts?.length > 0 ? (d.attempts[d.attempts.length - 1].date || 0) : 0,
-          }));
-
-          const recentItems = [...recentQuizzes, ...recentDecks]
-            .sort((a, b) => b.lastDate - a.lastDate)
-            .slice(0, 5);
-
-          const hasContent = recentItems.length > 0 || jumpItems.length > 0;
-
+          const hasContent = jumpItems.length > 0 || allRecents.length > 0;
           const userInitial = firebaseUser ? getUserInitial(firebaseUser) : "?";
 
-          const handleJumpItemPress = (item: JumpItem) => {
-            if (item.type === "quiz") {
-              setViewingInsightsQuiz(item.raw);
-              setViewingInsightsQuizFromTab("home");
-              setActiveTab("insights");
-            } else {
-              startStudy(item.raw);
-            }
-          };
-
-          const handleRecentPress = (item: RecentItem) => {
-            if (item.type === "quiz") {
-              setViewingInsightsQuiz(item.raw);
-              setViewingInsightsQuizFromTab("home");
-              setActiveTab("insights");
-            } else {
-              startStudy(item.raw);
-            }
-          };
+          const goQuiz = (q: any) => { setViewingInsightsQuiz(q); setViewingInsightsQuizFromTab("home"); setActiveTab("insights"); };
 
           return (
             <View style={{ flex: 1, backgroundColor: bg }}>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={{ paddingBottom: 120 }}
+              >
+                {/* ── Top: Search + Avatar ── */}
+                <View style={{
+                  flexDirection: "row", alignItems: "center", gap: 12,
+                  paddingHorizontal: 16, paddingTop: 18, paddingBottom: 8,
+                }}>
+                  {/* Search pill */}
+                  <View style={{
+                    flex: 1, flexDirection: "row", alignItems: "center", gap: 10,
+                    backgroundColor: searchBg, borderRadius: 28,
+                    paddingHorizontal: 16, paddingVertical: 12,
+                    borderWidth: 1, borderColor: border,
+                  }}>
+                    <Ionicons name="search-outline" size={17} color={muted} />
+                    <TextInput
+                      placeholder="Search"
+                      placeholderTextColor={muted}
+                      value={homeSearch}
+                      onChangeText={setHomeSearch}
+                      style={{ flex: 1, fontSize: 15, color: txt, padding: 0 }}
+                    />
+                    {homeSearch.length > 0 && (
+                      <Pressable onPress={() => setHomeSearch("")}>
+                        <Ionicons name="close-circle" size={17} color={muted} />
+                      </Pressable>
+                    )}
+                  </View>
 
-              {/* ── Top Bar ── */}
-              <View style={{
-                flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between",
-                paddingHorizontal: 20, paddingTop: 18, paddingBottom: 10,
-              }}>
-                <Text style={{
-                  fontSize: 28, fontWeight: "800", color: "#ffffff",
-                  letterSpacing: -0.5,
-                }}>Scorr</Text>
-
-                <View style={{ alignItems: "center", gap: 5 }}>
-                  <AnimatedPressable
+                  {/* Avatar circle */}
+                  <Pressable
                     onPress={() => setActiveTab("menu")}
-                    style={{
-                      width: 40, height: 40, borderRadius: 20,
-                      backgroundColor: "#22C55E",
+                    style={({ pressed }) => ({
+                      width: 46, height: 46, borderRadius: 23,
+                      backgroundColor: "#1C2244",
                       alignItems: "center", justifyContent: "center", overflow: "hidden",
-                    }}
-                    scaleTo={0.9}
+                      borderWidth: 1.5, borderColor: "rgba(255,255,255,0.12)",
+                      opacity: pressed ? 0.7 : 1,
+                    })}
                   >
                     {firebaseUser?.photoURL ? (
-                      <Image source={{ uri: firebaseUser.photoURL }} style={{ width: 40, height: 40, borderRadius: 20 }} />
+                      <Image source={{ uri: firebaseUser.photoURL }} style={{ width: 46, height: 46, borderRadius: 23 }} />
                     ) : (
-                      <Text style={{ fontSize: 18, fontWeight: "700", color: "#ffffff" }}>
-                        {userInitial}
-                      </Text>
+                      <Text style={{ fontSize: 17, fontWeight: "700", color: accentPurp }}>{userInitial}</Text>
                     )}
-                  </AnimatedPressable>
-                  <Pressable onPress={() => setActiveTab("menu")} hitSlop={8}>
-                    <Ionicons name="settings-outline" size={13} color={muted} />
                   </Pressable>
                 </View>
-              </View>
 
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
+                {/* ── Empty state ── */}
+                {!hasContent && !homeSearch && (
+                  <View style={{ paddingHorizontal: 20, paddingTop: 48, gap: 14 }}>
+                    <Text style={{ fontSize: 22, fontWeight: "700", color: txt, marginBottom: 4 }}>
+                      Welcome to Scorr
+                    </Text>
 
-                {/* ── Empty State ── */}
-                {!hasContent && (
-                  <View style={{ alignItems: "center", paddingTop: 88, paddingHorizontal: 32, gap: 16 }}>
-                    <View style={{
-                      width: 88, height: 88, borderRadius: 44,
-                      backgroundColor: accentPillBg,
-                      alignItems: "center", justifyContent: "center",
-                      shadowColor: accentPurple, shadowOffset: { width: 0, height: 0 },
-                      shadowOpacity: 0.4, shadowRadius: 24,
-                    }}>
-                      <Ionicons name="sparkles" size={40} color={accentPurple} />
-                    </View>
-                    <Text style={{ fontSize: 20, fontWeight: "600", color: txt, textAlign: "center", marginTop: 8 }}>
-                      Nothing here yet
-                    </Text>
-                    <Text style={{ fontSize: 14, color: muted, textAlign: "center", lineHeight: 20 }}>
-                      Create a flashcard deck or import a PDF to get started
-                    </Text>
-                    <AnimatedPressable
-                      onPress={() => setShowAddMenu(true)}
-                      style={{
-                        backgroundColor: accentPurple, borderRadius: 12,
-                        paddingVertical: 16, marginTop: 10,
-                        width: SCREEN_WIDTH - 64, alignItems: "center",
-                        shadowColor: accentPurple, shadowOffset: { width: 0, height: 6 },
-                        shadowOpacity: 0.35, shadowRadius: 16,
-                      }}
-                      scaleTo={0.96}
-                    >
-                      <Text style={{ color: "#0B0F1E", fontWeight: "700", fontSize: 15 }}>
-                        + Create your first deck
-                      </Text>
-                    </AnimatedPressable>
+                    {/* Quick start actions */}
+                    {[
+                      { icon: "flash-outline", color: "#F97316", bg: "rgba(249,115,22,0.15)", label: "Start a Quiz", sub: "Jump straight into practice" },
+                      { icon: "albums-outline", color: "#B5A8FF", bg: "rgba(181,168,255,0.15)", label: "Study Flashcards", sub: "Spaced repetition learning" },
+                      { icon: "add-circle-outline", color: "#4ADE80", bg: "rgba(74,222,128,0.15)", label: "Create Content", sub: "Import PDF, notes, or text" },
+                    ].map((item) => (
+                      <Pressable
+                        key={item.label}
+                        onPress={() => setShowAddMenu(true)}
+                        style={({ pressed }) => ({
+                          flexDirection: "row", alignItems: "center", gap: 16,
+                          backgroundColor: cardBg, borderRadius: 16,
+                          padding: 16, borderWidth: 1, borderColor: border,
+                          opacity: pressed ? 0.75 : 1,
+                        })}
+                      >
+                        <View style={{
+                          width: 46, height: 46, borderRadius: 14,
+                          backgroundColor: item.bg, alignItems: "center", justifyContent: "center",
+                        }}>
+                          <Ionicons name={item.icon as any} size={24} color={item.color} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 15, fontWeight: "600", color: txt, marginBottom: 2 }}>{item.label}</Text>
+                          <Text style={{ fontSize: 12, color: muted }}>{item.sub}</Text>
+                        </View>
+                        <Feather name="chevron-right" size={18} color={muted} />
+                      </Pressable>
+                    ))}
                   </View>
                 )}
 
-                {/* ── Section 1: Jump Back In ── */}
-                {jumpItems.length > 0 && (
-                  <View style={{ marginBottom: 32, marginTop: 8 }}>
+                {/* ── Jump Back In ── */}
+                {jumpItems.length > 0 && !homeSearch && (
+                  <View style={{ marginTop: 20, marginBottom: 8 }}>
                     <Text style={{
-                      fontSize: 18, fontWeight: "600", color: txt,
+                      fontSize: 18, fontWeight: "700", color: txt,
                       paddingHorizontal: 20, marginBottom: 14,
                     }}>
                       Jump back in
@@ -7649,82 +7244,82 @@ export default function HomeScreen() {
                       horizontal
                       showsHorizontalScrollIndicator={false}
                       decelerationRate="fast"
-                      snapToInterval={SCREEN_WIDTH - 52}
+                      snapToInterval={SCREEN_WIDTH - 40}
                       snapToAlignment="start"
                       contentContainerStyle={{ paddingHorizontal: 20, gap: 12 }}
                       onScroll={(e) => {
-                        const page = Math.round(e.nativeEvent.contentOffset.x / (SCREEN_WIDTH - 52));
+                        const page = Math.round(e.nativeEvent.contentOffset.x / (SCREEN_WIDTH - 40));
                         setJumpPage(Math.max(0, Math.min(page, jumpItems.length - 1)));
                       }}
                       scrollEventThrottle={16}
                     >
-                      {jumpItems.map((item) => (
-                        <View
-                          key={item.id}
-                          style={{
-                            width: SCREEN_WIDTH - 64,
-                            backgroundColor: cardBg,
-                            borderRadius: 16,
-                            padding: 16,
-                            borderWidth: 1,
-                            borderColor: border,
-                          }}
-                        >
-                          <Text
-                            style={{ fontSize: 16, fontWeight: "700", color: txt, marginBottom: 10 }}
-                            numberOfLines={2}
-                          >
-                            {item.title}
-                          </Text>
-
-                          <View style={{
-                            flexDirection: "row", alignItems: "center",
-                            backgroundColor: accentPillBg, borderRadius: 20,
-                            paddingHorizontal: 10, paddingVertical: 4,
-                            alignSelf: "flex-start", marginBottom: 16,
-                          }}>
-                            <Text style={{ fontSize: 11, fontWeight: "600", color: accentPurple }}>
-                              {item.type === "flashcard" ? "🃏 Flashcards" : "⚡ Quiz"}
-                            </Text>
-                          </View>
-
-                          <View style={{
-                            height: 6, backgroundColor: "rgba(255,255,255,0.1)",
-                            borderRadius: 3, marginBottom: 7, overflow: "hidden",
-                          }}>
-                            <View style={{
-                              height: 6,
-                              width: `${Math.round(Math.min(item.progress, 1) * 100)}%`,
-                              backgroundColor: accentPurple, borderRadius: 3,
-                            }} />
-                          </View>
-
-                          <Text style={{ fontSize: 12, color: muted, marginBottom: 16 }}>
-                            {item.progressLabel}
-                          </Text>
-
-                          <AnimatedPressable
-                            onPress={() => handleJumpItemPress(item)}
+                      {jumpItems.map((item) => {
+                        const pct = Math.min(Math.round(item.progress * 100), 100);
+                        return (
+                          <View
+                            key={item.id}
                             style={{
-                              backgroundColor: accentPurple, borderRadius: 12,
-                              paddingVertical: 13, alignItems: "center",
+                              width: SCREEN_WIDTH - 52,
+                              backgroundColor: cardBg,
+                              borderRadius: 18,
+                              padding: 18,
+                              borderWidth: 1,
+                              borderColor: border,
                             }}
-                            scaleTo={0.96}
                           >
-                            <Text style={{ color: "#0B0F1E", fontSize: 14, fontWeight: "700" }}>Continue</Text>
-                          </AnimatedPressable>
-                        </View>
-                      ))}
+                            {/* Title row */}
+                            <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 18 }}>
+                              <Text style={{ fontSize: 16, fontWeight: "700", color: txt, flex: 1, lineHeight: 22 }} numberOfLines={2}>
+                                {item.title}
+                              </Text>
+                              <Ionicons name="ellipsis-vertical" size={18} color={muted} style={{ marginLeft: 8, marginTop: 2 }} />
+                            </View>
+
+                            {/* Progress bar — Design 1 style: green filled + orange tip + gray unfilled */}
+                            <View style={{ height: 8, backgroundColor: "rgba(255,255,255,0.08)", borderRadius: 4, marginBottom: 8, overflow: "hidden", flexDirection: "row" }}>
+                              {pct > 0 && (
+                                <View style={{ width: `${Math.max(pct - 8, 0)}%` as any, backgroundColor: accentGrn, borderRadius: 4 }} />
+                              )}
+                              {pct > 0 && pct < 100 && (
+                                <View style={{ width: "8%", backgroundColor: accentOrng, borderRadius: 4 }} />
+                              )}
+                            </View>
+
+                            {/* Label */}
+                            <Text style={{ fontSize: 13, color: muted, marginBottom: 16 }}>{item.label}</Text>
+
+                            {/* Continue button — blue pill */}
+                            <Pressable
+                              onPress={() => {
+                                if (item.type === "quiz") goQuiz(item.raw);
+                                else startStudy(item.raw);
+                              }}
+                              style={({ pressed }) => ({
+                                backgroundColor: accentBlue,
+                                borderRadius: 50,
+                                paddingVertical: 14,
+                                alignItems: "center",
+                                opacity: pressed ? 0.85 : 1,
+                              })}
+                            >
+                              <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>Continue</Text>
+                            </Pressable>
+                          </View>
+                        );
+                      })}
                     </ScrollView>
 
+                    {/* Dot pagination */}
                     {jumpItems.length > 1 && (
                       <View style={{ flexDirection: "row", justifyContent: "center", gap: 6, marginTop: 14 }}>
                         {jumpItems.map((_, idx) => (
                           <View
                             key={idx}
                             style={{
-                              width: idx === jumpPage ? 18 : 6, height: 6, borderRadius: 3,
-                              backgroundColor: idx === jumpPage ? accentPurple : "rgba(255,255,255,0.18)",
+                              width: idx === jumpPage ? 20 : 7,
+                              height: 7,
+                              borderRadius: 4,
+                              backgroundColor: idx === jumpPage ? accentBlue : "rgba(255,255,255,0.2)",
                             }}
                           />
                         ))}
@@ -7733,64 +7328,73 @@ export default function HomeScreen() {
                   </View>
                 )}
 
-                {/* ── Section 2: Recents ── */}
-                {recentItems.length > 0 && (
-                  <View style={{ paddingHorizontal: 20 }}>
-                    <View style={{
-                      flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-                      marginBottom: 14,
-                    }}>
-                      <Text style={{ fontSize: 18, fontWeight: "600", color: txt }}>Recents</Text>
+                {/* ── Recents ── */}
+                {allRecents.length > 0 && (
+                  <View style={{ marginTop: jumpItems.length > 0 ? 28 : 20, paddingHorizontal: 20 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                      <Text style={{ fontSize: 18, fontWeight: "700", color: txt }}>Recents</Text>
                       <Pressable
                         onPress={() => setActiveTab("library" as any)}
-                        style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+                        style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
                       >
-                        <Text style={{ fontSize: 13, fontWeight: "600", color: accentPurple }}>See all</Text>
+                        <Text style={{ fontSize: 13, fontWeight: "600", color: accentPurp }}>See all</Text>
                       </Pressable>
                     </View>
 
-                    {recentItems.map((item) => (
-                      <AnimatedPressable
+                    {allRecents
+                      .filter((item) => !homeSearch || item.title.toLowerCase().includes(homeSearch.toLowerCase()))
+                      .map((item) => (
+                      <Pressable
                         key={item.id}
-                        onPress={() => handleRecentPress(item)}
-                        style={{
-                          flexDirection: "row", alignItems: "center",
-                          paddingVertical: 11, marginBottom: 2,
+                        onPress={() => {
+                          if (item.type === "quiz") goQuiz(item.raw);
+                          else startStudy(item.raw);
                         }}
-                        scaleTo={0.97}
+                        style={({ pressed }) => ({
+                          flexDirection: "row", alignItems: "center",
+                          paddingVertical: 10, gap: 14,
+                          opacity: pressed ? 0.7 : 1,
+                        })}
                       >
+                        {/* Icon square */}
                         <View style={{
-                          width: 48, height: 48, borderRadius: 12,
-                          backgroundColor: iconBg, alignItems: "center", justifyContent: "center",
-                          marginRight: 14,
+                          width: 54, height: 54, borderRadius: 14,
+                          backgroundColor: iconBg,
+                          alignItems: "center", justifyContent: "center",
+                          borderWidth: 1, borderColor: border,
                         }}>
                           <Ionicons
-                            name={item.type === "flashcard" ? "copy-outline" : "flash-outline"}
-                            size={22}
-                            color={accentPurple}
+                            name={item.type === "flashcard" ? "albums-outline" : "flash-outline"}
+                            size={26}
+                            color={item.type === "flashcard" ? accentPurp : "#60A5FA"}
                           />
                         </View>
 
+                        {/* Text */}
                         <View style={{ flex: 1 }}>
-                          <Text
-                            style={{ fontSize: 15, fontWeight: "500", color: txt, marginBottom: 3 }}
-                            numberOfLines={1}
-                          >
+                          <Text style={{ fontSize: 15, fontWeight: "600", color: txt, marginBottom: 3 }} numberOfLines={1}>
                             {item.title}
                           </Text>
-                          <Text style={{ fontSize: 12, color: muted }}>{item.subtitle}</Text>
+                          <Text style={{ fontSize: 13, color: "#D1D5DB", fontWeight: "500" }}>{item.sub}</Text>
                         </View>
 
-                        <Feather name="chevron-right" size={18} color={muted} />
-                      </AnimatedPressable>
+                        <Feather name="chevron-right" size={16} color="rgba(255,255,255,0.2)" />
+                      </Pressable>
                     ))}
+
+                    {homeSearch && allRecents.filter((i) => i.title.toLowerCase().includes(homeSearch.toLowerCase())).length === 0 && (
+                      <View style={{ alignItems: "center", paddingTop: 40, gap: 10 }}>
+                        <Ionicons name="search-outline" size={32} color={muted} />
+                        <Text style={{ fontSize: 14, color: muted }}>No results for "{homeSearch}"</Text>
+                      </View>
+                    )}
                   </View>
                 )}
-
               </ScrollView>
             </View>
           );
         })();
+
     }
   };
 
@@ -8114,7 +7718,7 @@ export default function HomeScreen() {
                 style={styles.tabItem}
                 scaleTo={0.88}
               >
-                <Ionicons name="library-outline" size={24} color={effectiveTab === "library" ? "#B5A8FF" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"} />
+                <IconFolder size={24} color={effectiveTab === "library" ? "#B5A8FF" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"} />
                 <Text style={[styles.tabLabel, effectiveTab === "library" && { color: "#B5A8FF" }, { color: effectiveTab === "library" ? "#B5A8FF" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)" }]}>Library</Text>
               </AnimatedPressable>
 
@@ -8183,15 +7787,346 @@ export default function HomeScreen() {
         setFcCurrentIdx, setCardType, setEditingDeckId, updateMobileQuiz, deleteMobileQuiz,
         sendFeedback, deleteAccount, deleteUserFromNeon,
         confettiParticles, setConfettiParticles,
-        deleteFlashcardDeck, fileInputRef, isConnected, parsePdfFromBackend,
+        deleteFlashcardDeck, fileInputRef, isConnected, parsePdfFromBackend, parsePptFromBackend,
         handleGenerateWithAI, aiGenPhase, setAiGenPhase,
         quizFlatListRef, quizNumbersScrollRef, setIsImporting, pendingAiFile, setPendingAiFile,
         showAddMenu, setShowAddMenu
       }} />
 
       {/* ── AI Generation Screen ── */}
-      {aiGenPhase === "generating" && <AIGeneratingScreen />}
+      {aiGenPhase === "generating" && <AIGeneratingScreen onCancel={() => setAiGenPhase(null)} />}
 
+      {/* ── Battle Modals ── */}
+      {(() => {
+        const isDark = settingsDarkMode;
+        const bg      = isDark ? "#0f172a" : "#f4f4f8";
+        const cardBg  = isDark ? "rgba(255,255,255,0.045)" : "#ffffff";
+        const cardBorder = isDark ? "rgba(255,255,255,0.09)" : "#e2e8f0";
+        const txt     = isDark ? "#ffffff" : "#0d0f14";
+        const muted   = isDark ? "#71717a" : "#64748b";
+        const mutedSub = isDark ? "#3f3f46" : "#94a3b8";
+        return (
+          <>
+        {/* ── Quiz Selector Modal ── */}
+        {showBattleQuizSelector && (
+        <Modal visible={true} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowBattleQuizSelector(false)}>
+          <View style={{ flex: 1, backgroundColor: isDark ? "#0d0f1a" : "#f4f4f8", paddingTop: Platform.OS === 'ios' ? 0 : 40 }}>
+            <View style={{
+              flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+              padding: 20, borderBottomWidth: 1, borderBottomColor: cardBorder
+            }}>
+              <Text style={{ fontSize: 18, fontWeight: "800", color: txt }}>⚔️ Select a Quiz</Text>
+              <Pressable onPress={() => setShowBattleQuizSelector(false)}
+                style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)",
+                  alignItems: "center", justifyContent: "center" }}>
+                <Ionicons name="close" size={20} color={muted} />
+              </Pressable>
+            </View>
+            <FlatList
+              data={(!sampleDismissed && sampleQuiz) ? [sampleQuiz, ...quizzes].reverse() : [...quizzes].reverse()}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={{ padding: 16, gap: 10 }}
+              renderItem={({ item }) => (
+                <Pressable
+                  onPress={() => handleHostBattle(item.id)}
+                  style={({ pressed }) => [{
+                    backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "#ffffff",
+                    borderWidth: 1, borderColor: cardBorder,
+                    borderRadius: 16, padding: 18,
+                    flexDirection: "row", alignItems: "center", gap: 14,
+                    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: isDark ? 0 : 0.04, shadowRadius: 8, elevation: isDark ? 0 : 1,
+                  }, pressed && { opacity: 0.8, borderColor: isDark ? "rgba(99,102,241,0.4)" : "rgba(99,102,241,0.3)" }]}
+                >
+                  <View style={{
+                    width: 46, height: 46, borderRadius: 12,
+                    backgroundColor: isDark ? "rgba(99,102,241,0.12)" : "rgba(99,102,241,0.09)",
+                    alignItems: "center", justifyContent: "center"
+                  }}>
+                    <Text style={{ fontSize: 22 }}>📝</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 15, fontWeight: "700", color: txt, marginBottom: 3 }}>{item.title}</Text>
+                    <Text style={{ fontSize: 12, color: muted, fontWeight: "500" }}>{item.questions} questions · {item.category}</Text>
+                  </View>
+                  <Feather name="chevron-right" size={16} color={mutedSub} />
+                </Pressable>
+              )}
+              ListEmptyComponent={
+                <View style={{ alignItems: "center", marginTop: 60, gap: 12 }}>
+                  <Text style={{ fontSize: 40 }}>📭</Text>
+                  <Text style={{ textAlign: "center", color: muted, fontSize: 15, fontWeight: "500" }}>No quizzes yet.{"\n"}Create one to host a battle!</Text>
+                </View>
+              }
+            />
+          </View>
+        </Modal>
+        )}
+
+        {/* ── Battle Options Modal ── */}
+        {showBattleOptions && (
+        <Modal visible={true} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { if (!battleCreating) setShowBattleOptions(false); }}>
+          <View style={{ flex: 1, backgroundColor: isDark ? "#0f172a" : "#f4f4f8" }}>
+            {/* Header */}
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+              padding: 20, borderBottomWidth: 1, borderBottomColor: cardBorder }}>
+              <Text style={{ fontSize: 18, fontWeight: "800", color: txt }}>⚙️ Battle Options</Text>
+              <Pressable onPress={() => { if (!battleCreating) setShowBattleOptions(false); }}
+                style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)",
+                  alignItems: "center", justifyContent: "center", opacity: battleCreating ? 0.3 : 1 }}>
+                <Ionicons name="close" size={20} color={txt} />
+              </Pressable>
+            </View>
+            <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 140 }} showsVerticalScrollIndicator={false}>
+              {/* Quiz info */}
+              {battleOptionsQuiz && (
+                <View style={{ backgroundColor: isDark ? "rgba(99,102,241,0.1)" : "rgba(99,102,241,0.07)",
+                  borderRadius: 14, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: isDark ? "rgba(99,102,241,0.2)" : "rgba(99,102,241,0.15)" }}>
+                  <Text style={{ fontSize: 16, fontWeight: "800", color: txt, marginBottom: 4 }}>{battleOptionsQuiz.title}</Text>
+                  <Text style={{ fontSize: 13, color: txt }}>{battleOptionsQuiz.questions} questions available</Text>
+                </View>
+              )}
+
+              {/* Question Selection */}
+              <Text style={{ fontSize: 12, fontWeight: "700", color: txt, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Question Selection</Text>
+              <View style={{ flexDirection: "row", gap: 10, marginBottom: 16 }}>
+                {([{ value: "all" as const, label: "All" }, { value: "random" as const, label: "Random" }, { value: "range" as const, label: "Range" }]).map(({ value, label }) => {
+                  const isActive = battleSelectionMode === value;
+                  return (
+                    <Pressable key={value} onPress={() => setBattleSelectionMode(value)}
+                      style={[{
+                        flex: 1, paddingVertical: 11, borderRadius: 12, alignItems: "center",
+                        borderWidth: 1.5,
+                        backgroundColor: isActive ? (isDark ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.1)") : cardBg,
+                        borderColor: isActive ? (isDark ? "rgba(99,102,241,0.5)" : "rgba(99,102,241,0.4)") : cardBorder,
+                      }]}
+                    >
+                      <Text style={{ fontSize: 14, fontWeight: "700", color: isActive ? (isDark ? "#818cf8" : "#6366f1") : txt }}>{label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {/* Random count stepper */}
+              {battleSelectionMode === "random" && (
+                <View style={{ backgroundColor: cardBg,
+                  borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: cardBorder,
+                  flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                  <Text style={{ fontSize: 15, fontWeight: "600", color: txt }}>Number of questions</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                    <Pressable onPress={() => setBattleRandomCount(Math.max(1, battleRandomCount - 1))}
+                      style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" }}>
+                      <Text style={{ fontSize: 18, color: txt, fontWeight: "700" }}>−</Text>
+                    </Pressable>
+                    <TextInput 
+                      style={{ fontSize: 18, fontWeight: "800", color: txt, minWidth: 32, textAlign: "center", padding: 0 }}
+                      keyboardType="number-pad"
+                      value={battleRandomCount === 0 ? "" : String(battleRandomCount)}
+                      onChangeText={(text) => {
+                        const cleaned = text.replace(/[^0-9]/g, '');
+                        if (!cleaned) { setBattleRandomCount(0); return; }
+                        const maxQ = battleOptionsQuiz?.questionsList?.length || battleOptionsQuiz?.questions || 50;
+                        setBattleRandomCount(Math.max(1, Math.min(maxQ, parseInt(cleaned, 10))));
+                      }}
+                    />
+                    <Pressable onPress={() => setBattleRandomCount(Math.min((battleOptionsQuiz?.questionsList?.length || battleOptionsQuiz?.questions || 50), battleRandomCount + 1))}
+                      style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" }}>
+                      <Text style={{ fontSize: 18, color: txt, fontWeight: "700" }}>+</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              )}
+
+              {/* Range count steppers */}
+              {battleSelectionMode === "range" && (
+                <View style={{ backgroundColor: cardBg,
+                  borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: cardBorder,
+                  flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                  <Text style={{ fontSize: 15, fontWeight: "600", color: txt }}>Question Range</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center" }}>
+                      <Pressable onPress={() => setBattleRangeStart(Math.max(1, battleRangeStart - 1))}
+                        style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" }}>
+                        <Text style={{ fontSize: 16, color: txt, fontWeight: "700" }}>−</Text>
+                      </Pressable>
+                      <TextInput 
+                        style={{ fontSize: 16, fontWeight: "800", color: txt, minWidth: 32, textAlign: "center", padding: 0 }}
+                        keyboardType="number-pad"
+                        value={battleRangeStart === 0 ? "" : String(battleRangeStart)}
+                        onChangeText={(text) => {
+                          const cleaned = text.replace(/[^0-9]/g, '');
+                          if (!cleaned) { setBattleRangeStart(0); return; }
+                          setBattleRangeStart(Math.max(1, Math.min(battleRangeEnd, parseInt(cleaned, 10))));
+                        }}
+                      />
+                      <Pressable onPress={() => setBattleRangeStart(Math.min(battleRangeEnd, battleRangeStart + 1))}
+                        style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" }}>
+                        <Text style={{ fontSize: 16, color: txt, fontWeight: "700" }}>+</Text>
+                      </Pressable>
+                    </View>
+                    <Text style={{ fontSize: 14, color: txt, marginHorizontal: 2 }}>to</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center" }}>
+                      <Pressable onPress={() => setBattleRangeEnd(Math.max(battleRangeStart, battleRangeEnd - 1))}
+                        style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" }}>
+                        <Text style={{ fontSize: 16, color: txt, fontWeight: "700" }}>−</Text>
+                      </Pressable>
+                      <TextInput 
+                        style={{ fontSize: 16, fontWeight: "800", color: txt, minWidth: 32, textAlign: "center", padding: 0 }}
+                        keyboardType="number-pad"
+                        value={battleRangeEnd === 0 ? "" : String(battleRangeEnd)}
+                        onChangeText={(text) => {
+                          const cleaned = text.replace(/[^0-9]/g, '');
+                          if (!cleaned) { setBattleRangeEnd(0); return; }
+                          const maxQ = battleOptionsQuiz?.questionsList?.length || battleOptionsQuiz?.questions || 100;
+                          setBattleRangeEnd(Math.max(battleRangeStart, Math.min(maxQ, parseInt(cleaned, 10))));
+                        }}
+                      />
+                      <Pressable onPress={() => setBattleRangeEnd(Math.min(battleOptionsQuiz?.questionsList?.length || battleOptionsQuiz?.questions || 100, battleRangeEnd + 1))}
+                        style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" }}>
+                        <Text style={{ fontSize: 16, color: txt, fontWeight: "700" }}>+</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {/* Time per question */}
+              <Text style={{ fontSize: 12, fontWeight: "700", color: txt, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10, marginTop: 4 }}>Time per Question</Text>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
+                {([null, 15, 20, 30, 45, 60] as (number | null)[]).map((t) => {
+                  const isActive = battleTimePerQuestion === t;
+                  const label = t === null ? "No Limit" : `${t}s`;
+                  return (
+                    <Pressable key={String(t)} onPress={() => setBattleTimePerQuestion(t)}
+                      style={[{
+                        paddingVertical: 9, paddingHorizontal: 16, borderRadius: 10, borderWidth: 1.5,
+                        backgroundColor: isActive ? (isDark ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.1)") : cardBg,
+                        borderColor: isActive ? (isDark ? "rgba(99,102,241,0.5)" : "rgba(99,102,241,0.4)") : cardBorder,
+                      }]}
+                    >
+                      <Text style={{ fontSize: 13, fontWeight: "700",
+                        color: isActive ? (isDark ? "#818cf8" : "#6366f1") : txt }}>
+                        {label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {/* Toggles */}
+              <Text style={{ fontSize: 12, fontWeight: "700", color: txt, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Gameplay Options</Text>
+              <View style={{ backgroundColor: cardBg,
+                borderRadius: 14, borderWidth: 1, borderColor: cardBorder, overflow: "hidden" }}>
+                {[
+                  { label: "Shuffle question order", sub: "Questions appear in random order", value: battleShuffleQ, set: setBattleShuffleQ },
+                  { label: "Shuffle answer options", sub: "Answer choices appear randomized", value: battleShuffleA, set: setBattleShuffleA },
+                ].map((row, i) => (
+                  <View key={row.label}>
+                    {i > 0 && <View style={{ height: 1, backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "#f1f5f9", marginLeft: 16 }} />}
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 16 }}>
+                      <View style={{ flex: 1, marginRight: 12 }}>
+                        <Text style={{ fontSize: 15, fontWeight: "600", color: txt, marginBottom: 2 }}>{row.label}</Text>
+                        <Text style={{ fontSize: 12, color: txt }}>{row.sub}</Text>
+                      </View>
+                      <ToggleSwitch checked={row.value} onChange={row.set} darkMode={isDark} />
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+
+            {/* Sticky Start Button */}
+            <View style={{ position: "absolute", bottom: 0, left: 0, right: 0,
+              padding: 20, paddingBottom: Platform.OS === "ios" ? 36 : 20,
+              backgroundColor: isDark ? "#0f172a" : "#f4f4f8",
+              borderTopWidth: 1, borderTopColor: cardBorder }}>
+              <Pressable
+                onPress={handleStartBattle}
+                disabled={battleCreating}
+                style={({ pressed }) => [{
+                  backgroundColor: "#6366f1",
+                  paddingVertical: 16, borderRadius: 14, alignItems: "center", justifyContent: "center",
+                  flexDirection: "row", gap: 10,
+                  opacity: battleCreating ? 0.85 : 1,
+                }, pressed && !battleCreating && { opacity: 0.8, transform: [{ scale: 0.98 }] }]}
+              >
+                {battleCreating ? (
+                  <>
+                    <ActivityIndicator size="small" color="#fff" />
+                    <Text style={{ color: "#fff", fontSize: 16, fontWeight: "800" }}>Creating Room…</Text>
+                  </>
+                ) : (
+                  <Text style={{ color: "#fff", fontSize: 16, fontWeight: "800" }}>⚔️  Create Battle Room</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+        )}
+
+        {/* ── Battle History Modal ── */}
+        {showBattleHistory && (
+        <Modal visible={true} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowBattleHistory(false)}>
+          <View style={{ flex: 1, backgroundColor: isDark ? "#0d0f1a" : "#f4f4f8", paddingTop: Platform.OS === 'ios' ? 0 : 40 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+              padding: 20, borderBottomWidth: 1, borderBottomColor: cardBorder }}>
+              <Text style={{ fontSize: 18, fontWeight: "800", color: txt }}>📜 Battle History</Text>
+              <Pressable onPress={() => setShowBattleHistory(false)}
+                style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)",
+                  alignItems: "center", justifyContent: "center" }}>
+                <Ionicons name="close" size={20} color={muted} />
+              </Pressable>
+            </View>
+            {battleHistory.length === 0 ? (
+              <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 14 }}>
+                <Text style={{ fontSize: 48 }}>⚔️</Text>
+                <Text style={{ fontSize: 18, fontWeight: "800", color: txt }}>No battles yet</Text>
+                <Text style={{ fontSize: 14, color: muted, textAlign: "center" }}>Complete your first battle{"\n"}to see your history here!</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={[...battleHistory].sort((a, b) => b.date - a.date)}
+                keyExtractor={(_, i) => String(i)}
+                contentContainerStyle={{ padding: 16, gap: 10 }}
+                renderItem={({ item }) => {
+                  const d = new Date(item.date);
+                  const dateStr = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                  return (
+                    <View style={{
+                      backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "#ffffff",
+                      borderRadius: 16, padding: 16,
+                      borderWidth: 1, borderColor: item.won ? (isDark ? "rgba(34,197,94,0.2)" : "rgba(34,197,94,0.15)") : cardBorder,
+                      flexDirection: "row", alignItems: "center", gap: 14,
+                    }}>
+                      <Text style={{ fontSize: 28 }}>{item.won ? "🏆" : "💀"}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 14, fontWeight: "700", color: txt, marginBottom: 2 }} numberOfLines={1}>{item.quizTitle}</Text>
+                        <Text style={{ fontSize: 12, color: muted }}>vs {item.opponentName} · {dateStr}</Text>
+                      </View>
+                      <View style={{ alignItems: "flex-end", gap: 4 }}>
+                <View style={{ backgroundColor: item.won ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.12)",
+                          borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 }}>
+                          <Text style={{ fontSize: 11, fontWeight: "800", color: item.won ? "#22c55e" : "#ef4444" }}>
+                            {item.won ? "WIN" : "LOSS"}
+                          </Text>
+                        </View>
+                        <Text style={{ fontSize: 13, fontWeight: "700", color: muted }}>{item.myScore} – {item.opponentScore}</Text>
+                        {item.myScore === item.opponentScore && item.myTime != null && item.opponentTime != null && (
+                          <Text style={{ fontSize: 10, color: item.won ? "#22c55e" : "#ef4444", fontWeight: "600", marginTop: -2 }}>
+                            {item.won ? "+" : "-"}{(Math.abs(item.opponentTime - item.myTime) / 1000).toFixed(1)}s
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                  );
+                }}
+              />
+            )}
+          </View>
+        </Modal>
+        )}
+          </>
+        );
+      })()}
       {/* ── Study Mode Modal ── */}
       {studyModeModalVisible && (() => {
         const isDark = settingsDarkMode;

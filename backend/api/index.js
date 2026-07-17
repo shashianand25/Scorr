@@ -254,6 +254,22 @@ app.post('/api/parse-pdf', upload.single('file'), async (req, res) => {
   }
 });
 
+// ── PPT/PPTX Parsing ────────────────────────────────────────────────────────────
+const officeParser = require('officeparser');
+
+app.post('/api/parse-ppt', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+    const text = await officeParser.parseOfficeAsync(req.file.buffer);
+    res.json({ text });
+  } catch (err) {
+    console.error('PPT Parse Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── App Updates ────────────────────────────────────────────────────────────
 app.get('/api/version-config', (req, res) => {
   res.json({

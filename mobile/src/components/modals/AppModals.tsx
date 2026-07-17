@@ -1642,13 +1642,17 @@ export function AppModals({ p }: { p: any }) {
                         const ext = fileName.split(".").pop()?.toLowerCase();
                         if (ext === "pdf" && !p.isConnected) { (p.setOfflineModalParams || (() => {}))({ title: "Can't Generate", message: "PDF conversion requires internet." }); return; }
                         if (ext === "pdf" && fileSize > 4.5 * 1024 * 1024) { Alert.alert("File Too Large", "Please select a PDF under 4.5 MB."); return; }
-                        if (ext && !["txt", "qst", "md", "docx", "pdf"].includes(ext)) { Alert.alert("Unsupported File", `Supported: .txt, .docx, .pdf. Got .${ext}`); return; }
-                        (p.setIsImporting || (() => {}))(true);
+                        if (ext && !["txt", "qst", "md", "docx", "pdf", "ppt", "pptx"].includes(ext)) { Alert.alert("Unsupported File", `Supported: .txt, .docx, .pdf, .ppt, .pptx. Got .${ext}`); return; }
+                        (p.setAiGenPhase || (() => {}))("generating");
                         setTimeout(async () => {
                           try {
                             let text = "";
                             if (ext === "pdf") {
                               const pr = await (p.parsePdfFromBackend || (() => {}))(fileUri, fileName);
+                              if (pr.error) throw new Error(pr.error);
+                              text = pr.text;
+                            } else if (ext === "ppt" || ext === "pptx") {
+                              const pr = await (p.parsePptFromBackend || (() => {}))(fileUri, fileName);
                               if (pr.error) throw new Error(pr.error);
                               text = pr.text;
                             } else if (ext === "docx") {
@@ -1658,11 +1662,10 @@ export function AppModals({ p }: { p: any }) {
                             } else {
                               text = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.UTF8 });
                             }
-                            (p.setIsImporting || (() => {}))(false);
                             (p.setShowAddMenu || (() => {}))(false);
                             setTimeout(() => (p.handleGenerateWithAI || (() => {}))(text, fileName), 150);
                           } catch (err: any) {
-                            (p.setIsImporting || (() => {}))(false);
+                            (p.setAiGenPhase || (() => {}))(null);
                             Alert.alert("Error", typeof __DEV__ !== 'undefined' && __DEV__ ? err.message : getUserErrorMessage(err));
                           }
                         }, 50);
@@ -1727,10 +1730,10 @@ export function AppModals({ p }: { p: any }) {
                           return;
                         }
 
-                        if (ext && !['txt', 'qst', 'md', 'docx', 'pdf'].includes(ext)) {
+                        if (ext && !['txt', 'qst', 'md', 'docx', 'pdf', 'ppt', 'pptx'].includes(ext)) {
                           Alert.alert(
                             "Unsupported File",
-                            `You can upload only .txt, .docx, and .pdf files. Your uploaded file is .${ext}`
+                            `You can upload only .txt, .docx, .pdf, .ppt, and .pptx files. Your uploaded file is .${ext}`
                           );
                           return;
                         }
@@ -1744,6 +1747,12 @@ export function AppModals({ p }: { p: any }) {
                                 throw new Error(`Backend PDF parsing failed: ${pdfResult.error}`);
                               }
                               text = pdfResult.text;
+                            } else if (ext === "ppt" || ext === "pptx") {
+                              const pptResult = await (p.parsePptFromBackend || (() => {}))(fileUri, fileName);
+                              if (pptResult.error) {
+                                throw new Error(`Backend PPT parsing failed: ${pptResult.error}`);
+                              }
+                              text = pptResult.text;
                             } else if (ext === "docx") {
                               const b64 = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.Base64 });
                               const buff = Buffer.from(b64, "base64");
@@ -1777,7 +1786,7 @@ export function AppModals({ p }: { p: any }) {
                             (p.setIsImporting || (() => {}))(false);
                             setTimeout(() => (p.handleImportQst || (() => {}))(text, fileName, fileUri), 150);
                           } catch (err: any) {
-                            if (ext === "pdf" || ext === "docx") {
+                            if (ext === "pdf" || ext === "docx" || ext === "ppt" || ext === "pptx") {
                               (p.setIsImporting || (() => {}))(false);
                               Alert.alert("Error", typeof __DEV__ !== 'undefined' && __DEV__ ? `Failed to parse ${ext.toUpperCase()} file.\n\n${err.message}` : getUserErrorMessage(err));
                               return;

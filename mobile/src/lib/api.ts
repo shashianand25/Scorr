@@ -344,3 +344,27 @@ export async function parsePdfFromBackend(fileUri: string, fileName: string): Pr
     return { text: "", error: errMsg };
   }
 }
+
+export async function parsePptFromBackend(fileUri: string, fileName: string): Promise<{ text: string; error?: string }> {
+  try {
+    const uploadResult = await FileSystem.uploadAsync(`${BASE_URL}/api/parse-ppt`, fileUri, {
+      httpMethod: 'POST',
+      uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+      fieldName: 'file',
+    });
+
+    if (uploadResult.status !== 200) {
+      return { text: "", error: `Server returned ${uploadResult.status}: ${uploadResult.body}` };
+    }
+    
+    const data = JSON.parse(uploadResult.body);
+    if (data.error) return { text: "", error: data.error };
+    return { text: data.text || "" };
+  } catch (err: any) {
+    let errMsg = err?.message || "Upload failed";
+    if (errMsg.includes(BASE_URL) || errMsg.includes("recall-backend") || errMsg.includes("UnknownHostException") || errMsg.includes("Network request failed")) {
+      errMsg = "Network error: Please check your internet connection.";
+    }
+    return { text: "", error: errMsg };
+  }
+}
