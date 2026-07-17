@@ -262,7 +262,7 @@ app.post('/api/parse-ppt', upload.single('file'), async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
-    const text = await officeParser.parseOfficeAsync(req.file.buffer);
+    const text = await officeParser.parseOffice(req.file.buffer);
     res.json({ text });
   } catch (err) {
     console.error('PPT Parse Error:', err);
