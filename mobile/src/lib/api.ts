@@ -330,7 +330,15 @@ export async function parsePdfFromBackend(fileUri: string, fileName: string): Pr
     });
 
     if (uploadResult.status !== 200) {
-      return { text: "", error: `Server returned ${uploadResult.status}: ${uploadResult.body}` };
+      let msg = uploadResult.body;
+      try {
+        const parsed = JSON.parse(uploadResult.body);
+        if (parsed.error) msg = parsed.error;
+      } catch (e) {}
+      if (msg.includes("OfficeParser currently supports")) {
+        return { text: "", error: "Unsupported file format. Please upload a modern Office file (.docx, .pptx) or PDF." };
+      }
+      return { text: "", error: `Server error: ${msg}` };
     }
     
     const data = JSON.parse(uploadResult.body);
@@ -354,7 +362,15 @@ export async function parsePptFromBackend(fileUri: string, fileName: string): Pr
     });
 
     if (uploadResult.status !== 200) {
-      return { text: "", error: `Server returned ${uploadResult.status}: ${uploadResult.body}` };
+      let msg = uploadResult.body;
+      try {
+        const parsed = JSON.parse(uploadResult.body);
+        if (parsed.error) msg = parsed.error;
+      } catch (e) {}
+      if (msg.includes("OfficeParser currently supports")) {
+        return { text: "", error: "Unsupported file format. Please upload a modern Office file (.docx, .pptx) or PDF." };
+      }
+      return { text: "", error: `Server error: ${msg}` };
     }
     
     const data = JSON.parse(uploadResult.body);

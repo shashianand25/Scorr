@@ -1598,26 +1598,29 @@ export function AppModals({ p }: { p: any }) {
           onPress={() => (p.setShowAddMenu || (() => {}))(false)}
         >
           <View style={{
-            backgroundColor: p.settingsDarkMode ? "#1E293B" : "#ffffff",
+            backgroundColor: p.settingsDarkMode ? "#090A0F" : "#F4F4F8",
             borderTopLeftRadius: 28, borderTopRightRadius: 28,
-            paddingBottom: Platform.OS === "ios" ? 36 : 24,
+            paddingBottom: Platform.OS === "ios" ? 44 : 24,
+            paddingHorizontal: 16,
             overflow: "hidden",
           }} onStartShouldSetResponder={() => true}>
 
             {/* Drag handle */}
-            <View style={{ alignItems: "center", paddingTop: 12, paddingBottom: 6 }}>
-              <View style={{ width: 36, height: 4, borderRadius: 2, marginBottom: 14,
-                backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.12)" }} />
-              <Text style={{ fontSize: 17, fontWeight: "700", color: p.settingsDarkMode ? "#ffffff" : "#0d0f14", marginBottom: 8 }}>
-                Add Quiz
-              </Text>
+            <View style={{ alignItems: "center", paddingTop: 16, paddingBottom: 24 }}>
+              <View style={{ width: 40, height: 4, borderRadius: 2,
+                backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.12)" }} />
             </View>
 
-            <View style={{ height: 0.5, backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)", marginBottom: 8 }} />
-
-            {/* Generate with AI */}
-            <AnimatedPressable
-              onPress={() => {
+            {/* Block 1 (Main Actions) */}
+            <View style={{
+              backgroundColor: p.settingsDarkMode ? "#252B43" : "#ffffff",
+              borderRadius: 20,
+              paddingVertical: 12,
+              marginBottom: 16,
+            }}>
+              {/* Generate with AI */}
+              <AnimatedPressable
+                onPress={() => {
                 (p.setShowAddMenu || (() => {}))(false);
                 if (Platform.OS === "web") {
                   const input = document.createElement("input");
@@ -1674,30 +1677,48 @@ export function AppModals({ p }: { p: any }) {
                   }, 350);
                 }
               }}
-              style={{ paddingVertical: 13, paddingHorizontal: 20 }}
-              scaleTo={0.97}
-            >
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
-                <View style={{ width: 40, height: 40, borderRadius: 12,
-                  backgroundColor: "rgba(168,85,247,0.12)", alignItems: "center", justifyContent: "center" }}>
-                  <Ionicons name="sparkles" size={20} color="#a855f7" />
+                style={{ paddingVertical: 16, paddingHorizontal: 20 }}
+                scaleTo={0.97}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
+                  <Ionicons name="sparkles" size={28} color="#a855f7" />
+                  <View style={{ flexDirection: "column", flex: 1 }}>
+                    <Text style={{ fontSize: 17, fontWeight: "600",
+                      color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>Generate with AI</Text>
+                  </View>
                 </View>
-                <View style={{ flexDirection: "column" }}>
-                  <Text style={{ fontSize: 15, fontWeight: "600",
-                    color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>Generate with AI</Text>
-                  <Text style={{ fontSize: 11, color: p.settingsDarkMode ? "#888899" : "#666680", marginTop: 2 }}>
-                    Upload a file, AI generates the quiz
-                  </Text>
+              </AnimatedPressable>
+
+              {/* Create quiz manually */}
+              <AnimatedPressable
+                onPress={() => {
+                (p.setShowAddMenu || (() => {}))(false);
+                (p.setCreationMode || (() => {}))("quiz");
+                (p.setCreationStep || (() => {}))("setup");
+                (p.setActiveTab || (() => {}))("add");
+              }}
+                style={{ paddingVertical: 16, paddingHorizontal: 20 }}
+                scaleTo={0.97}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
+                  <Ionicons name="create-outline" size={30} color="#3b82f6" />
+                  <View style={{ flexDirection: "column", flex: 1 }}>
+                    <Text style={{ fontSize: 17, fontWeight: "600",
+                      color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('create_menu.create_manual') || "Create quiz manually"}</Text>
+                  </View>
                 </View>
-              </View>
-            </AnimatedPressable>
+              </AnimatedPressable>
+            </View>
 
-            <View style={{ height: 1, backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)", marginHorizontal: 20 }} />
-
-
-            {/* Import from File */}
-            <AnimatedPressable
-              onPress={() => {
+            {/* Block 2 (Folder/Import) */}
+            <View style={{
+              backgroundColor: p.settingsDarkMode ? "#252B43" : "#ffffff",
+              borderRadius: 20,
+              paddingVertical: 12,
+            }}>
+              {/* Import from File */}
+              <AnimatedPressable
+                onPress={() => {
                 (p.setShowAddMenu || (() => {}))(false);
                 if (Platform.OS === "web") {
                   if (p.fileInputRef?.current) { p.fileInputRef?.current.click(); }
@@ -1808,51 +1829,18 @@ export function AppModals({ p }: { p: any }) {
                   }, 350);
                 }
               }}
-              style={{
-                paddingVertical: 13, paddingHorizontal: 20,
-              }}
-              scaleTo={0.97}
-            >
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
-                <View style={{ width: 40, height: 40, borderRadius: 12,
-                  backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)",
-                  alignItems: "center", justifyContent: "center" }}>
-                  <Ionicons name="document-text-outline" size={20} color={p.settingsDarkMode ? "#aaaacc" : "#666688"} />
+                style={{ paddingVertical: 16, paddingHorizontal: 20 }}
+                scaleTo={0.97}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
+                  <Ionicons name="folder-outline" size={28} color={p.settingsDarkMode ? "#e2e8f0" : "#64748b"} />
+                  <View style={{ flexDirection: "column", flex: 1 }}>
+                    <Text style={{ fontSize: 17, fontWeight: "600",
+                      color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('create_menu.import_txt') || "Import file (.txt, .docx, .pdf)"}</Text>
+                  </View>
                 </View>
-                <View style={{ flexDirection: "column" }}>
-                  <Text style={{ fontSize: 15, fontWeight: "600",
-                    color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('create_menu.import_txt') || "Import file (.txt, .docx, .pdf)"}</Text>
-                  <Text style={{ fontSize: 11, color: p.settingsDarkMode ? "#888899" : "#666680", marginTop: 2 }}>
-                    (Use .docx if your quiz contains images)
-                  </Text>
-                </View>
-              </View>
-            </AnimatedPressable>
-
-            <View style={{ height: 1, backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)", marginHorizontal: 20 }} />
-
-            {/* Create Quiz */}
-            <AnimatedPressable
-              onPress={() => {
-                (p.setShowAddMenu || (() => {}))(false);
-                (p.setCreationMode || (() => {}))("quiz");
-                (p.setCreationStep || (() => {}))("setup");
-                (p.setActiveTab || (() => {}))("add");
-              }}
-              style={{
-                paddingVertical: 13, paddingHorizontal: 20,
-              }}
-              scaleTo={0.97}
-            >
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
-                <View style={{ width: 40, height: 40, borderRadius: 12,
-                  backgroundColor: "rgba(99,102,241,0.12)", alignItems: "center", justifyContent: "center" }}>
-                  <Ionicons name="create-outline" size={20} color="#6366f1" />
-                </View>
-                <Text style={{ fontSize: 15, fontWeight: "600",
-                  color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('create_menu.create_manual') || "Create quiz manually"}</Text>
-              </View>
-            </AnimatedPressable>
+              </AnimatedPressable>
+            </View>
           </View>
         </Pressable>
       </Modal>

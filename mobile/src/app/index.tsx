@@ -176,7 +176,7 @@ function AIGeneratingScreen({ onCancel }: { onCancel?: () => void }) {
 
   return (
     <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: "#0A0B14", alignItems: "center", justifyContent: "center", zIndex: 99999, paddingHorizontal: 32 }}>
+      backgroundColor: "#0A0B14", alignItems: "center", justifyContent: "center", zIndex: 99999, paddingHorizontal: 16 }}>
       
       {/* Back button */}
       <SafeAreaView style={{ position: "absolute", top: 0, left: 0, right: 0 }}>
@@ -185,7 +185,7 @@ function AIGeneratingScreen({ onCancel }: { onCancel?: () => void }) {
         </Pressable>
       </SafeAreaView>
 
-      <View style={{ alignItems: "center", marginTop: -60 }}>
+      <View style={{ alignItems: "center", marginTop: -60, width: "100%" }}>
         {/* Animated Stacked Cards Icon */}
         <View style={{ width: 100, height: 100, alignItems: "center", justifyContent: "center", marginBottom: 30 }}>
           {/* Back Card (Cyan) */}
@@ -208,17 +208,17 @@ function AIGeneratingScreen({ onCancel }: { onCancel?: () => void }) {
 
         {/* Blinking Text */}
         <Animated.Text style={{
-          fontSize: 32, fontWeight: "700", color: "#B5A8FF", // using a pleasant purple/blue
+          fontSize: 34, fontWeight: "800",
           textAlign: "center", marginBottom: 24, opacity: blink,
-          lineHeight: 40
+          lineHeight: 42
         }}>
-          <Text style={{ color: "#67E8F9" }}>Generating your{"\n"}</Text>
-          <Text style={{ color: "#B5A8FF" }}>flashcards...</Text>
+          <Text style={{ color: "#60A5FA" }}>Generating your{"\n"}</Text>
+          <Text style={{ color: "#A78BFA" }}>flashcards...</Text>
         </Animated.Text>
 
         {/* Subtitle */}
         <Text style={{
-          fontSize: 17, color: "rgba(255,255,255,0.9)", textAlign: "center", fontWeight: "600", lineHeight: 26, paddingHorizontal: 10
+          fontSize: 16, color: "rgba(255,255,255,0.9)", textAlign: "center", fontWeight: "500", lineHeight: 24, paddingHorizontal: 20
         }}>
           The conversion may take a while depending on{"\n"}the size of your upload
         </Text>
@@ -920,7 +920,7 @@ export default function HomeScreen() {
         return true;
       }
       if (activeTab === "insights") {
-        setActiveTab("home");
+        setActiveTab(viewingInsightsQuizFromTab as any || "home");
         return true;
       }
       if (activeTab === "home") {
@@ -933,7 +933,7 @@ export default function HomeScreen() {
 
     const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => subscription.remove();
-  }, [activeSession, studyingDeck, activeTab]);
+  }, [activeSession, studyingDeck, activeTab, viewingInsightsQuizFromTab]);
 
 
   // Confetti celebration physics loop (Confetti Cannon / Party Popper)
@@ -1928,7 +1928,9 @@ export default function HomeScreen() {
             style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
           >
             <Feather name="arrow-left" size={18} color={textSub} />
-            <Text style={{ fontSize: 14, color: textSub, fontWeight: "500" }}>Back to home</Text>
+            <Text style={{ fontSize: 14, color: textSub, fontWeight: "500" }}>
+              {viewingInsightsQuizFromTab === "library" ? "Back to library" : "Back to home"}
+            </Text>
           </Pressable>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
             <Pressable onPress={() => setShowQuizActions(quiz)} style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: iconBg, alignItems: "center", justifyContent: "center" }}>
@@ -1999,7 +2001,7 @@ export default function HomeScreen() {
           </Pressable>
         </View>
         <Pressable 
-          onPress={() => handleHostBattle(quiz.id)} 
+          onPress={() => setActiveTab("battle" as any)} 
           style={({pressed}) => [{ 
             backgroundColor: cardBg, borderRadius: 16, paddingVertical: 16, paddingHorizontal: 12, 
             borderWidth: 1, borderColor: border, flexDirection: "row", alignItems: "center", marginBottom: 32
@@ -4127,8 +4129,14 @@ export default function HomeScreen() {
 
   /** Opens battle options sheet – does NOT create room yet */
   const handleHostBattle = (quizId: string) => {
-    const q = quizId === "sample_quiz" ? sampleQuiz : quizzes.find((q) => q.id === quizId);
-    if (!q) return;
+    let q = quizId === "sample_quiz" ? sampleQuiz : quizzes.find((q) => q.id === quizId);
+    if (!q && viewingInsightsQuiz?.id === quizId) {
+      q = viewingInsightsQuiz;
+    }
+    if (!q) {
+      Alert.alert("Error", "Quiz not found. Please try again.");
+      return;
+    }
     setBattleOptionsQuiz(q);
     setBattleSelectionMode("all");
     setBattleRandomCount(Math.min(10, (q.questionsList?.length || q.questions || 10)));
@@ -4139,6 +4147,7 @@ export default function HomeScreen() {
     setBattleTimePerQuestion(null);
     setBattleCreating(false);
     setShowBattleQuizSelector(false);
+    setActiveTab("battle" as any);
     setShowBattleOptions(true);
   };
 
@@ -4186,6 +4195,7 @@ export default function HomeScreen() {
       battleStartedRef.current = false;
       setBattleCreating(false);
       setShowBattleOptions(false); // close AFTER room created so user sees loading
+      setActiveTab("battle" as any); // transition to Battle Lobby
       if (battleUnsubscribeRef.current) battleUnsubscribeRef.current();
       battleUnsubscribeRef.current = listenToBattleRoom(code, (data) => {
         setBattleRoomState(data);
@@ -4366,9 +4376,21 @@ export default function HomeScreen() {
         >
           {/* Header row with history button */}
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8, marginBottom: 28 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-              <MaterialCommunityIcons name="sword-cross" size={19} color={isDark ? "#818cf8" : "#6366f1"} />
-              <Text style={{ fontSize: 15, color: isDark ? "#818cf8" : "#6366f1", fontWeight: "700" }}>Battle Arena</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+              <Pressable
+                onPress={() => setActiveTab("home" as any)}
+                style={({ pressed }) => [{
+                  width: 36, height: 36, borderRadius: 18,
+                  backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
+                  alignItems: "center", justifyContent: "center"
+                }, pressed && { opacity: 0.7 }]}
+              >
+                <Ionicons name="chevron-back" size={20} color={isDark ? "#ffffff" : "#000000"} />
+              </Pressable>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <MaterialCommunityIcons name="sword-cross" size={19} color={isDark ? "#818cf8" : "#6366f1"} />
+                <Text style={{ fontSize: 15, color: isDark ? "#818cf8" : "#6366f1", fontWeight: "700" }}>Battle Arena</Text>
+              </View>
             </View>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <Pressable
@@ -7105,7 +7127,6 @@ export default function HomeScreen() {
             }),
           ];
 
-          // ── Recents data ──────────────────────────────────────────
           type RecentItem = { id: string; title: string; type: "quiz"|"flashcard"; sub: string; raw: any; ts: number; };
           const allRecents: RecentItem[] = [
             ...quizzes.map((q: any): RecentItem => {
@@ -7260,33 +7281,33 @@ export default function HomeScreen() {
                             key={item.id}
                             style={{
                               width: SCREEN_WIDTH - 52,
-                              backgroundColor: cardBg,
+                              backgroundColor: "#20253B", // Match the dark navy blue from the image
                               borderRadius: 18,
                               padding: 18,
                               borderWidth: 1,
-                              borderColor: border,
+                              borderColor: "rgba(255,255,255,0.06)",
                             }}
                           >
                             {/* Title row */}
-                            <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 18 }}>
-                              <Text style={{ fontSize: 16, fontWeight: "700", color: txt, flex: 1, lineHeight: 22 }} numberOfLines={2}>
+                            <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 18, minHeight: 44 }}>
+                              <Text style={{ fontSize: 16, fontWeight: "700", color: "#FFFFFF", flex: 1, lineHeight: 22 }} numberOfLines={2}>
                                 {item.title}
                               </Text>
                               <Ionicons name="ellipsis-vertical" size={18} color={muted} style={{ marginLeft: 8, marginTop: 2 }} />
                             </View>
 
-                            {/* Progress bar — Design 1 style: green filled + orange tip + gray unfilled */}
-                            <View style={{ height: 8, backgroundColor: "rgba(255,255,255,0.08)", borderRadius: 4, marginBottom: 8, overflow: "hidden", flexDirection: "row" }}>
+                            {/* Progress bar */}
+                            <View style={{ height: 12, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 6, marginBottom: 12, overflow: "hidden", flexDirection: "row" }}>
                               {pct > 0 && (
-                                <View style={{ width: `${Math.max(pct - 8, 0)}%` as any, backgroundColor: accentGrn, borderRadius: 4 }} />
+                                <View style={{ width: `${Math.max(pct - 12, 0)}%` as any, backgroundColor: "#10B981" }} />
                               )}
                               {pct > 0 && pct < 100 && (
-                                <View style={{ width: "8%", backgroundColor: accentOrng, borderRadius: 4 }} />
+                                <View style={{ width: "12%", backgroundColor: "#F59E0B", borderTopRightRadius: 6, borderBottomRightRadius: 6 }} />
                               )}
                             </View>
 
                             {/* Label */}
-                            <Text style={{ fontSize: 13, color: muted, marginBottom: 16 }}>{item.label}</Text>
+                            <Text style={{ fontSize: 14, color: "#FFFFFF", fontWeight: "500", marginBottom: 20 }}>{item.label}</Text>
 
                             {/* Continue button — blue pill */}
                             <Pressable
@@ -7295,14 +7316,14 @@ export default function HomeScreen() {
                                 else startStudy(item.raw);
                               }}
                               style={({ pressed }) => ({
-                                backgroundColor: accentBlue,
-                                borderRadius: 50,
+                                backgroundColor: "#4F46E5",
+                                borderRadius: 24,
                                 paddingVertical: 14,
                                 alignItems: "center",
                                 opacity: pressed ? 0.85 : 1,
                               })}
                             >
-                              <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>Continue</Text>
+                              <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>Continue</Text>
                             </Pressable>
                           </View>
                         );
@@ -7311,15 +7332,15 @@ export default function HomeScreen() {
 
                     {/* Dot pagination */}
                     {jumpItems.length > 1 && (
-                      <View style={{ flexDirection: "row", justifyContent: "center", gap: 6, marginTop: 14 }}>
+                      <View style={{ flexDirection: "row", justifyContent: "center", gap: 8, marginTop: 16 }}>
                         {jumpItems.map((_, idx) => (
                           <View
                             key={idx}
                             style={{
-                              width: idx === jumpPage ? 20 : 7,
-                              height: 7,
+                              width: 8,
+                              height: 8,
                               borderRadius: 4,
-                              backgroundColor: idx === jumpPage ? accentBlue : "rgba(255,255,255,0.2)",
+                              backgroundColor: idx === jumpPage ? "#FFFFFF" : "rgba(255,255,255,0.3)",
                             }}
                           />
                         ))}
@@ -7328,66 +7349,31 @@ export default function HomeScreen() {
                   </View>
                 )}
 
-                {/* ── Recents ── */}
-                {allRecents.length > 0 && (
-                  <View style={{ marginTop: jumpItems.length > 0 ? 28 : 20, paddingHorizontal: 20 }}>
-                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-                      <Text style={{ fontSize: 18, fontWeight: "700", color: txt }}>Recents</Text>
-                      <Pressable
-                        onPress={() => setActiveTab("library" as any)}
-                        style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
-                      >
-                        <Text style={{ fontSize: 13, fontWeight: "600", color: accentPurp }}>See all</Text>
-                      </Pressable>
-                    </View>
-
-                    {allRecents
-                      .filter((item) => !homeSearch || item.title.toLowerCase().includes(homeSearch.toLowerCase()))
-                      .map((item) => (
-                      <Pressable
-                        key={item.id}
-                        onPress={() => {
-                          if (item.type === "quiz") goQuiz(item.raw);
-                          else startStudy(item.raw);
-                        }}
-                        style={({ pressed }) => ({
-                          flexDirection: "row", alignItems: "center",
-                          paddingVertical: 10, gap: 14,
-                          opacity: pressed ? 0.7 : 1,
-                        })}
-                      >
-                        {/* Icon square */}
-                        <View style={{
-                          width: 54, height: 54, borderRadius: 14,
-                          backgroundColor: iconBg,
-                          alignItems: "center", justifyContent: "center",
-                          borderWidth: 1, borderColor: border,
-                        }}>
-                          <Ionicons
-                            name={item.type === "flashcard" ? "albums-outline" : "flash-outline"}
-                            size={26}
-                            color={item.type === "flashcard" ? accentPurp : "#60A5FA"}
-                          />
-                        </View>
-
-                        {/* Text */}
-                        <View style={{ flex: 1 }}>
-                          <Text style={{ fontSize: 15, fontWeight: "600", color: txt, marginBottom: 3 }} numberOfLines={1}>
-                            {item.title}
-                          </Text>
-                          <Text style={{ fontSize: 13, color: "#D1D5DB", fontWeight: "500" }}>{item.sub}</Text>
-                        </View>
-
-                        <Feather name="chevron-right" size={16} color="rgba(255,255,255,0.2)" />
-                      </Pressable>
-                    ))}
-
-                    {homeSearch && allRecents.filter((i) => i.title.toLowerCase().includes(homeSearch.toLowerCase())).length === 0 && (
-                      <View style={{ alignItems: "center", paddingTop: 40, gap: 10 }}>
-                        <Ionicons name="search-outline" size={32} color={muted} />
-                        <Text style={{ fontSize: 14, color: muted }}>No results for "{homeSearch}"</Text>
+                {/* ── Battle Arena Banner ── */}
+                {!homeSearch && (
+                  <View style={{ marginTop: jumpItems.length > 0 || !hasContent ? 28 : 20, paddingHorizontal: 20 }}>
+                    <Text style={{ fontSize: 18, fontWeight: "700", color: txt, marginBottom: 14 }}>Multiplayer</Text>
+                    
+                    <Pressable
+                      onPress={() => setActiveTab("battle" as any)}
+                      style={({ pressed }) => ({
+                        backgroundColor: cardBg,
+                        borderRadius: 20, padding: 20,
+                        borderWidth: 1, borderColor: border,
+                        flexDirection: "row", alignItems: "center",
+                        shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 2,
+                        opacity: pressed ? 0.8 : 1,
+                      })}
+                    >
+                      <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: "rgba(251, 113, 133, 0.15)", alignItems: "center", justifyContent: "center", marginRight: 16 }}>
+                        <Ionicons name="flame" size={24} color="#FB7185" />
                       </View>
-                    )}
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 16, fontWeight: "700", color: txt, marginBottom: 4 }}>Battle Arena</Text>
+                        <Text style={{ fontSize: 13, color: muted }}>Challenge friends in real-time matches</Text>
+                      </View>
+                      <Feather name="chevron-right" size={20} color={muted} />
+                    </Pressable>
                   </View>
                 )}
               </ScrollView>
@@ -7697,8 +7683,9 @@ export default function HomeScreen() {
               {/* Home */}
               <AnimatedPressable onPress={() => setActiveTab("home")} style={styles.tabItem} scaleTo={0.88}>
                 <IconHome size={24}
-                  color={effectiveTab === "home" ? "#B5A8FF" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"} />
-                <Text style={[styles.tabLabel, { color: effectiveTab === "home" ? "#B5A8FF" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)" }]}>{t('tabs.home')}</Text>
+                  strokeWidth={effectiveTab === "home" ? 2.5 : 2}
+                  color={effectiveTab === "home" ? "#FFFFFF" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"} />
+                <Text style={[styles.tabLabel, { color: effectiveTab === "home" ? "#FFFFFF" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)", fontWeight: effectiveTab === "home" ? "800" : "500" }]}>{t('tabs.home')}</Text>
               </AnimatedPressable>
 
 
@@ -7709,7 +7696,7 @@ export default function HomeScreen() {
                 scaleTo={0.88}
               >
                 <FontAwesome6 name="plus" size={22} color={settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"} />
-                <Text style={[styles.tabLabel, { color: settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)" }]}>Create</Text>
+                <Text style={[styles.tabLabel, { color: settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)", fontWeight: "500" }]}>Create</Text>
               </AnimatedPressable>
 
               {/* Library */}
@@ -7718,15 +7705,18 @@ export default function HomeScreen() {
                 style={styles.tabItem}
                 scaleTo={0.88}
               >
-                <IconFolder size={24} color={effectiveTab === "library" ? "#B5A8FF" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"} />
-                <Text style={[styles.tabLabel, effectiveTab === "library" && { color: "#B5A8FF" }, { color: effectiveTab === "library" ? "#B5A8FF" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)" }]}>Library</Text>
+                <IconFolder size={24}
+                  strokeWidth={effectiveTab === "library" ? 2.5 : 2}
+                  color={effectiveTab === "library" ? "#FFFFFF" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"} />
+                <Text style={[styles.tabLabel, { color: effectiveTab === "library" ? "#FFFFFF" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)", fontWeight: effectiveTab === "library" ? "800" : "500" }]}>Library</Text>
               </AnimatedPressable>
 
               {/* Profile */}
               <AnimatedPressable onPress={() => setActiveTab("menu")} style={styles.tabItem} scaleTo={0.88}>
                 <IconUser size={24}
-                  color={effectiveTab === "menu" ? "#B5A8FF" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"} />
-                <Text style={[styles.tabLabel, { color: effectiveTab === "menu" ? "#B5A8FF" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)" }]}>{t('tabs.profile')}</Text>
+                  strokeWidth={effectiveTab === "menu" ? 2.5 : 2}
+                  color={effectiveTab === "menu" ? "#FFFFFF" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"} />
+                <Text style={[styles.tabLabel, { color: effectiveTab === "menu" ? "#FFFFFF" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)", fontWeight: effectiveTab === "menu" ? "800" : "500" }]}>{t('tabs.profile')}</Text>
               </AnimatedPressable>
 
             </View>
@@ -7800,8 +7790,8 @@ export default function HomeScreen() {
       {(() => {
         const isDark = settingsDarkMode;
         const bg      = isDark ? "#0f172a" : "#f4f4f8";
-        const cardBg  = isDark ? "rgba(255,255,255,0.045)" : "#ffffff";
-        const cardBorder = isDark ? "rgba(255,255,255,0.09)" : "#e2e8f0";
+        const cardBg  = isDark ? "#1e293b" : "#ffffff";
+        const cardBorder = isDark ? "#334155" : "#e5e7eb";
         const txt     = isDark ? "#ffffff" : "#0d0f14";
         const muted   = isDark ? "#71717a" : "#64748b";
         const mutedSub = isDark ? "#3f3f46" : "#94a3b8";
@@ -7810,7 +7800,7 @@ export default function HomeScreen() {
         {/* ── Quiz Selector Modal ── */}
         {showBattleQuizSelector && (
         <Modal visible={true} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowBattleQuizSelector(false)}>
-          <View style={{ flex: 1, backgroundColor: isDark ? "#0d0f1a" : "#f4f4f8", paddingTop: Platform.OS === 'ios' ? 0 : 40 }}>
+          <View style={{ flex: 1, backgroundColor: bg, paddingTop: Platform.OS === 'ios' ? 0 : 40 }}>
             <View style={{
               flexDirection: "row", alignItems: "center", justifyContent: "space-between",
               padding: 20, borderBottomWidth: 1, borderBottomColor: cardBorder
@@ -7830,7 +7820,7 @@ export default function HomeScreen() {
                 <Pressable
                   onPress={() => handleHostBattle(item.id)}
                   style={({ pressed }) => [{
-                    backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "#ffffff",
+                    backgroundColor: cardBg,
                     borderWidth: 1, borderColor: cardBorder,
                     borderRadius: 16, padding: 18,
                     flexDirection: "row", alignItems: "center", gap: 14,
@@ -7839,13 +7829,13 @@ export default function HomeScreen() {
                 >
                   <View style={{
                     width: 46, height: 46, borderRadius: 12,
-                    backgroundColor: isDark ? "rgba(99,102,241,0.12)" : "rgba(99,102,241,0.09)",
+                    backgroundColor: isDark ? "rgba(129,140,248,0.15)" : "rgba(79,70,229,0.1)",
                     alignItems: "center", justifyContent: "center"
                   }}>
-                    <Text style={{ fontSize: 22 }}>📝</Text>
+                    <Ionicons name="document-text" size={22} color={isDark ? "#818cf8" : "#4f46e5"} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 15, fontWeight: "700", color: txt, marginBottom: 3 }}>{item.title}</Text>
+                    <Text style={{ fontSize: 15, fontWeight: "700", color: txt, marginBottom: 3 }} numberOfLines={1}>{item.title.replace(/[\r\n]+/g, ' ')}</Text>
                     <Text style={{ fontSize: 12, color: muted, fontWeight: "500" }}>{item.questions} questions · {item.category}</Text>
                   </View>
                   <Feather name="chevron-right" size={16} color={mutedSub} />
@@ -7881,7 +7871,7 @@ export default function HomeScreen() {
               {battleOptionsQuiz && (
                 <View style={{ backgroundColor: isDark ? "rgba(99,102,241,0.1)" : "rgba(99,102,241,0.07)",
                   borderRadius: 14, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: isDark ? "rgba(99,102,241,0.2)" : "rgba(99,102,241,0.15)" }}>
-                  <Text style={{ fontSize: 16, fontWeight: "800", color: txt, marginBottom: 4 }}>{battleOptionsQuiz.title}</Text>
+                  <Text style={{ fontSize: 16, fontWeight: "800", color: txt, marginBottom: 4 }}>{battleOptionsQuiz.title.replace(/[\r\n]+/g, ' ')}</Text>
                   <Text style={{ fontSize: 13, color: txt }}>{battleOptionsQuiz.questions} questions available</Text>
                 </View>
               )}
