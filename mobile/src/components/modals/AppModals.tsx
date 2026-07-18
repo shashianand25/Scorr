@@ -1678,7 +1678,6 @@ export function AppModals({ p }: { p: any }) {
                         const { uri: fileUri, name: fileName, size: fileSize = 0 } = result.assets[0];
                         const ext = fileName.split(".").pop()?.toLowerCase();
                         if (ext === "pdf" && !p.isConnected) { (p.setOfflineModalParams || (() => {}))({ title: "Can't Generate", message: "PDF conversion requires internet." }); return; }
-                        if (ext === "pdf" && fileSize > 4.5 * 1024 * 1024) { Alert.alert("File Too Large", "Please select a PDF under 4.5 MB."); return; }
                         if (ext && !["txt", "qst", "md", "docx", "pdf", "ppt", "pptx"].includes(ext)) { Alert.alert("Unsupported File", `Supported: .txt, .docx, .pdf, .ppt, .pptx. Got .${ext}`); return; }
                         (p.setAiGenPhase || (() => {}))("generating");
                         setTimeout(async () => {
@@ -1777,14 +1776,6 @@ export function AppModals({ p }: { p: any }) {
                           });
                           return;
                         }
-                        if (ext === 'pdf' && fileSize > 4.5 * 1024 * 1024) {
-                          Alert.alert(
-                            "File Too Large",
-                            "Please select a PDF under 4.5 MB."
-                          );
-                          return;
-                        }
-
                         if (ext && !['txt', 'qst', 'md', 'docx', 'pdf', 'ppt', 'pptx'].includes(ext)) {
                           Alert.alert(
                             "Unsupported File",

@@ -12,6 +12,8 @@
 // In production, set to your deployed URL.
 import { Platform } from "react-native";
 
+import { extractText } from "expo-pdf-text-extract";
+
 const BASE_URL = "https://recall-backend-wheat.vercel.app";
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -333,33 +335,14 @@ import * as FileSystem from "expo-file-system/legacy";
 
 export async function parsePdfFromBackend(fileUri: string, fileName: string): Promise<{ text: string; error?: string }> {
   try {
-    const uploadResult = await FileSystem.uploadAsync(`${BASE_URL}/api/parse-pdf`, fileUri, {
-      httpMethod: 'POST',
-      uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-      fieldName: 'file',
-    });
-
-    if (uploadResult.status !== 200) {
-      let msg = uploadResult.body;
-      try {
-        const parsed = JSON.parse(uploadResult.body);
-        if (parsed.error) msg = parsed.error;
-      } catch (e) {}
-      if (msg.includes("OfficeParser currently supports")) {
-        return { text: "", error: "Unsupported file format. Please upload a modern Office file (.docx, .pptx) or PDF." };
-      }
-      return { text: "", error: `Server error: ${msg}` };
+    const text = await extractText(fileUri);
+    if (!text || text.trim() === "") {
+      return { text: "", error: "Could not extract text from this PDF. It might be a scanned document containing only images." };
     }
-    
-    const data = JSON.parse(uploadResult.body);
-    if (data.error) return { text: "", error: data.error };
-    return { text: data.text || "" };
+    return { text };
   } catch (err: any) {
-    let errMsg = err?.message || "Upload failed";
-    if (errMsg.includes(BASE_URL) || errMsg.includes("recall-backend") || errMsg.includes("UnknownHostException") || errMsg.includes("Network request failed")) {
-      errMsg = "Network error: Please check your internet connection.";
-    }
-    return { text: "", error: errMsg };
+    let errMsg = err?.message || "Local PDF parsing failed";
+    return { text: "", error: `Failed to extract text locally: ${errMsg}` };
   }
 }
 
