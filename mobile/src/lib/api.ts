@@ -20,7 +20,7 @@ async function apiFetch<T>(
   options?: RequestInit
 ): Promise<{ data: T | null; error: string | null }> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 25000); // 25-second timeout to allow for Vercel cold starts
+  const timeoutId = setTimeout(() => controller.abort(), 60000); // 60-second timeout to allow for Gemini generation
 
   let responseClone: Response | null = null;
   try {
