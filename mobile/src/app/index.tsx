@@ -273,6 +273,8 @@ export default function HomeScreen() {
   const [flashcardFilter, setFlashcardFilter] = useState<"all"|"due"|"progress"|"mastered">("all");
   const [showFlashcardOptions, setShowFlashcardOptions] = useState<any>(null);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [backgroundQuizReady, setBackgroundQuizReady] = useState<any>(null);
+  const isBackgroundGen = React.useRef(false);
 
   // Track which uid slot is currently loaded so we know when to switch
   const loadedUidRef = React.useRef<string | null | undefined>(undefined); // undefined = not loaded yet
@@ -3083,6 +3085,7 @@ export default function HomeScreen() {
   };
 
   const handleGenerateWithAI = async (text: string, fileName: string) => {
+    isBackgroundGen.current = false;
     setAiGenPhase("generating");
     try {
       const { key, error: keyError } = await fetchGeminiKey();
@@ -3115,12 +3118,17 @@ export default function HomeScreen() {
       const title = (parsed.title || fileName).replace(/\.[^.]+$/, "");
       const newQuiz: any = { id: localId, title, questions: parsed.questions.length, category: "AI Generated", time: "Just now", flashcards: parsed.flashcards || [], questionsList: parsed.questions.map((q: any) => ({ ...q, answers: [...q.answers].sort(() => Math.random() - 0.5) })), attempts: [], wrongQuestions: [], uniqueCorrectIds: [] };
       setQuizzes((prev: any[]) => [...prev, newQuiz]);
-      setAiGenPhase(null);
-      setTimeout(() => {
-        setActiveTab("insights");
-        setViewingInsightsQuiz(newQuiz);
-        setViewingInsightsQuizFromTab("home");
-      }, 300);
+      if (isBackgroundGen.current) {
+        setBackgroundQuizReady(newQuiz);
+        isBackgroundGen.current = false;
+      } else {
+        setAiGenPhase(null);
+        setTimeout(() => {
+          setActiveTab("insights");
+          setViewingInsightsQuiz(newQuiz);
+          setViewingInsightsQuizFromTab("home");
+        }, 300);
+      }
       if (firebaseUser && neonUserReadyRef.current) {
         const sourceText = `@title: ${title}\n@category: AI Generated\n\n` + raw;
         createMobileQuiz({ userId: firebaseUser.uid, title, category: "AI Generated", questionCount: parsed.questions.length, sourceText }).then(({ quiz: saved, error }) => {
@@ -3128,7 +3136,11 @@ export default function HomeScreen() {
         });
       }
     } catch (err: any) {
-      setAiGenPhase(null);
+      if (!isBackgroundGen.current) {
+        setAiGenPhase(null);
+      } else {
+        isBackgroundGen.current = false;
+      }
       let errMsg = err.message || "Unknown error";
       if (errMsg.includes("generativelanguage.googleapis.com") || errMsg.includes("UnknownHostException") || errMsg.includes("Network request failed")) {
          errMsg = "Network error: Please check your internet connection.";
@@ -8019,6 +8031,32 @@ export default function HomeScreen() {
           <Text style={{ color: "#f8fafc", fontSize: 13, fontWeight: "500", flex: 1 }}>{syncToastMessage}</Text>
         </View>
       )}
+
+      {/* Background Quiz Ready Toast */}
+      {!!backgroundQuizReady && (
+        <View style={{ position: "absolute", top: Platform.OS === "ios" ? 52 : 24, left: 20, right: 20, zIndex: 1000, backgroundColor: "#48CAE4", padding: 16, borderRadius: 12, flexDirection: "row", alignItems: "center", gap: 12, elevation: 6, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 }}>
+          <Ionicons name="checkmark-circle" size={24} color="#0A0B14" />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: "#0A0B14", fontSize: 16, fontWeight: "800" }}>Quiz Ready!</Text>
+            <Text style={{ color: "rgba(10,11,20,0.8)", fontSize: 13, fontWeight: "500", marginTop: 2 }} numberOfLines={1}>{backgroundQuizReady.title}</Text>
+          </View>
+          <Pressable 
+            style={{ backgroundColor: "#0A0B14", paddingHorizontal: 16, paddingVertical: 8, borderRadius: 16 }}
+            onPress={() => {
+              const quiz = backgroundQuizReady;
+              setBackgroundQuizReady(null);
+              setActiveTab("insights");
+              setViewingInsightsQuiz(quiz);
+              setViewingInsightsQuizFromTab("home");
+            }}
+          >
+            <Text style={{ color: "#48CAE4", fontWeight: "800", fontSize: 13 }}>View</Text>
+          </Pressable>
+          <Pressable onPress={() => setBackgroundQuizReady(null)} style={{ padding: 4 }}>
+            <Ionicons name="close" size={20} color="rgba(10,11,20,0.5)" />
+          </Pressable>
+        </View>
+      )}
     <SafeAreaView style={[styles.rootContainer, !settingsDarkMode && styles.lightRootContainer]} edges={["top", "left", "right"]}>
       {activeSession ? (
         renderActiveSessionView()
@@ -8155,7 +8193,7 @@ export default function HomeScreen() {
       }} />
 
       {/* ── AI Generation Screen ── */}
-      {aiGenPhase === "generating" && <AIGeneratingScreen onCancel={() => setAiGenPhase(null)} />}
+      {aiGenPhase === "generating" && <AIGeneratingScreen onCancel={() => { isBackgroundGen.current = true; setAiGenPhase(null); }} />}
 
       {/* ── Battle Modals ── */}
       {(() => {
