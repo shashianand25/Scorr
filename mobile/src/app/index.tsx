@@ -2789,6 +2789,7 @@ export default function HomeScreen() {
   const [fcCurrentIdx, setFcCurrentIdx] = useState(0);
   const [studyCardIdx, setStudyCardIdx] = useState(0);
   const [studyQueue, setStudyQueue] = useState<string[]>([]);
+  const [studyQueueTotal, setStudyQueueTotal] = useState<number>(0);
   const [customStudyMode, setCustomStudyMode] = useState(false);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [noDueAtStart, setNoDueAtStart] = useState(false); // true when deck had 0 due before the session started
@@ -4172,6 +4173,7 @@ export default function HomeScreen() {
       : updatedDeck.cards.filter((c: any) => !c.sm2_nextReviewDate || c.sm2_nextReviewDate <= nowWithBuffer);
     
     setStudyQueue(due.map((c: any) => c.id));
+    setStudyQueueTotal(due.length);
     setStudyingDeck(updatedDeck);
     setStudyFlipped(false);
     flipAnim.setValue(0);
@@ -6269,6 +6271,7 @@ export default function HomeScreen() {
               // Build a deck of only new cards
               const newDeck = { ...studyingDeck, cards: newCards };
               setStudyQueue(newCards.map((c: any) => c.id));
+              setStudyQueueTotal(newCards.length);
               setStudyingDeck(newDeck);
               setStudyFlipped(false);
               flipAnim.setValue(0);
@@ -6283,6 +6286,7 @@ export default function HomeScreen() {
               previewSourceDeckRef.current = studyingDeck;
               const previewDeck = { ...studyingDeck, cards: previewCandidates };
               setStudyQueue(previewCandidates.map((c: any) => c.id));
+              setStudyQueueTotal(previewCandidates.length);
               setStudyingDeck(previewDeck);
               setIsPreviewMode(true);
               setStudyFlipped(false);
@@ -6559,18 +6563,14 @@ export default function HomeScreen() {
 
                   {/* Actions */}
                   <View style={{ gap: 12 }}>
-                    <Pressable onPress={handleGoBack} style={({pressed}) => ({ backgroundColor: settingsDarkMode ? "#172033" : "#ffffff", borderRadius: 16, padding: 20, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", opacity: pressed ? 0.8 : 1 })}>
+                    <Pressable onPress={() => {
+                        setStudyQueue(studyingDeck.cards.map((c: any) => c.id));
+                        setStudyQueueTotal(studyingDeck.cards.length);
+                        setIsPreviewMode(true);
+                      }} style={({pressed}) => ({ backgroundColor: settingsDarkMode ? "#172033" : "#ffffff", borderRadius: 16, padding: 20, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", opacity: pressed ? 0.8 : 1 })}>
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
                         <Text style={{ fontSize: 24 }}>📝</Text>
-                        <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Review Flashcards</Text>
-                      </View>
-                      <Feather name="chevron-right" size={22} color={settingsDarkMode ? "#ffffff" : "#111827"} />
-                    </Pressable>
-
-                    <Pressable onPress={() => startStudy(studyingDeck, customStudyMode)} style={({pressed}) => ({ backgroundColor: settingsDarkMode ? "#172033" : "#ffffff", borderRadius: 16, padding: 20, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", opacity: pressed ? 0.8 : 1 })}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
-                        <Text style={{ fontSize: 24 }}>📇</Text>
-                        <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Study Flashcards Again</Text>
+                        <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Preview Flashcards</Text>
                       </View>
                       <Feather name="chevron-right" size={22} color={settingsDarkMode ? "#ffffff" : "#111827"} />
                     </Pressable>
@@ -6586,14 +6586,6 @@ export default function HomeScreen() {
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
                         <Text style={{ fontSize: 24 }}>❓</Text>
                         <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Play Quiz</Text>
-                      </View>
-                      <Feather name="chevron-right" size={22} color={settingsDarkMode ? "#ffffff" : "#111827"} />
-                    </Pressable>
-
-                    <Pressable onPress={() => console.log("Review prompted")} style={({pressed}) => ({ backgroundColor: settingsDarkMode ? "#172033" : "#ffffff", borderRadius: 16, padding: 20, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", opacity: pressed ? 0.8 : 1 })}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
-                        <Text style={{ fontSize: 24 }}>👍</Text>
-                        <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Give us a 5 star review</Text>
                       </View>
                       <Feather name="chevron-right" size={22} color={settingsDarkMode ? "#ffffff" : "#111827"} />
                     </Pressable>
@@ -6661,7 +6653,7 @@ export default function HomeScreen() {
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 10 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                   <Text style={{ fontSize: 16, fontWeight: "700", color: isDark ? "#ffffff" : "#111827" }}>
-                    {studyingDeck.cards.length - studyQueue.length + 1}/{studyingDeck.cards.length}
+                    {studyQueueTotal - studyQueue.length + 1}/{studyQueueTotal || 1}
                   </Text>
                   {isPreviewMode && (
                     <View style={{ backgroundColor: "rgba(99,102,241,0.18)", borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
@@ -6683,7 +6675,7 @@ export default function HomeScreen() {
 
               {/* Progress bar */}
               <View style={{ height: 4, backgroundColor: isDark ? "rgba(255,255,255,0.07)" : "#e0e0e8" }}>
-                <View style={{ height: 4, backgroundColor: "#00d4aa", width: `${((studyingDeck.cards.length - studyQueue.length + 1) / studyingDeck.cards.length) * 100}%` }} />
+                <View style={{ height: 4, backgroundColor: "#00d4aa", width: `${((studyQueueTotal - studyQueue.length + 1) / (studyQueueTotal || 1)) * 100}%` }} />
               </View>
 
               {/* Card Stack Area — same structure as Simple Preview */}
