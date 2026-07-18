@@ -304,6 +304,22 @@ export async function deleteMobileQuiz(
   return { error };
 }
 
+// ── AI Generation ────────────────────────────────────────────────────────
+
+/**
+ * Calls the backend to securely generate a quiz using the Gemini API.
+ */
+export async function generateQuizWithAI(text: string): Promise<{ result: string; error: string | null }> {
+  const { data, error } = await apiFetch<{ result: string }>(
+    "/api/generate-quiz",
+    {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }
+  );
+  return { result: data?.result ?? "", error };
+}
+
 // ── App Updates ────────────────────────────────────────────────────────
 
 export interface VersionConfig {

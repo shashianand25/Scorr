@@ -39,7 +39,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Buffer } from "buffer";
 import * as mammoth from "mammoth/mammoth.browser.js";
 import { signInWithGoogle, signInWithEmail, signUpWithEmail, signOutUser, onAuth, deleteAccount, resetPassword, type User } from "../lib/firebase";
-import { syncUserToNeon, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz, deleteUserFromNeon, sendFeedback, saveBattleHistory, fetchBattleHistory, parsePdfFromBackend, parsePptFromBackend } from "../lib/api";
+import { syncUserToNeon, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz, deleteUserFromNeon, sendFeedback, saveBattleHistory, fetchBattleHistory, parsePdfFromBackend, parsePptFromBackend, generateQuizWithAI } from "../lib/api";
 import { getUserErrorMessage } from "../utils/errors";
 import { createBattleRoom, joinBattleRoom, updateBattleScore, finishBattle, markPlayerFinished, listenToBattleRoom, getBattleRoom, type BattleRoom } from "../lib/multiplayer";
 import NetInfo from "@react-native-community/netinfo";
@@ -78,62 +78,7 @@ const deleteFlashcardDeck = async (..._args: any[]) => ({ error: null });
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const KeyboardWrapper = Platform.OS === "ios" ? KeyboardAvoidingView : View;
 
-// ── Gemini AI Generation ─────────────────────────────────────────────────────
-const GEMINI_URL = `https://asia-south1-aiplatform.googleapis.com/v1/projects/guardian-495515/locations/asia-south1/publishers/google/models/gemini-3.5-flash:generateContent?key=${process.env.EXPO_PUBLIC_GEMINI_API_KEY}`;
-const MCQ_PROMPT = (text: string) => `You are an expert educator and assessment designer.
-
-Convert the provided text into high-quality flashcards and multiple-choice questions for active recall.
-
-The provided text may be one chunk of a larger document.
-Generate flashcards and questions using only the information in the provided text.
-Do not assume information outside the provided text.
-
-### Content Generation
-
-* Generate exactly the same number of questions if the text already contains MCQs, recreating those MCQs only.
-* If the text does not contain MCQs, you MUST generate AT LEAST 20 Flashcards AND AT LEAST 20 MCQs. Do not generate fewer than 20 of each, extracting as much detail as necessary from the text to reach this minimum.
-* Flashcards should capture the most important terms, concepts, definitions, processes, and formulas.
-* MCQs should test understanding, application, or comparison rather than simple memorization.
-* Avoid duplicate or nearly identical content.
-
-### Answer Rules for MCQs
-* Each MCQ must have exactly one correct answer and exactly three incorrect answers.
-* Incorrect answers should be plausible, relevant, and clearly incorrect based on the provided text.
-
-### Output Format
-
-Output your response using the EXACT following format. First, output all flashcards under the ===FLASHCARDS=== header. Then, output all MCQs under the ===MCQS=== header.
-
-===FLASHCARDS===
-
-# Term or Concept 1
-= Definition or explanation 1
-
-# Term or Concept 2
-= Definition or explanation 2
-
-===MCQS===
-
-? Question 1
-
-+ Correct Answer
-
-- Wrong Answer
-- Wrong Answer
-- Wrong Answer
-- Wrong Answer
-
-### Formatting Rules
-
-* Every question must start with \`?\`.
-* The correct answer must start with \`+\`.
-* Every incorrect answer must start with \`-\`.
-* Do not number the questions.
-* Do not include explanations, headings, notes, or any extra text.
-* Output only the formatted questions.
-
-Text:
-${text}`;
+// ── AI Generation logic moved to backend ─────────────────────────────────────
 
 const handleModalCloseRequest = (closeAction: () => void) => {
   if (Keyboard.isVisible()) {
@@ -3056,23 +3001,11 @@ export default function HomeScreen() {
   const handleGenerateWithAI = async (text: string, fileName: string) => {
     setAiGenPhase("generating");
     try {
-      const CHUNK_SIZE = 50000;
-      const chunks: string[] = [];
-      for (let i = 0; i < text.length; i += CHUNK_SIZE) chunks.push(text.slice(i, i + CHUNK_SIZE));
-      const CONCURRENCY = 3;
-      const results: string[] = [];
-      for (let i = 0; i < chunks.length; i += CONCURRENCY) {
-        const batch = chunks.slice(i, i + CONCURRENCY);
-        const batchResults = await Promise.all(
-          batch.map(chunk => fetch(GEMINI_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: MCQ_PROMPT(chunk) }] }], generationConfig: { maxOutputTokens: 65536, temperature: 0.2 } }),
-          }).then(async r => { if (!r.ok) throw new Error((await r.json())?.error?.message || r.statusText); return (await r.json())?.candidates?.[0]?.content?.parts?.[0]?.text || ""; }))
-        );
-        results.push(...batchResults);
+      const { result: raw, error } = await generateQuizWithAI(text);
+      if (error) {
+        throw new Error(error);
       }
-      const raw = results.join("\n");
+      
       const parsed = parseQstText(raw);
       if (parsed.questions.length === 0) throw new Error("Gemini didn't return any valid questions.");
       const localId = `ai_${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -3093,12 +3026,10 @@ export default function HomeScreen() {
       }
     } catch (err: any) {
       setAiGenPhase(null);
-      let errMsg = err.message || "Unknown error";
-      if (errMsg.includes("generativelanguage.googleapis.com") || errMsg.includes("UnknownHostException") || errMsg.includes("Network request failed")) {
-         errMsg = "Network error: Please check your internet connection.";
-      }
+      // The backend returns user-friendly errors via the 'error' field, which is passed back by our API client.
+      const errMsg = err.message || "Failed to generate quiz.";
       if (Platform.OS === "web") alert("AI generation failed: " + errMsg);
-      else Alert.alert("Generation Failed", typeof __DEV__ !== 'undefined' && __DEV__ ? errMsg : getUserErrorMessage(errMsg));
+      else Alert.alert("Generation Failed", errMsg);
     }
   };
 
