@@ -89,6 +89,7 @@ Do not assume information outside the provided text.
 
 ### Content Generation
 
+* Cover the entire document. Every major topic or section should be represented by one or more flashcards and MCQs where appropriate. Do not ignore later sections of the text.
 * Generate exactly the same number of questions if the text already contains MCQs, recreating those MCQs only.
 * If the text does not contain MCQs, you MUST generate AT LEAST 20 Flashcards AND AT LEAST 20 MCQs. Do not generate fewer than 20 of each, extracting as much detail as necessary from the text to reach this minimum.
 * Flashcards should capture the most important terms, concepts, definitions, processes, and formulas.
