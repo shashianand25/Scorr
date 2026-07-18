@@ -474,6 +474,40 @@ export function AppModals({ p }: { p: any }) {
       </Modal>
       )}
 
+      {/* ── Logout Confirm ── */}
+      {!!p.showLogoutConfirm && (
+      <Modal visible={true} animationType="fade" transparent onRequestClose={() => (p.setShowLogoutConfirm || (() => {}))(false)}>
+        <Pressable style={styles.centerModalBackdrop} onPress={() => (p.setShowLogoutConfirm || (() => {}))(false)}>
+          <View style={[styles.dialogCard, !p.settingsDarkMode && styles.lightModal]} onStartShouldSetResponder={() => true}>
+            <View style={[styles.dialogIcon, { backgroundColor: "rgba(99, 102, 241, 0.12)" }]}>
+              <Ionicons name="log-out-outline" size={28} color="#6366f1" />
+            </View>
+            <Text style={[styles.dialogTitle, !p.settingsDarkMode && styles.lightText]}>Log Out</Text>
+            <Text style={[styles.dialogDescription, !p.settingsDarkMode && styles.lightTextSub, { textAlign: "center", marginBottom: 20, lineHeight: 20 }]}>
+              Are you sure you want to log out of your account?
+            </Text>
+            <View style={styles.dialogButtons}>
+              <AnimatedPressable
+                onPress={() => (p.setShowLogoutConfirm || (() => {}))(false)}
+                style={[styles.dialogCancel, !p.settingsDarkMode && { borderColor: "rgba(0,0,0,0.15)" }]}
+              >
+                <Text style={[styles.dialogCancelText, !p.settingsDarkMode && styles.lightText]}>Cancel</Text>
+              </AnimatedPressable>
+              <AnimatedPressable
+                onPress={() => {
+                  (p.setShowLogoutConfirm || (() => {}))(false);
+                  if (p.handleLogout) p.handleLogout();
+                }}
+                style={[styles.dialogConfirm, { backgroundColor: "#ef4444", shadowColor: "#ef4444" }]}
+              >
+                <Text style={[styles.dialogConfirmText, { color: "#ffffff" }]}>Log Out</Text>
+              </AnimatedPressable>
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
+      )}
+
       {/* ── Delete Account Confirm ── */}
       {!!p.showDeleteAccountConfirm && (
       <Modal visible={true} animationType="fade" transparent onRequestClose={() => (p.setShowDeleteAccountConfirm || (() => {}))(false)}>
@@ -487,14 +521,14 @@ export function AppModals({ p }: { p: any }) {
               Are you sure you want to permanently delete your account and all associated data? This action cannot be undone.
             </Text>
             <View style={styles.dialogButtons}>
-              <Pressable
+              <AnimatedPressable
                 onPress={() => (p.setShowDeleteAccountConfirm || (() => {}))(false)}
                 disabled={p.deleteAccountLoading}
-                style={({ pressed }) => [styles.dialogCancel, !p.settingsDarkMode && { borderColor: "rgba(0,0,0,0.15)" }, pressed && styles.pressedScale]}
+                style={[styles.dialogCancel, !p.settingsDarkMode && { borderColor: "rgba(0,0,0,0.15)" }]}
               >
                 <Text style={[styles.dialogCancelText, !p.settingsDarkMode && styles.lightText]}>Cancel</Text>
-              </Pressable>
-              <Pressable
+              </AnimatedPressable>
+              <AnimatedPressable
                 onPress={async () => {
                   if (p.firebaseUser) {
                     (p.setDeleteAccountLoading || (() => {}))(true);
@@ -513,14 +547,14 @@ export function AppModals({ p }: { p: any }) {
                   }
                 }}
                 disabled={p.deleteAccountLoading}
-                style={({ pressed }) => [styles.dialogConfirm, { backgroundColor: "#ef4444", shadowColor: "#ef4444" }, pressed && styles.pressedScale]}
+                style={[styles.dialogConfirm, { backgroundColor: "#ef4444", shadowColor: "#ef4444" }]}
               >
                 {p.deleteAccountLoading ? (
                   <ActivityIndicator size="small" color="#ffffff" />
                 ) : (
                   <Text style={[styles.dialogConfirmText, { color: "#ffffff" }]}>Delete</Text>
                 )}
-              </Pressable>
+              </AnimatedPressable>
             </View>
           </View>
         </Pressable>
@@ -877,7 +911,7 @@ export function AppModals({ p }: { p: any }) {
       {!!p.showFeedbackPage && (
       <Modal visible={true} animationType="slide" transparent={false} onRequestClose={() => closeOrDismiss(() => (p.setShowFeedbackPage || (() => {}))(false))}>
         <KeyboardWrapper
-          style={{ flex: 1, backgroundColor: p.settingsDarkMode ? "#000000" : "#f4f4f8" }}
+          style={{ flex: 1, backgroundColor: p.settingsDarkMode ? "#0B0F1E" : "#f4f4f8" }}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
           keyboardVerticalOffset={0}
         >
@@ -886,7 +920,7 @@ export function AppModals({ p }: { p: any }) {
             <Pressable
               onPress={() => { (p.setShowFeedbackPage || (() => {}))(false); (p.setFeedbackText || (() => {}))(""); }}
               style={({ pressed }) => [{ padding: 8, borderRadius: 12,
-                backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)" }, pressed && styles.pressedScale]}
+                backgroundColor: p.settingsDarkMode ? "#141930" : "rgba(0,0,0,0.06)", borderWidth: 1, borderColor: p.settingsDarkMode ? "rgba(255,255,255,0.07)" : "transparent" }, pressed && styles.pressedScale]}
             >
               <Ionicons name="arrow-back" size={20} color={p.settingsDarkMode ? "#fff" : "#0d0f14"} />
             </Pressable>
@@ -896,17 +930,17 @@ export function AppModals({ p }: { p: any }) {
           <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 100 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             <View style={{
               borderRadius: 24, padding: 24, marginBottom: 20,
-              backgroundColor: p.settingsDarkMode ? "#121212" : "#ffffff",
-              borderWidth: 1, borderColor: p.settingsDarkMode ? "#222222" : "#e5e5ea",
+              backgroundColor: p.settingsDarkMode ? "#141930" : "#ffffff",
+              borderWidth: 1, borderColor: p.settingsDarkMode ? "rgba(255,255,255,0.07)" : "#e5e5ea",
             }}>
-              <View style={{ width: 56, height: 56, borderRadius: 18, backgroundColor: "rgba(59,130,246,0.12)",
+              <View style={{ width: 56, height: 56, borderRadius: 18, backgroundColor: "rgba(99,102,241,0.15)",
                 alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
-                <Ionicons name="chatbubble-ellipses-outline" size={26} color="#3b82f6" />
+                <Ionicons name="chatbubble-ellipses-outline" size={26} color="#818cf8" />
               </View>
               <Text style={{ fontSize: 22, fontWeight: "800", color: p.settingsDarkMode ? "#fff" : "#0d0f14", marginBottom: 6, letterSpacing: -0.3 }}>
                 {t('profile.feedback_title') || "Share your thoughts"}
               </Text>
-              <Text style={{ fontSize: 14, color: p.settingsDarkMode ? "#8888aa" : "#666677", lineHeight: 20 }}>
+              <Text style={{ fontSize: 14, color: p.settingsDarkMode ? "rgba(255,255,255,0.7)" : "#666677", lineHeight: 20 }}>
                 {t('profile.feedback_desc') || "Found a bug? Have a suggestion? Want a new feature? We're all ears."}
               </Text>
             </View>
@@ -917,18 +951,18 @@ export function AppModals({ p }: { p: any }) {
               placeholder={t('profile.feedback_placeholder') || "Tell us what you think…"}
               placeholderTextColor={p.settingsDarkMode ? "#555555" : "#c0c0d0"}
               style={{
-                backgroundColor: p.settingsDarkMode ? "#121212" : "#ffffff",
+                backgroundColor: p.settingsDarkMode ? "#141930" : "#ffffff",
                 borderRadius: 18, padding: 18,
                 color: p.settingsDarkMode ? "#fff" : "#0d0f14", fontSize: 15,
                 minHeight: 180, textAlignVertical: "top",
-                borderWidth: 1, borderColor: p.settingsDarkMode ? "#222222" : "#e5e5ea",
+                borderWidth: 1, borderColor: p.settingsDarkMode ? "rgba(255,255,255,0.07)" : "#e5e5ea",
                 marginBottom: 20,
               }}
               value={p.feedbackText}
               onChangeText={p.setFeedbackText}
             />
 
-            <Pressable
+            <AnimatedPressable
               onPress={async () => { 
                 if ((p.feedbackText || "").trim().length === 0) {
                   Alert.alert("Empty Feedback", "Please write something before sending.");
@@ -951,17 +985,17 @@ export function AppModals({ p }: { p: any }) {
                 }
               }}
               disabled={p.feedbackLoading}
-              style={({ pressed }) => [{
+              style={{
                 height: 54, borderRadius: 18, alignItems: "center", justifyContent: "center",
-                backgroundColor: p.feedbackLoading ? "#60a5fa" : "#3b82f6",
-              }, pressed && !p.feedbackLoading && styles.pressedScale]}
+                backgroundColor: p.feedbackLoading ? "#818cf8" : "#6366f1",
+              }}
             >
               {p.feedbackLoading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
                 <Text style={{ fontSize: 16, fontWeight: "700", color: "#fff" }}>{t('profile.send_feedback') || "Send Feedback"}</Text>
               )}
-            </Pressable>
+            </AnimatedPressable>
           </ScrollView>
         </KeyboardWrapper>
       </Modal>
@@ -1613,7 +1647,7 @@ export function AppModals({ p }: { p: any }) {
 
             {/* Block 1 (Main Actions) */}
             <View style={{
-              backgroundColor: p.settingsDarkMode ? "#252B43" : "#ffffff",
+              backgroundColor: p.settingsDarkMode ? "#20253B" : "#ffffff",
               borderRadius: 20,
               paddingVertical: 12,
               marginBottom: 16,
@@ -1681,10 +1715,10 @@ export function AppModals({ p }: { p: any }) {
                 scaleTo={0.97}
               >
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
-                  <Ionicons name="sparkles" size={28} color="#a855f7" />
+                  <Ionicons name="albums-outline" size={28} color="#a855f7" />
                   <View style={{ flexDirection: "column", flex: 1 }}>
                     <Text style={{ fontSize: 17, fontWeight: "600",
-                      color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>Generate with AI</Text>
+                      color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>Create flashcard and quiz</Text>
                   </View>
                 </View>
               </AnimatedPressable>
@@ -1712,7 +1746,7 @@ export function AppModals({ p }: { p: any }) {
 
             {/* Block 2 (Folder/Import) */}
             <View style={{
-              backgroundColor: p.settingsDarkMode ? "#252B43" : "#ffffff",
+              backgroundColor: p.settingsDarkMode ? "#20253B" : "#ffffff",
               borderRadius: 20,
               paddingVertical: 12,
             }}>
@@ -1983,19 +2017,19 @@ export function AppModals({ p }: { p: any }) {
 
       {!!p.showLanguageModal && (
       <Modal visible={true} animationType="slide" transparent={true} onRequestClose={() => (p.setShowLanguageModal || (() => {}))(false)}>
-        <View style={{ flex: 1, backgroundColor: p.settingsDarkMode ? "#090d14" : "#f0f2f5" }}>
+        <View style={{ flex: 1, backgroundColor: p.settingsDarkMode ? "#0B0F1E" : "#f0f2f5" }}>
           <SafeAreaView style={{ flex: 1 }}>
             {/* Header */}
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16 }}>
               <Text style={{ fontSize: 24, fontWeight: "600", color: p.settingsDarkMode ? "#fff" : "#111" }}>Language</Text>
-              <Pressable onPress={() => (p.setShowLanguageModal || (() => {}))(false)} style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: "rgba(16,185,129,0.15)", alignItems: "center", justifyContent: "center" }}>
-                <Ionicons name="close" size={20} color="#10b981" />
+              <Pressable onPress={() => (p.setShowLanguageModal || (() => {}))(false)} style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)", alignItems: "center", justifyContent: "center" }}>
+                <Ionicons name="close" size={20} color={p.settingsDarkMode ? "#fff" : "#111"} />
               </Pressable>
             </View>
 
             {/* Search */}
             <View style={{ paddingHorizontal: 20, paddingBottom: 16 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: p.settingsDarkMode ? "#1e293b" : "#e2e8f0", borderRadius: 8, paddingHorizontal: 12, height: 44, borderWidth: 1, borderColor: "rgba(16,185,129,0.3)" }}>
+              <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: p.settingsDarkMode ? "#141930" : "#ffffff", borderRadius: 8, paddingHorizontal: 12, height: 44, borderWidth: 1, borderColor: p.settingsDarkMode ? "rgba(99,102,241,0.3)" : "rgba(99,102,241,0.2)" }}>
                 <TextInput
                   placeholder="Search"
                   placeholderTextColor={p.settingsDarkMode ? "#64748b" : "#94a3b8"}
@@ -2004,7 +2038,7 @@ export function AppModals({ p }: { p: any }) {
                   onChangeText={p.setLanguageSearch}
                 />
               </View>
-              <View style={{ height: 2, backgroundColor: "#10b981", marginTop: -2, borderBottomLeftRadius: 8, borderBottomRightRadius: 8 }} />
+              <View style={{ height: 2, backgroundColor: "#6366f1", marginTop: -2, borderBottomLeftRadius: 8, borderBottomRightRadius: 8 }} />
             </View>
 
             {/* List */}
@@ -2046,8 +2080,8 @@ export function AppModals({ p }: { p: any }) {
                       </View>
                     </View>
                     {/* Radio Button */}
-                    <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: isSelected ? "#10b981" : (p.settingsDarkMode ? "#64748b" : "#cbd5e1"), alignItems: "center", justifyContent: "center" }}>
-                      {isSelected && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: "#10b981" }} />}
+                    <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: isSelected ? "#6366f1" : (p.settingsDarkMode ? "#64748b" : "#cbd5e1"), alignItems: "center", justifyContent: "center" }}>
+                      {isSelected && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: "#6366f1" }} />}
                     </View>
                   </Pressable>
                 );

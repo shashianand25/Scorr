@@ -5,7 +5,7 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 export const styles = StyleSheet.create({
   rootContainer: {
     flex: 1,
-    backgroundColor: "#0f172a",
+    backgroundColor: "#0B0F1E",
     overflow: "hidden",
   },
   screenContainer: {
@@ -14,7 +14,7 @@ export const styles = StyleSheet.create({
   },
   homeContainer: {
     flex: 1,
-    backgroundColor: "#0f172a",
+    backgroundColor: "#0B0F1E",
   },
   topHeaderBar: {
     flexDirection: "row",
@@ -439,7 +439,7 @@ export const styles = StyleSheet.create({
   },
   bottomTabBar: {
     flexDirection: "row",
-    backgroundColor: "#0f172a",
+    backgroundColor: "#0B0F1E",
     borderTopWidth: 1,
     borderTopColor: "rgba(255,255,255,0.02)",
     paddingTop: 10,
@@ -667,10 +667,10 @@ export const styles = StyleSheet.create({
     marginTop: 8,
   },
   webInputDummy: {
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
+    backgroundColor: "#141930",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.1)",
+    borderColor: "rgba(255, 255, 255, 0.07)",
     paddingHorizontal: 16,
     height: 48,
     justifyContent: "center",
@@ -707,7 +707,7 @@ export const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   createButton: {
-    backgroundColor: "#00e5a0",
+    backgroundColor: "#6366f1",
     height: 52,
     borderRadius: 26,
     alignItems: "center",
@@ -719,7 +719,7 @@ export const styles = StyleSheet.create({
     shadowRadius: 10,
   },
   createButtonText: {
-    color: "#000000",
+    color: "#ffffff",
     fontSize: 16,
     fontWeight: "bold",
   },
@@ -1160,7 +1160,7 @@ export const styles = StyleSheet.create({
   },
   sessionContainer: {
     flex: 1,
-    backgroundColor: "#0f172a",
+    backgroundColor: "#0B0F1E",
     paddingHorizontal: 20,
     paddingTop: 10,
   },

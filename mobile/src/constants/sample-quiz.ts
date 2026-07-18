@@ -2,7 +2,7 @@
 export const SAMPLE_QUIZ = {
   id: "sample_quiz",
   isSample: true,
-  title: "General Knowledge — Sample Quiz",
+  title: "Sample Set",
   category: "General",
   questions: 5,
   attempts: [] as any[],
@@ -19,6 +19,13 @@ export const SAMPLE_QUIZ = {
       answers: [{ id: "sq4a", text: "Michelangelo", isCorrect: false }, { id: "sq4b", text: "Leonardo da Vinci", isCorrect: true }, { id: "sq4c", text: "Raphael", isCorrect: false }, { id: "sq4d", text: "Vincent van Gogh", isCorrect: false }] },
     { id: "sq5", prompt: "What is the chemical symbol for water?",
       answers: [{ id: "sq5a", text: "O2", isCorrect: false }, { id: "sq5b", text: "HO", isCorrect: false }, { id: "sq5c", text: "H2O", isCorrect: true }, { id: "sq5d", text: "CO2", isCorrect: false }] },
+  ],
+  flashcards: [
+    { id: "sfc1", front: "What is the capital city of Japan?",   back: "Tokyo — the world's most populous metropolitan area." },
+    { id: "sfc2", front: "Which planet is called the Red Planet?", back: "Mars — its reddish colour comes from iron oxide (rust) on its surface." },
+    { id: "sfc3", front: "How many sides does a hexagon have?",   back: "6 sides — think of a honeycomb cell." },
+    { id: "sfc4", front: "Who painted the Mona Lisa?",            back: "Leonardo da Vinci — painted between 1503 and 1519." },
+    { id: "sfc5", front: "What is the chemical symbol for water?", back: "H₂O — two hydrogen atoms bonded to one oxygen atom." },
   ],
 };
 
