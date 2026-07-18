@@ -174,7 +174,7 @@ app.get('/api/mobile-quizzes', async (req, res) => {
     const quizzes = result.rows.map(r => ({
       ...r,
       questionCount: r.question_count,
-      sourceText: r.source_text,
+      sourceText: undefined, // Omit massive sourceText to save bandwidth and prevent RN chunking bugs
       wrongQuestions: typeof r.wrong_questions === 'string' ? JSON.parse(r.wrong_questions) : r.wrong_questions,
       uniqueCorrectIds: typeof r.unique_correct_ids === 'string' ? JSON.parse(r.unique_correct_ids) : r.unique_correct_ids,
       attempts: typeof r.attempts === 'string' ? JSON.parse(r.attempts) : r.attempts
@@ -195,7 +195,7 @@ app.post('/api/mobile-quizzes', async (req, res) => {
       [quizId, userId, title, category, questionCount || 0, sourceText || '', JSON.stringify(attempts || []), JSON.stringify(wrongQuestions || []), JSON.stringify(uniqueCorrectIds || [])]
     );
     const r = result.rows[0];
-    res.json({ quiz: { ...r, questionCount: r.question_count, sourceText: r.source_text } });
+    res.json({ quiz: { ...r, questionCount: r.question_count, sourceText: undefined } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -224,7 +224,7 @@ app.put('/api/mobile-quizzes', async (req, res) => {
     
     const result = await pool.query(query, values);
     const r = result.rows[0];
-    res.json({ quiz: r ? { ...r, questionCount: r.question_count, sourceText: r.source_text } : null });
+    res.json({ quiz: r ? { ...r, questionCount: r.question_count, sourceText: undefined } : null });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
