@@ -218,19 +218,19 @@ function AIGeneratingScreen({ onCancel }: { onCancel?: () => void }) {
         {/* Blinking Text */}
         <Animated.View style={{ marginBottom: 24, opacity: blink }}>
           <Text style={{
-            fontSize: elapsed >= 30 && elapsed < 60 ? 30 : 34, 
+            fontSize: elapsed >= 30 ? 26 : 34, 
             fontWeight: "800",
             textAlign: "center", 
             lineHeight: 42
           }}>
             {elapsed >= 60 ? (
               <>
-                <Text style={{ color: "#60A5FA" }}>Almost{"\n"}</Text>
+                <Text style={{ color: "#60A5FA" }}>Almost </Text>
                 <Text style={{ color: "#A78BFA" }}>there!</Text>
               </>
             ) : elapsed >= 30 ? (
               <>
-                <Text style={{ color: "#60A5FA" }}>⏳ Taking longer{"\n"}</Text>
+                <Text style={{ color: "#60A5FA" }}>⏳ Taking longer </Text>
                 <Text style={{ color: "#A78BFA" }}>than usual...</Text>
               </>
             ) : (
