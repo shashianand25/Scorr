@@ -286,118 +286,14 @@ app.post('/api/parse-ppt', upload.single('file'), async (req, res) => {
   }
 });
 
-// ── Gemini AI Generation ────────────────────────────────────────────────────
-const MCQ_PROMPT = (text) => `You are an expert educator and assessment designer.
-
-Convert the provided text into high-quality flashcards and multiple-choice questions for active recall.
-
-The provided text may be one chunk of a larger document.
-Generate flashcards and questions using only the information in the provided text.
-Do not assume information outside the provided text.
-
-### Content Generation
-
-* Generate exactly the same number of questions if the text already contains MCQs, recreating those MCQs only.
-* If the text does not contain MCQs, you MUST generate AT LEAST 20 Flashcards AND AT LEAST 20 MCQs. Do not generate fewer than 20 of each, extracting as much detail as necessary from the text to reach this minimum.
-* Flashcards should capture the most important terms, concepts, definitions, processes, and formulas.
-* MCQs should test understanding, application, or comparison rather than simple memorization.
-* Avoid duplicate or nearly identical content.
-
-### Answer Rules for MCQs
-* Each MCQ must have exactly one correct answer and exactly three incorrect answers.
-* Incorrect answers should be plausible, relevant, and clearly incorrect based on the provided text.
-
-### Output Format
-
-Output your response using the EXACT following format. First, output all flashcards under the ===FLASHCARDS=== header. Then, output all MCQs under the ===MCQS=== header.
-
-===FLASHCARDS===
-
-# Term or Concept 1
-= Definition or explanation 1
-
-# Term or Concept 2
-= Definition or explanation 2
-
-===MCQS===
-
-? Question 1
-
-+ Correct Answer
-
-- Wrong Answer
-- Wrong Answer
-- Wrong Answer
-- Wrong Answer
-
-### Formatting Rules
-
-* Every question must start with \`?\`.
-* The correct answer must start with \`+\`.
-* Every incorrect answer must start with \`-\`.
-* Do not number the questions.
-* Do not include explanations, headings, notes, or any extra text.
-* Output only the formatted questions.
-
-Text:
-${text}`;
-
-app.post('/api/generate-quiz', async (req, res) => {
-  const { text } = req.body;
-  if (!text) {
-    return res.status(400).json({ error: "No text provided for generation." });
+// ── Gemini Config ───────────────────────────────────────────────────────────
+app.get('/api/gemini-config', (req, res) => {
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+  if (!GEMINI_API_KEY) {
+    console.error("[Backend] Missing GEMINI_API_KEY environment variable.");
+    return res.status(500).json({ error: "Server is missing AI configuration.", devError: "Missing GEMINI_API_KEY" });
   }
-
-  try {
-    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-    if (!GEMINI_API_KEY) {
-      console.error("[Backend] Missing GEMINI_API_KEY environment variable.");
-      return res.status(500).json({ error: "Server is missing AI configuration.", devError: "Missing GEMINI_API_KEY" });
-    }
-
-    const GEMINI_URL = `https://asia-south1-aiplatform.googleapis.com/v1/projects/guardian-495515/locations/asia-south1/publishers/google/models/gemini-3.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-
-    const CHUNK_SIZE = 50000;
-    const chunks = [];
-    for (let i = 0; i < text.length; i += CHUNK_SIZE) chunks.push(text.slice(i, i + CHUNK_SIZE));
-    
-    const CONCURRENCY = 3;
-    const results = [];
-    
-    for (let i = 0; i < chunks.length; i += CONCURRENCY) {
-      const batch = chunks.slice(i, i + CONCURRENCY);
-      const batchResults = await Promise.all(
-        batch.map(chunk => fetch(GEMINI_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: MCQ_PROMPT(chunk) }] }],
-            generationConfig: { maxOutputTokens: 65536, temperature: 0.2 }
-          }),
-        }).then(async r => {
-          if (!r.ok) {
-            const errData = await r.json().catch(() => ({}));
-            throw new Error(errData?.error?.message || r.statusText || "Gemini API request failed");
-          }
-          const data = await r.json();
-          return data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        }))
-      );
-      results.push(...batchResults);
-    }
-    
-    const raw = results.join("\n");
-    res.json({ result: raw });
-  } catch (err) {
-    console.error("Gemini Generation Error:", err);
-    let errorMsg = "Failed to generate quiz. Please try again later.";
-    
-    if (err.message.includes("fetch") || err.message.includes("Network") || err.message.includes("ETIMEDOUT") || err.message.includes("Failed to fetch") || err.message.includes("ECONNREFUSED")) {
-      errorMsg = "Our AI provider is currently unreachable. Please try again in a few moments.";
-    }
-
-    res.status(500).json({ error: errorMsg, devError: err.message });
-  }
+  res.json({ key: GEMINI_API_KEY });
 });
 
 // ── App Updates ────────────────────────────────────────────────────────────
