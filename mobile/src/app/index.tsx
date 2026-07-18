@@ -152,6 +152,14 @@ const STEPS = [
 function AIGeneratingScreen({ onCancel }: { onCancel?: () => void }) {
   const sway = React.useRef(new Animated.Value(0)).current;
   const blink = React.useRef(new Animated.Value(1)).current;
+  const [elapsed, setElapsed] = React.useState(0);
+
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setElapsed((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   React.useEffect(() => {
     // Subtle sway animation
@@ -208,19 +216,37 @@ function AIGeneratingScreen({ onCancel }: { onCancel?: () => void }) {
 
         {/* Blinking Text */}
         <Animated.Text style={{
-          fontSize: 34, fontWeight: "800",
+          fontSize: elapsed >= 30 && elapsed < 60 ? 30 : 34, fontWeight: "800",
           textAlign: "center", marginBottom: 24, opacity: blink,
           lineHeight: 42
         }}>
-          <Text style={{ color: "#60A5FA" }}>Generating your{"\n"}</Text>
-          <Text style={{ color: "#A78BFA" }}>flashcards...</Text>
+          {elapsed >= 60 ? (
+            <>
+              <Text style={{ color: "#60A5FA" }}>Almost{"\n"}</Text>
+              <Text style={{ color: "#A78BFA" }}>there!</Text>
+            </>
+          ) : elapsed >= 30 ? (
+            <>
+              <Text style={{ color: "#60A5FA" }}>⏳ Taking longer{"\n"}</Text>
+              <Text style={{ color: "#A78BFA" }}>than usual...</Text>
+            </>
+          ) : (
+            <>
+              <Text style={{ color: "#60A5FA" }}>Generating your{"\n"}</Text>
+              <Text style={{ color: "#A78BFA" }}>flashcards...</Text>
+            </>
+          )}
         </Animated.Text>
 
         {/* Subtitle */}
         <Text style={{
           fontSize: 16, color: "rgba(255,255,255,0.9)", textAlign: "center", fontWeight: "500", lineHeight: 24, paddingHorizontal: 20
         }}>
-          The conversion may take a while depending on{"\n"}the size of your upload
+          {elapsed >= 60 
+            ? "Large PDFs can take a few minutes to process.\nThanks for your patience." 
+            : elapsed >= 30 
+              ? "Please wait while we finish\nprocessing your file." 
+              : "The conversion may take a while depending on\nthe size of your upload"}
         </Text>
       </View>
     </View>
