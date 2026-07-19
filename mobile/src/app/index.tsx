@@ -85,24 +85,66 @@ Convert the provided text into high-quality flashcards and multiple-choice quest
 
 The provided text may be one chunk of a larger document.
 Generate flashcards and questions using only the information in the provided text.
-Do not assume information outside the provided text.
+Do not assume, infer, or add information that is not explicitly present in the provided text.
 
 ### Content Generation
 
-* Cover the entire document. Every major topic or section should be represented by one or more flashcards and MCQs where appropriate. Do not ignore later sections of the text.
-* Generate exactly the same number of questions if the text already contains MCQs, recreating those MCQs only.
-* If the text does not contain MCQs, generate flashcards and MCQs based on the length and density of the text. If the document contains more information, generate as many high-quality items as necessary to comprehensively cover all major topics and concepts. Do not omit important information.
-* Flashcards should capture the most important terms, concepts, definitions, processes, and formulas.
-* MCQs should test understanding, application, or comparison rather than simple memorization.
-* Avoid duplicate or nearly identical content.
+* Cover the entire provided text exhaustively. Missing major concepts, sections, definitions, processes, examples, tables, lists, formulas, or comparisons is considered an incorrect response.
+* Treat the output as a complete study deck, not a summary.
+* Every major topic and subsection should be represented by one or more flashcards and one or more MCQs where appropriate.
+* If the provided text already contains MCQs, recreate exactly the same number of MCQs only. Do not create additional MCQs. You may still generate flashcards from the content.
+* If the text does not contain MCQs, generate original flashcards and MCQs based only on the provided text.
+* Generate at least **20 flashcards** and **20 MCQs** whenever the text contains enough information to support them.
+* If the text is information-dense, generate substantially more than 20 items. There is no upper limit. Continue generating unique flashcards and MCQs until nearly every meaningful fact has been converted into active recall.
+* If the text is too short to support 20 unique flashcards or 20 unique MCQs without repetition, generate the maximum number of high-quality, non-duplicate items possible.
+* Prioritize completeness over brevity. Missing important information is a worse error than generating additional high-quality questions.
+* Do not omit later sections of the text because of output length. Continue until the entire provided text has been covered.
 
-### Answer Rules for MCQs
-* Each MCQ must have exactly one correct answer and exactly three incorrect answers.
-* Incorrect answers should be plausible, relevant, and clearly incorrect based on the provided text.
+### Coverage Requirements
+
+* Convert nearly every meaningful piece of information into active recall whenever practical.
+* Create flashcards for:
+  * Definitions
+  * Key terms
+  * Important concepts
+  * Processes and sequences
+  * Classifications
+  * Formulas
+  * Comparisons
+  * Tables
+  * Lists
+  * Relationships
+* If a paragraph contains multiple independent facts, create multiple flashcards and multiple MCQs instead of combining them into one.
+* Long lists should be broken into multiple questions whenever appropriate.
+* Multi-step processes should generate separate questions for important steps whenever possible.
+* Comparisons should generate comparison-based MCQs.
+* Avoid combining several unrelated facts into a single flashcard or MCQ.
+* Prefer many focused questions over fewer broad questions.
+* Do not generate duplicate or nearly identical flashcards or MCQs.
+
+### Flashcard Rules
+
+* Flashcards should be concise while remaining complete.
+* Each flashcard should test one primary concept whenever possible.
+* Use clear terminology from the source text.
+* Do not include information not found in the provided text.
+
+### MCQ Rules
+
+* Every MCQ must assess understanding, application, identification, comparison, or recall based only on the provided text.
+* Avoid trivial wording changes from the flashcards whenever possible.
+* Each MCQ must have exactly one correct answer.
+* Each MCQ must contain exactly three incorrect answers.
+* Incorrect answers should be plausible, relevant, and clearly incorrect based only on the provided text.
+* Every major concept should usually produce at least one flashcard and one MCQ.
 
 ### Output Format
 
-Output your response using the EXACT following format. First, output all flashcards under the ===FLASHCARDS=== header. Then, output all MCQs under the ===MCQS=== header.
+Output your response using the EXACT following format.
+
+First output all flashcards under the ===FLASHCARDS=== header.
+
+Then output all MCQs under the ===MCQS=== header.
 
 ===FLASHCARDS===
 
@@ -121,16 +163,17 @@ Output your response using the EXACT following format. First, output all flashca
 - Wrong Answer
 - Wrong Answer
 - Wrong Answer
-- Wrong Answer
 
 ### Formatting Rules
 
-* Every question must start with \`?\`.
+* Every flashcard title must start with \`#\`.
+* Every flashcard answer must start with \`=\`.
+* Every MCQ must start with \`?\`.
 * The correct answer must start with \`+\`.
 * Every incorrect answer must start with \`-\`.
-* Do not number the questions.
-* Do not include explanations, headings, notes, or any extra text.
-* Output only the formatted questions.
+* Do not number flashcards or questions.
+* Do not include explanations, reasoning, notes, markdown, code fences, or extra headings beyond the required headers.
+* Output only the formatted flashcards and MCQs.
 
 Text:
 ${text}`;
@@ -5172,17 +5215,17 @@ export default function HomeScreen() {
                   {item.title}
                 </Text>
                 {isQuiz ? (
-                  <View style={{ flexDirection: "row", alignItems: "center" }}>
-                    <Text style={{ fontSize: 13, color: "#D1D5DB", fontWeight: "500", width: 100 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Text style={{ fontSize: 13, color: "#D1D5DB", fontWeight: "500" }}>
                       {questionCount} Question{questionCount !== 1 ? "s" : ""}
                     </Text>
-                    <Text style={{ fontSize: 13, color: "#D1D5DB", fontWeight: "500", width: 16, textAlign: "center" }}>
+                    <Text style={{ fontSize: 13, color: "#D1D5DB", fontWeight: "500" }}>
                       •
                     </Text>
-                    <Text style={{ fontSize: 13, color: "#D1D5DB", fontWeight: "500", width: 70 }}>
+                    <Text style={{ fontSize: 13, color: "#D1D5DB", fontWeight: "500" }}>
                       {cardCount} Card{cardCount !== 1 ? "s" : ""}
                     </Text>
-                    <Text style={{ fontSize: 13, color: "#D1D5DB", fontWeight: "500", width: 16, textAlign: "center" }}>
+                    <Text style={{ fontSize: 13, color: "#D1D5DB", fontWeight: "500" }}>
                       •
                     </Text>
                     <Text style={{ fontSize: 13, color: "#D1D5DB", fontWeight: "500" }}>
