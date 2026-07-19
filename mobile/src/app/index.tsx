@@ -81,7 +81,7 @@ const KeyboardWrapper = Platform.OS === "ios" ? KeyboardAvoidingView : View;
 
 const COMBINED_PROMPT = (text: string) => `You are an expert tutor and you need to get me full marks.
 
-Generate TWO sections based on the text below. You MUST extract every possible detail. Do NOT summarize or skip information. You are strictly required to generate AT LEAST the requested number of items. Do not stop early.
+Generate TWO sections based on the text below.
 
 ===FLASHCARDS===
 Generate at least {{MIN_FLASHCARDS}} flashcards covering all the given text.
@@ -3135,10 +3135,10 @@ export default function HomeScreen() {
       
       const GEMINI_URL = `https://asia-south1-aiplatform.googleapis.com/v1/projects/guardian-495515/locations/asia-south1/publishers/google/models/gemini-3.5-flash:generateContent?key=${key}`;
       
-      const CHUNK_SIZE = 60000;
+      const CHUNK_SIZE = 20000;
       let chunks: string[] = [];
       for (let i = 0; i < text.length; i += CHUNK_SIZE) chunks.push(text.slice(i, i + CHUNK_SIZE));
-      if (chunks.length > 5) chunks = chunks.slice(0, 5); // Max 300k chars
+      if (chunks.length > 8) chunks = chunks.slice(0, 8); // Max 160k chars
       console.log(`[AI Generation] Document split into ${chunks.length} chunk(s) (Chunk size: ${CHUNK_SIZE} chars)`);
       const CONCURRENCY = chunks.length || 1;
       const results: string[] = [];
@@ -3167,15 +3167,12 @@ export default function HomeScreen() {
             } else if (docSize >= 15000 && docSize < 20000) {
               minFlashcards = "32-41";
               expectedFlashcards = "32-49";
-            } else if (docSize >= 20000 && docSize < 40000) {
-              minFlashcards = "45-55";
-              expectedFlashcards = "45-65";
-            } else if (docSize >= 40000 && docSize < 60000) {
-              minFlashcards = "60-70";
-              expectedFlashcards = "60-80";
+            } else if (docSize >= 20000 && docSize < 25000) {
+              minFlashcards = "41-49";
+              expectedFlashcards = "41-61";
             } else {
-              minFlashcards = "75-90";
-              expectedFlashcards = "75-100";
+              minFlashcards = "49-61";
+              expectedFlashcards = "49-73";
             }
 
             const scaleRangeBy1_3 = (rangeStr: string): string => {
