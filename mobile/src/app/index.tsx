@@ -251,7 +251,7 @@ function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true }: 
         </View>
 
         {showLongWait && (
-          <Text style={{ marginTop: 12, color: isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.4)", fontSize: 13, fontStyle: 'italic', position: 'absolute', bottom: -30 }}>
+          <Text style={{ marginTop: 12, color: isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.4)", fontSize: 13, fontStyle: 'italic' }}>
             Taking longer than usual...
           </Text>
         )}
