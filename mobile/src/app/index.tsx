@@ -3082,13 +3082,6 @@ export default function HomeScreen() {
   const handleGenerateWithAI = async (text: string, fileName: string) => {
     isBackgroundGen.current = false;
     setAiGenPhase("generating");
-    console.log("[Text Extraction Debug]", {
-      fileName,
-      characterCount: text ? text.length : 0,
-      wordCount: text ? text.split(/\s+/).filter(Boolean).length : 0,
-      sampleStart: text ? text.substring(0, 300) : "",
-      sampleEnd: text ? text.substring(Math.max(0, text.length - 300)) : ""
-    });
     try {
       const { key, prompt: backendPrompt, error: keyError } = await fetchGeminiKey();
       if (keyError || !key) {
