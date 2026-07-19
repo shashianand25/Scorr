@@ -39,7 +39,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Buffer } from "buffer";
 import * as mammoth from "mammoth/mammoth.browser.js";
 import { signInWithGoogle, signInWithEmail, signUpWithEmail, signOutUser, onAuth, deleteAccount, resetPassword, type User } from "../lib/firebase";
-import { syncUserToNeon, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz, deleteUserFromNeon, sendFeedback, saveBattleHistory, fetchBattleHistory, parsePdfFromBackend, parsePptFromBackend, fetchGeminiKey, generateQuizFromBackend } from "../lib/api";
+import { syncUserToNeon, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz, deleteUserFromNeon, sendFeedback, saveBattleHistory, fetchBattleHistory, parsePdfFromBackend, parsePptFromBackend, fetchGeminiKey } from "../lib/api";
 import { getUserErrorMessage } from "../utils/errors";
 import { createBattleRoom, joinBattleRoom, updateBattleScore, finishBattle, markPlayerFinished, listenToBattleRoom, getBattleRoom, type BattleRoom } from "../lib/multiplayer";
 import NetInfo from "@react-native-community/netinfo";
@@ -78,10 +78,7 @@ const deleteFlashcardDeck = async (..._args: any[]) => ({ error: null });
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const KeyboardWrapper = Platform.OS === "ios" ? KeyboardAvoidingView : View;
 
-const MCQ_PROMPT = (text: string) => `You are an expert tutor and you need to get me full marks.
-
-First output all flashcards under the ===FLASHCARDS=== header.
-Then output all quiz questions under the ===MCQS=== header.
+const FLASHCARD_PROMPT = (text: string) => `You are an expert tutor and you need to get me full marks.
 
 ===FLASHCARDS===
 Generate at least {{MIN_FLASHCARDS}} flashcards covering all the given text.
@@ -89,6 +86,13 @@ Flashcards are TERM → DEFINITION, NOT question → answer.
 Example:
 # What is the SI unit of force?
 = Newton
+
+If this is a list of questions generate exactly that many flashcards as given.
+
+Text:
+${text}`;
+
+const MCQ_ONLY_PROMPT = (text: string) => `You are an expert tutor and you need to get me full marks.
 
 ===MCQS===
 Generate at least {{MIN_MCQS}} quiz covering all the given text.
@@ -99,7 +103,7 @@ Example:
 - Pascal
 - Watt
 
-If this is a list of questions generate exactly that many questions and flashcards as given.
+If this is a list of questions generate exactly that many questions as given.
 
 Text:
 ${text}`;
@@ -121,18 +125,12 @@ const STEPS = [
 
 function AIGeneratingScreen({ onCancel }: { onCancel?: () => void }) {
   const sway = React.useRef(new Animated.Value(0)).current;
-  const blink = React.useRef(new Animated.Value(1)).current;
-  const [elapsed, setElapsed] = React.useState(0);
+  const blink = React.useRef(new Animated.Value(0)).current; // Start at 0 for full vanish
+  const progress = React.useRef(new Animated.Value(0)).current;
+  const dotIndex = React.useRef(new Animated.Value(0)).current;
 
   React.useEffect(() => {
-    const interval = setInterval(() => {
-      setElapsed((prev) => prev + 1);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  React.useEffect(() => {
-    // Subtle sway animation
+    // Subtle sway animation for the card
     Animated.loop(
       Animated.sequence([
         Animated.timing(sway, { toValue: -1, duration: 2500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
@@ -140,87 +138,126 @@ function AIGeneratingScreen({ onCancel }: { onCancel?: () => void }) {
       ])
     ).start();
 
-    // Blink text
+    // Blink text fully vanishes (0 to 1)
     Animated.loop(
       Animated.sequence([
-        Animated.timing(blink, { toValue: 0.4, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(blink, { toValue: 1, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true })
+        Animated.timing(blink, { toValue: 1, duration: 1200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(blink, { toValue: 0, duration: 1200, easing: Easing.inOut(Easing.ease), useNativeDriver: true })
       ])
+    ).start();
+
+    // Fake progress bar filling over 15 seconds
+    Animated.timing(progress, {
+      toValue: 1,
+      duration: 15000,
+      easing: Easing.out(Easing.ease),
+      useNativeDriver: false 
+    }).start();
+    
+    // Dot pagination animation
+    Animated.loop(
+      Animated.timing(dotIndex, {
+        toValue: 3,
+        duration: 2000,
+        easing: Easing.linear,
+        useNativeDriver: false
+      })
     ).start();
   }, []);
 
-  const swayRotateFront = sway.interpolate({ inputRange: [-1, 1], outputRange: ["-18deg", "-12deg"] });
-  const swayTranslateXFront = sway.interpolate({ inputRange: [-1, 1], outputRange: [-2, 2] });
+  const swayRotate = sway.interpolate({ inputRange: [-1, 1], outputRange: ["-6deg", "6deg"] });
+  const swayTranslateY = sway.interpolate({ inputRange: [-1, 1], outputRange: [-5, 5] });
+  
+  const barWidth = progress.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] });
+
+  const getDotStyle = (idx: number) => {
+    const opacity = dotIndex.interpolate({
+      inputRange: [idx - 1, idx, idx + 1],
+      outputRange: [0.3, 1, 0.3],
+      extrapolate: 'clamp'
+    });
+    return { opacity };
+  };
 
   return (
     <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: "#0A0B14", alignItems: "center", justifyContent: "center", zIndex: 99999, paddingHorizontal: 16 }}>
+      backgroundColor: "#0B0D17", alignItems: "center", justifyContent: "center", zIndex: 99999 }}>
       
+      {/* Background Stars (fake) */}
+      <View style={{ position: 'absolute', top: '20%', left: '25%', width: 3, height: 3, borderRadius: 1.5, backgroundColor: '#6C7491', opacity: 0.4 }} />
+      <View style={{ position: 'absolute', top: '28%', right: '20%', width: 2, height: 2, borderRadius: 1, backgroundColor: '#6C7491', opacity: 0.3 }} />
+      <View style={{ position: 'absolute', top: '56%', right: '25%', width: 3, height: 3, borderRadius: 1.5, backgroundColor: '#6C7491', opacity: 0.4 }} />
+      <View style={{ position: 'absolute', top: '62%', left: '25%', width: 2, height: 2, borderRadius: 1, backgroundColor: '#6C7491', opacity: 0.2 }} />
+      <View style={{ position: 'absolute', bottom: '26%', right: '35%', width: 2, height: 2, borderRadius: 1, backgroundColor: '#6C7491', opacity: 0.3 }} />
+      <View style={{ position: 'absolute', bottom: '24%', left: '35%', width: 3, height: 3, borderRadius: 1.5, backgroundColor: '#6C7491', opacity: 0.4 }} />
+
       {/* Back button */}
       <SafeAreaView style={{ position: "absolute", top: 0, left: 0, right: 0 }}>
-        <Pressable onPress={onCancel} style={{ padding: 24 }}>
-          <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
+        <Pressable onPress={onCancel} style={{ padding: 24, paddingTop: Platform.OS === 'android' ? 40 : 24 }}>
+          <Ionicons name="chevron-back" size={32} color="#FFFFFF" />
         </Pressable>
       </SafeAreaView>
 
       <View style={{ alignItems: "center", marginTop: -60, width: "100%" }}>
-        {/* Animated Stacked Cards Icon */}
-        <View style={{ width: 100, height: 100, alignItems: "center", justifyContent: "center", marginBottom: 30 }}>
-          {/* Back Card (Cyan) */}
-          <View style={{
-            position: "absolute", width: 50, height: 70, borderRadius: 8,
-            backgroundColor: "#48CAE4",
-            transform: [{ rotate: "15deg" }, { translateX: 12 }, { translateY: 4 }],
-          }} />
-          {/* Front Card (Blue) animated */}
+        
+        {/* Center Icon & Rings */}
+        <View style={{ width: 220, height: 220, alignItems: "center", justifyContent: "center", marginBottom: 20 }}>
+          {/* Ring 1 */}
+          <View style={{ position: 'absolute', width: 200, height: 200, borderRadius: 100, borderWidth: 1, borderColor: "rgba(255,255,255,0.03)" }} />
+          {/* Ring 2 */}
+          <View style={{ position: 'absolute', width: 140, height: 140, borderRadius: 70, borderWidth: 1, borderColor: "rgba(255,255,255,0.06)" }} />
+          
+          {/* Flashcard */}
           <Animated.View style={{
-            position: "absolute", width: 56, height: 76, borderRadius: 8,
-            backgroundColor: "#4263EB",
+            width: 90, height: 124, borderRadius: 12,
+            backgroundColor: "#20154D",
+            borderWidth: 1.5, borderColor: "#4C3896",
+            alignItems: 'center', justifyContent: 'center',
             transform: [
-              { rotate: swayRotateFront }, 
-              { translateX: swayTranslateXFront },
-              { translateY: -4 }
-            ]
-          }} />
+              { rotate: swayRotate },
+              { translateY: swayTranslateY }
+            ],
+            shadowColor: '#4C3896', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 20
+          }}>
+             <Ionicons name="flash" size={54} color="#E5D9FF" style={{ transform: [{ skewX: "-5deg" }] }} />
+             {/* Faint lines on card */}
+             <View style={{ position: 'absolute', left: 14, top: 24, width: 30, height: 1.5, backgroundColor: 'rgba(229,217,255,0.2)' }} />
+             <View style={{ position: 'absolute', left: 14, top: 38, width: 50, height: 1.5, backgroundColor: 'rgba(229,217,255,0.2)' }} />
+          </Animated.View>
         </View>
 
         {/* Blinking Text */}
-        <Animated.View style={{ marginBottom: 24, opacity: blink }}>
+        <Animated.View style={{ marginBottom: 20, opacity: blink }}>
           <Text style={{
-            fontSize: elapsed >= 30 ? 26 : 34, 
+            fontSize: 30, 
             fontWeight: "800",
             textAlign: "center", 
-            lineHeight: 42
+            lineHeight: 38,
+            color: "#E5DAFF"
           }}>
-            {elapsed >= 60 ? (
-              <>
-                <Text style={{ color: "#60A5FA" }}>Almost </Text>
-                <Text style={{ color: "#A78BFA" }}>there!</Text>
-              </>
-            ) : elapsed >= 30 ? (
-              <>
-                <Text style={{ color: "#60A5FA" }}>⏳ Taking longer </Text>
-                <Text style={{ color: "#A78BFA" }}>than usual...</Text>
-              </>
-            ) : (
-              <>
-                <Text style={{ color: "#60A5FA" }}>Generating your{"\n"}</Text>
-                <Text style={{ color: "#A78BFA" }}>flashcards...</Text>
-              </>
-            )}
+            Generating your{"\n"}flashcards...
           </Text>
         </Animated.View>
 
         {/* Subtitle */}
         <Text style={{
-          fontSize: 16, color: "rgba(255,255,255,0.9)", textAlign: "center", fontWeight: "500", lineHeight: 24, paddingHorizontal: 20
+          fontSize: 16, color: "#7B88A0", textAlign: "center", fontWeight: "500", lineHeight: 24, paddingHorizontal: 20, marginBottom: 50
         }}>
-          {elapsed >= 60 
-            ? "Large PDFs can take a few minutes to process.\nThanks for your patience." 
-            : elapsed >= 30 
-              ? "Please wait while we finish\nprocessing your file." 
-              : "The conversion may take a while depending on\nthe size of your upload"}
+          This might take a moment{"\n"}depending on your upload size
         </Text>
+
+        {/* Dots Pagination */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 24, gap: 10 }}>
+          <Animated.View style={[{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#846BFE" }, getDotStyle(0.5)]} />
+          <Animated.View style={[{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#846BFE" }, getDotStyle(1.5)]} />
+          <Animated.View style={[{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#846BFE" }, getDotStyle(2.5)]} />
+        </View>
+
+        {/* Progress Bar Track */}
+        <View style={{ width: 220, height: 4, borderRadius: 2, backgroundColor: "#201D38", overflow: 'hidden' }}>
+          <Animated.View style={{ width: barWidth, height: '100%', backgroundColor: "#5D45A5", borderRadius: 2 }} />
+        </View>
+
       </View>
     </View>
   );
@@ -1731,7 +1768,7 @@ export default function HomeScreen() {
       setSampleDismissed(true);
       AsyncStorage.setItem("quizforge_sample_dismissed", "1");
       setViewingInsightsQuiz(null);
-      setActiveTab("home");
+      setActiveTab(viewingInsightsQuizFromTab as any || "home");
       return;
     }
 
@@ -1755,7 +1792,7 @@ export default function HomeScreen() {
     const updatedQuizzes = quizzes.filter((q) => q.id !== quizId);
     setQuizzes(updatedQuizzes);
     setViewingInsightsQuiz(null);
-    setActiveTab("home");
+    setActiveTab(viewingInsightsQuizFromTab as any || "home");
   };
 
   const renderTrendsChart = (attempts: any[]) => {
@@ -3095,6 +3132,13 @@ export default function HomeScreen() {
     isBackgroundGen.current = false;
     setAiGenPhase("generating");
     try {
+      const { key, prompt: backendPrompt, error: keyError } = await fetchGeminiKey();
+      if (keyError || !key) {
+        throw new Error(keyError || "Could not fetch AI configuration from server.");
+      }
+      
+      const GEMINI_URL = `https://asia-south1-aiplatform.googleapis.com/v1/projects/guardian-495515/locations/asia-south1/publishers/google/models/gemini-3.5-flash:generateContent?key=${key}`;
+      
       const CHUNK_SIZE = 30000;
       const chunks: string[] = [];
       for (let i = 0; i < text.length; i += CHUNK_SIZE) chunks.push(text.slice(i, i + CHUNK_SIZE));
@@ -3104,12 +3148,65 @@ export default function HomeScreen() {
       for (let i = 0; i < chunks.length; i += CONCURRENCY) {
         const batch = chunks.slice(i, i + CONCURRENCY);
         const batchResults = await Promise.all(
-          batch.map(async chunk => {
-            const { text: generatedText, error } = await generateQuizFromBackend(chunk);
-            if (error || !generatedText) {
-              throw new Error(error || "Failed to connect to server.");
+          batch.map(chunk => {
+            const docSize = chunk.length;
+            let minFlashcards = "20";
+            let minMcqs = "20";
+            let expectedFlashcards = "20-30";
+            let expectedMcqs = "20-30";
+
+            if (docSize < 2000) {
+              minFlashcards = "10-15";
+              expectedFlashcards = "12-18";
+            } else if (docSize >= 2000 && docSize < 5000) {
+              minFlashcards = "20-25";
+              expectedFlashcards = "24-30";
+            } else if (docSize >= 5000 && docSize < 10000) {
+              minFlashcards = "24-30";
+              expectedFlashcards = "24-36";
+            } else if (docSize >= 10000 && docSize < 15000) {
+              minFlashcards = "36-42";
+              expectedFlashcards = "36-54";
+            } else if (docSize >= 15000 && docSize < 20000) {
+              minFlashcards = "48-60";
+              expectedFlashcards = "48-72";
+            } else if (docSize >= 20000 && docSize < 25000) {
+              minFlashcards = "60-72";
+              expectedFlashcards = "60-90";
+            } else {
+              minFlashcards = "72-90";
+              expectedFlashcards = "72-108";
             }
-            return generatedText;
+
+            const scaleRangeBy1_3 = (rangeStr: string): string => {
+              const parts = rangeStr.split("-").map(Number);
+              if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                const low = Math.round(parts[0] * 1.3);
+                const high = Math.round(parts[1] * 1.3);
+                return `${low}-${high}`;
+              }
+              return rangeStr;
+            };
+
+            minMcqs = scaleRangeBy1_3(minFlashcards);
+            expectedMcqs = scaleRangeBy1_3(expectedFlashcards);
+
+            let flashcardPrompt = FLASHCARD_PROMPT(chunk);
+            flashcardPrompt = flashcardPrompt.replace(/\{\{MIN_FLASHCARDS\}\}/g, minFlashcards);
+            flashcardPrompt = flashcardPrompt.replace(/\{\{EXPECTED_FLASHCARDS\}\}/g, expectedFlashcards);
+
+            let mcqPrompt = MCQ_ONLY_PROMPT(chunk);
+            mcqPrompt = mcqPrompt.replace(/\{\{MIN_MCQS\}\}/g, minMcqs);
+            mcqPrompt = mcqPrompt.replace(/\{\{EXPECTED_MCQS\}\}/g, expectedMcqs);
+
+            const fetchGen = (prompt: string) => fetch(GEMINI_URL, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 65536, temperature: 0.2 } }),
+            }).then(async r => { if (!r.ok) throw new Error((await r.json())?.error?.message || r.statusText); return (await r.json())?.candidates?.[0]?.content?.parts?.[0]?.text || ""; });
+
+            // Run both in parallel
+            return Promise.all([fetchGen(flashcardPrompt), fetchGen(mcqPrompt)]).then(([fcText, mcqText]) => `${fcText}\n\n${mcqText}`);
           })
         );
         results.push(...batchResults);
@@ -7537,9 +7634,6 @@ export default function HomeScreen() {
                       <Text style={{ fontSize: 18, fontWeight: "700", color: txt, marginBottom: 2 }}>
                         Continue learning
                       </Text>
-                      <Text style={{ fontSize: 13, color: muted }}>
-                        In-progress decks or new decks waiting to start
-                      </Text>
                     </View>
 
                     <ScrollView
@@ -8167,7 +8261,7 @@ export default function HomeScreen() {
         activeSession, setActiveSession, starredQuestions, setStarredQuestions,
         handleOpenQuizOptions, handleShareQuiz, handleStartQuiz, handleFinishSession,
         handleImportQst, handleDeleteAttemptOnMobile, saveAndExitQuizSession, handleClearHistoryOnMobile,
-        setActiveTab, setViewingInsightsQuiz, setViewingInsightsDeck, setViewingInsightsQuizFromTab,
+        setActiveTab, setViewingInsightsQuiz, setViewingInsightsDeck, setViewingInsightsQuizFromTab, viewingInsightsQuizFromTab,
         selectionMode, setSelectionMode, randomCount, setRandomCount,
         rangeStart, setRangeStart, rangeEnd, setRangeEnd,
         shuffleQuestions, setShuffleQuestions, shuffleAnswers, setShuffleAnswers,

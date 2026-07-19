@@ -404,7 +404,7 @@ export function AppModals({ p }: { p: any }) {
 
                     (p.setQuizzes || (() => {}))((p.quizzes || []).filter((q: any) => q.id !== p.deletingQuizConfirm.id));
                     (p.setViewingInsightsQuiz || (() => {}))(null);
-                    (p.setActiveTab || (() => {}))("home");
+                    (p.setActiveTab || (() => {}))(p.viewingInsightsQuizFromTab as any || "home");
                     (p.setDeletingQuizConfirm || (() => {}))(null);
                     // Delete from Neon if logged in and quiz is synced
                     const neonId = p.deletingQuizConfirm.neonId ?? p.deletingQuizConfirm.id;
