@@ -18,5 +18,5 @@ export function getUserErrorMessage(error: any): string {
     return "Unable to connect to your account right now. Please try again.";
   }
 
-  return "Something went wrong. Please try again.";
+  return `Something went wrong. Please try again. (${msg})`;
 }

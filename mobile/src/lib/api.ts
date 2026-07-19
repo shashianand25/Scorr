@@ -311,9 +311,23 @@ export async function deleteMobileQuiz(
 /**
  * Fetches the Gemini API key and prompt from the backend to securely use on the client.
  */
+/**
+ * Fetches the gemini key directly (deprecated/legacy).
+ */
 export async function fetchGeminiKey(): Promise<{ key: string | null; prompt: string | null; error: string | null }> {
   const { data, error } = await apiFetch<{ key: string; prompt: string }>("/api/gemini-config");
   return { key: data?.key ?? null, prompt: data?.prompt ?? null, error };
+}
+
+/**
+ * Generates a quiz from the backend securely.
+ */
+export async function generateQuizFromBackend(text: string): Promise<{ text: string | null; error: string | null }> {
+  const { data, error } = await apiFetch<{ text: string }>("/api/generate-quiz", {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });
+  return { text: data?.text ?? null, error };
 }
 
 // ── App Updates ────────────────────────────────────────────────────────

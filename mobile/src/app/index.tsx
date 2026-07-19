@@ -39,7 +39,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Buffer } from "buffer";
 import * as mammoth from "mammoth/mammoth.browser.js";
 import { signInWithGoogle, signInWithEmail, signUpWithEmail, signOutUser, onAuth, deleteAccount, resetPassword, type User } from "../lib/firebase";
-import { syncUserToNeon, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz, deleteUserFromNeon, sendFeedback, saveBattleHistory, fetchBattleHistory, parsePdfFromBackend, parsePptFromBackend, fetchGeminiKey } from "../lib/api";
+import { syncUserToNeon, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz, deleteUserFromNeon, sendFeedback, saveBattleHistory, fetchBattleHistory, parsePdfFromBackend, parsePptFromBackend, fetchGeminiKey, generateQuizFromBackend } from "../lib/api";
 import { getUserErrorMessage } from "../utils/errors";
 import { createBattleRoom, joinBattleRoom, updateBattleScore, finishBattle, markPlayerFinished, listenToBattleRoom, getBattleRoom, type BattleRoom } from "../lib/multiplayer";
 import NetInfo from "@react-native-community/netinfo";
@@ -3095,13 +3095,6 @@ export default function HomeScreen() {
     isBackgroundGen.current = false;
     setAiGenPhase("generating");
     try {
-      const { key, prompt: backendPrompt, error: keyError } = await fetchGeminiKey();
-      if (keyError || !key) {
-        throw new Error(keyError || "Could not fetch AI configuration from server.");
-      }
-      
-      const GEMINI_URL = `https://asia-south1-aiplatform.googleapis.com/v1/projects/guardian-495515/locations/asia-south1/publishers/google/models/gemini-3.5-flash:generateContent?key=${key}`;
-      
       const CHUNK_SIZE = 30000;
       const chunks: string[] = [];
       for (let i = 0; i < text.length; i += CHUNK_SIZE) chunks.push(text.slice(i, i + CHUNK_SIZE));
@@ -3111,79 +3104,19 @@ export default function HomeScreen() {
       for (let i = 0; i < chunks.length; i += CONCURRENCY) {
         const batch = chunks.slice(i, i + CONCURRENCY);
         const batchResults = await Promise.all(
-          batch.map(chunk => {
-            const docSize = chunk.length;
-            let minFlashcards = "20";
-            let minMcqs = "20";
-            let expectedFlashcards = "20-30";
-            let expectedMcqs = "20-30";
-
-            if (docSize < 2000) {
-              minFlashcards = "10-15";
-              expectedFlashcards = "12-18";
-            } else if (docSize >= 2000 && docSize < 5000) {
-              minFlashcards = "20-25";
-              expectedFlashcards = "24-30";
-            } else if (docSize >= 5000 && docSize < 10000) {
-              minFlashcards = "24-30";
-              expectedFlashcards = "24-36";
-            } else if (docSize >= 10000 && docSize < 15000) {
-              minFlashcards = "36-42";
-              expectedFlashcards = "36-54";
-            } else if (docSize >= 15000 && docSize < 20000) {
-              minFlashcards = "48-60";
-              expectedFlashcards = "48-72";
-            } else if (docSize >= 20000 && docSize < 25000) {
-              minFlashcards = "60-72";
-              expectedFlashcards = "60-90";
-            } else {
-              minFlashcards = "72-90";
-              expectedFlashcards = "72-108";
+          batch.map(async chunk => {
+            const { text: generatedText, error } = await generateQuizFromBackend(chunk);
+            if (error || !generatedText) {
+              throw new Error(error || "Failed to connect to server.");
             }
-
-            const scaleRangeBy1_3 = (rangeStr: string): string => {
-              const parts = rangeStr.split("-").map(Number);
-              if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-                const low = Math.round(parts[0] * 1.3);
-                const high = Math.round(parts[1] * 1.3);
-                return `${low}-${high}`;
-              }
-              return rangeStr;
-            };
-
-            minMcqs = scaleRangeBy1_3(minFlashcards);
-            expectedMcqs = scaleRangeBy1_3(expectedFlashcards);
-
-            const promptTemplate = backendPrompt || MCQ_PROMPT("");
-            let fullPrompt = promptTemplate;
-            fullPrompt = fullPrompt.replace(/\{\{CHAR_COUNT\}\}/g, String(docSize));
-            fullPrompt = fullPrompt.replace(/\{\{MIN_FLASHCARDS\}\}/g, minFlashcards);
-            fullPrompt = fullPrompt.replace(/\{\{MIN_MCQS\}\}/g, minMcqs);
-            fullPrompt = fullPrompt.replace(/\{\{EXPECTED_FLASHCARDS\}\}/g, expectedFlashcards);
-            fullPrompt = fullPrompt.replace(/\{\{EXPECTED_MCQS\}\}/g, expectedMcqs);
-
-            if (fullPrompt.includes("[PASTE YOUR TEXT HERE]")) {
-              fullPrompt = fullPrompt.replace("[PASTE YOUR TEXT HERE]", chunk);
-            } else if (fullPrompt.includes("{{TEXT}}")) {
-              fullPrompt = fullPrompt.replace("{{TEXT}}", chunk);
-            } else if (fullPrompt.includes("[The extracted document text is inserted here]")) {
-              fullPrompt = fullPrompt.replace("[The extracted document text is inserted here]", chunk);
-            } else {
-              fullPrompt = backendPrompt ? `${fullPrompt}\n\nText:\n${chunk}` : MCQ_PROMPT(chunk);
-            }
-
-            return fetch(GEMINI_URL, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: fullPrompt }] }], generationConfig: { maxOutputTokens: 65536, temperature: 0.2 } }),
-            }).then(async r => { if (!r.ok) throw new Error((await r.json())?.error?.message || r.statusText); return (await r.json())?.candidates?.[0]?.content?.parts?.[0]?.text || ""; });
+            return generatedText;
           })
         );
         results.push(...batchResults);
       }
       const raw = results.join("\n");
       const parsed = parseQstText(raw);
-      if (parsed.questions.length === 0) throw new Error("Gemini didn't return any valid questions.");
+      if (parsed.questions.length === 0) throw new Error("AI didn't return any valid questions.");
       const localId = `ai_${Date.now()}_${Math.random().toString(36).slice(2)}`;
       const title = (parsed.title || fileName).replace(/\.[^.]+$/, "");
       const newQuiz: any = { id: localId, title, questions: parsed.questions.length, category: "AI Generated", time: "Just now", flashcards: parsed.flashcards || [], questionsList: parsed.questions.map((q: any) => ({ ...q, answers: [...q.answers].sort(() => Math.random() - 0.5) })), attempts: [], wrongQuestions: [], uniqueCorrectIds: [] };
@@ -3212,8 +3145,8 @@ export default function HomeScreen() {
         isBackgroundGen.current = false;
       }
       let errMsg = err.message || "Unknown error";
-      if (errMsg.includes("generativelanguage.googleapis.com") || errMsg.includes("UnknownHostException") || errMsg.includes("Network request failed")) {
-         errMsg = "Network error: Please check your internet connection.";
+      if (errMsg.includes("generativelanguage.googleapis.com") || errMsg.includes("UnknownHostException") || errMsg.includes("Network request failed") || errMsg.toLowerCase().includes("failed to fetch") || errMsg.includes("Failed to connect to server")) {
+         errMsg = "Failed to connect to server. Please check your internet connection.";
       }
       if (Platform.OS === "web") alert("AI generation failed: " + errMsg);
       else Alert.alert("Generation Failed", typeof __DEV__ !== 'undefined' && __DEV__ ? errMsg : getUserErrorMessage(errMsg));
