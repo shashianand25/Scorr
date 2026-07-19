@@ -89,7 +89,7 @@ export function parseQstText(text: string): { title: string; category: string; q
     const trimmed = line.trim();
     if (!trimmed) continue;
 
-    let nextSection = currentSection;
+    let nextSection: "NONE" | "FLASHCARDS" | "MCQS" = currentSection;
 
     if (trimmed.startsWith("===") && trimmed.endsWith("===")) {
       const sec = trimmed.replace(/=/g, "").trim().toUpperCase();

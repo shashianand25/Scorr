@@ -3119,26 +3119,26 @@ export default function HomeScreen() {
             let expectedMcqs = "20-30";
 
             if (docSize < 2000) {
-              minFlashcards = "5-8";
-              expectedFlashcards = "5-10";
-            } else if (docSize >= 2000 && docSize < 5000) {
               minFlashcards = "10-15";
-              expectedFlashcards = "10-20";
-            } else if (docSize >= 5000 && docSize < 10000) {
+              expectedFlashcards = "12-18";
+            } else if (docSize >= 2000 && docSize < 5000) {
               minFlashcards = "20-25";
-              expectedFlashcards = "20-30";
+              expectedFlashcards = "24-30";
+            } else if (docSize >= 5000 && docSize < 10000) {
+              minFlashcards = "24-30";
+              expectedFlashcards = "24-36";
             } else if (docSize >= 10000 && docSize < 15000) {
-              minFlashcards = "30-35";
-              expectedFlashcards = "30-45";
+              minFlashcards = "36-42";
+              expectedFlashcards = "36-54";
             } else if (docSize >= 15000 && docSize < 20000) {
-              minFlashcards = "40-50";
-              expectedFlashcards = "40-60";
+              minFlashcards = "48-60";
+              expectedFlashcards = "48-72";
             } else if (docSize >= 20000 && docSize < 25000) {
-              minFlashcards = "50-60";
-              expectedFlashcards = "50-75";
-            } else {
-              minFlashcards = "60-75";
+              minFlashcards = "60-72";
               expectedFlashcards = "60-90";
+            } else {
+              minFlashcards = "72-90";
+              expectedFlashcards = "72-108";
             }
 
             const scaleRangeBy1_3 = (rangeStr: string): string => {
@@ -7449,26 +7449,29 @@ export default function HomeScreen() {
           });
           const inProgressDecks = flashcardDecks.filter((d: any) => (d.cards || []).length > 0);
 
-          type JumpItem = { id: string; title: string; type: "quiz"|"flashcard"; progress: number; label: string; raw: any; ts?: number; };
+          type JumpItem = { id: string; title: string; type: "quiz"|"flashcard"; progress: number; label: string; raw: any; ts?: number; isNew?: boolean };
           const allJumpCandidates: JumpItem[] = [
             ...inProgressQuizzes.map((q: any, i: number): JumpItem => {
               const done = (q.uniqueCorrectIds || []).length;
               const total = q.questions || 1;
               const isNew = (q.attempts || []).length === 0;
-              const ts = isNew ? Date.now() - (i * 1000) : (q.attempts[0]?.date || 0);
+              const ts = isNew ? -i : (q.attempts[0]?.date || 0);
               return { id: q.id, title: q.title, type: "quiz", progress: done / total,
-                label: isNew ? "Not started" : `${Math.round((done / total) * 100)}% complete`, raw: q, ts };
+                label: isNew ? "Not started" : `${Math.round((done / total) * 100)}% complete`, raw: q, ts, isNew };
             }),
             ...inProgressDecks.map((d: any, i: number): JumpItem => {
               const cards = d.cards || [];
               const studied = cards.filter((c: any) => !!c.sm2_nextReviewDate).length;
               const isNew = studied === 0;
-              const ts = isNew ? Date.now() - (i * 1000) : (d.attempts?.[d.attempts.length - 1]?.date || 0);
+              const ts = isNew ? -i : (d.attempts?.[d.attempts.length - 1]?.date || 0);
               return { id: d.id, title: d.title, type: "flashcard", progress: cards.length > 0 ? studied / cards.length : 0,
-                label: isNew ? "Not started" : `${studied}/${cards.length} cards sorted`, raw: d, ts };
+                label: isNew ? "Not started" : `${studied}/${cards.length} cards sorted`, raw: d, ts, isNew };
             }),
           ];
-          const jumpItems: JumpItem[] = allJumpCandidates.sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, 5);
+          const jumpItems: JumpItem[] = allJumpCandidates.sort((a, b) => {
+            if (a.isNew !== b.isNew) return a.isNew ? 1 : -1;
+            return (b.ts || 0) - (a.ts || 0);
+          }).slice(0, 5);
 
           type RecentItem = { id: string; title: string; type: "quiz"|"flashcard"; sub: string; raw: any; ts: number; };
           const allRecents: RecentItem[] = [
