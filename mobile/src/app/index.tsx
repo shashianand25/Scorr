@@ -3110,7 +3110,7 @@ export default function HomeScreen() {
         minMcqs = "100-150";
       }
 
-      const CHUNK_SIZE = 50000;
+      const CHUNK_SIZE = 30000;
       const chunks: string[] = [];
       for (let i = 0; i < text.length; i += CHUNK_SIZE) chunks.push(text.slice(i, i + CHUNK_SIZE));
       const CONCURRENCY = 3;
