@@ -3158,14 +3158,14 @@ export default function HomeScreen() {
             let expectedMcqs = "20-30";
 
             if (docSize < 2000) {
-              minFlashcards = "11-17";
-              expectedFlashcards = "13-20";
+              minFlashcards = "10-15";
+              expectedFlashcards = "12-18";
             } else if (docSize >= 2000 && docSize < 5000) {
-              minFlashcards = "22-28";
-              expectedFlashcards = "26-33";
+              minFlashcards = "20-25";
+              expectedFlashcards = "24-30";
             } else if (docSize >= 5000 && docSize < 10000) {
-              minFlashcards = "26-33";
-              expectedFlashcards = "26-40";
+              minFlashcards = "24-30";
+              expectedFlashcards = "24-36";
             } else if (docSize >= 10000 && docSize < 15000) {
               minFlashcards = "30-35";
               expectedFlashcards = "30-44";
