@@ -36,6 +36,7 @@ import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import { LinearGradient } from "expo-linear-gradient";
+import MaskedView from '@react-native-masked-view/masked-view';
 import { Buffer } from "buffer";
 import * as mammoth from "mammoth/mammoth.browser.js";
 import { signInWithGoogle, signInWithEmail, signUpWithEmail, signOutUser, onAuth, deleteAccount, resetPassword, type User } from "../lib/firebase";
@@ -84,8 +85,8 @@ const FLASHCARD_PROMPT = (text: string) => `You are an expert tutor and you need
 Generate at least {{MIN_FLASHCARDS}} flashcards covering all the given text.
 Flashcards are TERM → DEFINITION, NOT question → answer.
 Example:
-# What is the SI unit of force?
-= Newton
+# Pharmacology
+= The science dealing with drugs
 
 If this is a list of questions generate exactly that many flashcards as given.
 
@@ -123,11 +124,10 @@ const STEPS = [
   { icon: "shuffle-outline",       label: "Shuffling answers" },
 ] as const;
 
-function AIGeneratingScreen({ onCancel }: { onCancel?: () => void }) {
+function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true }: { onCancel?: () => void; documentCharCount?: number; isDark?: boolean }) {
   const sway = React.useRef(new Animated.Value(0)).current;
-  const blink = React.useRef(new Animated.Value(0)).current; // Start at 0 for full vanish
+  const blink = React.useRef(new Animated.Value(0.3)).current; // Start at 0.3
   const progress = React.useRef(new Animated.Value(0)).current;
-  const dotIndex = React.useRef(new Animated.Value(0)).current;
 
   React.useEffect(() => {
     // Subtle sway animation for the card
@@ -138,63 +138,54 @@ function AIGeneratingScreen({ onCancel }: { onCancel?: () => void }) {
       ])
     ).start();
 
-    // Blink text fully vanishes (0 to 1)
+    // Slower blink as requested ("blinking too fast")
     Animated.loop(
       Animated.sequence([
-        Animated.timing(blink, { toValue: 1, duration: 1200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(blink, { toValue: 0, duration: 1200, easing: Easing.inOut(Easing.ease), useNativeDriver: true })
+        Animated.timing(blink, { toValue: 1, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(blink, { toValue: 0.3, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true })
       ])
     ).start();
 
-    // Fake progress bar filling over 15 seconds
+    // Dynamic duration based on char count
+    let duration = 30000;
+    if (documentCharCount >= 25000) {
+      duration = 60000;
+    } else if (documentCharCount >= 20000) {
+      duration = 45000;
+    } else if (documentCharCount >= 10000) {
+      duration = 40000;
+    }
+
+    // Fake progress bar filling
     Animated.timing(progress, {
       toValue: 1,
-      duration: 15000,
+      duration,
       easing: Easing.out(Easing.ease),
       useNativeDriver: false 
     }).start();
-    
-    // Dot pagination animation
-    Animated.loop(
-      Animated.timing(dotIndex, {
-        toValue: 3,
-        duration: 2000,
-        easing: Easing.linear,
-        useNativeDriver: false
-      })
-    ).start();
-  }, []);
+  }, [documentCharCount]);
 
   const swayRotate = sway.interpolate({ inputRange: [-1, 1], outputRange: ["-6deg", "6deg"] });
   const swayTranslateY = sway.interpolate({ inputRange: [-1, 1], outputRange: [-5, 5] });
   
   const barWidth = progress.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] });
 
-  const getDotStyle = (idx: number) => {
-    const opacity = dotIndex.interpolate({
-      inputRange: [idx - 1, idx, idx + 1],
-      outputRange: [0.3, 1, 0.3],
-      extrapolate: 'clamp'
-    });
-    return { opacity };
-  };
-
   return (
     <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: "#0B0D17", alignItems: "center", justifyContent: "center", zIndex: 99999 }}>
+      backgroundColor: isDark ? "#0B0F1E" : "#f4f4f8", alignItems: "center", justifyContent: "center", zIndex: 99999 }}>
       
       {/* Background Stars (fake) */}
-      <View style={{ position: 'absolute', top: '20%', left: '25%', width: 3, height: 3, borderRadius: 1.5, backgroundColor: '#6C7491', opacity: 0.4 }} />
-      <View style={{ position: 'absolute', top: '28%', right: '20%', width: 2, height: 2, borderRadius: 1, backgroundColor: '#6C7491', opacity: 0.3 }} />
-      <View style={{ position: 'absolute', top: '56%', right: '25%', width: 3, height: 3, borderRadius: 1.5, backgroundColor: '#6C7491', opacity: 0.4 }} />
-      <View style={{ position: 'absolute', top: '62%', left: '25%', width: 2, height: 2, borderRadius: 1, backgroundColor: '#6C7491', opacity: 0.2 }} />
-      <View style={{ position: 'absolute', bottom: '26%', right: '35%', width: 2, height: 2, borderRadius: 1, backgroundColor: '#6C7491', opacity: 0.3 }} />
-      <View style={{ position: 'absolute', bottom: '24%', left: '35%', width: 3, height: 3, borderRadius: 1.5, backgroundColor: '#6C7491', opacity: 0.4 }} />
+      <View style={{ position: 'absolute', top: '20%', left: '25%', width: 3, height: 3, borderRadius: 1.5, backgroundColor: isDark ? '#6C7491' : '#cbd5e1', opacity: 0.4 }} />
+      <View style={{ position: 'absolute', top: '28%', right: '20%', width: 2, height: 2, borderRadius: 1, backgroundColor: isDark ? '#6C7491' : '#cbd5e1', opacity: 0.3 }} />
+      <View style={{ position: 'absolute', top: '56%', right: '25%', width: 3, height: 3, borderRadius: 1.5, backgroundColor: isDark ? '#6C7491' : '#cbd5e1', opacity: 0.4 }} />
+      <View style={{ position: 'absolute', top: '62%', left: '25%', width: 2, height: 2, borderRadius: 1, backgroundColor: isDark ? '#6C7491' : '#cbd5e1', opacity: 0.2 }} />
+      <View style={{ position: 'absolute', bottom: '26%', right: '35%', width: 2, height: 2, borderRadius: 1, backgroundColor: isDark ? '#6C7491' : '#cbd5e1', opacity: 0.3 }} />
+      <View style={{ position: 'absolute', bottom: '24%', left: '35%', width: 3, height: 3, borderRadius: 1.5, backgroundColor: isDark ? '#6C7491' : '#cbd5e1', opacity: 0.4 }} />
 
       {/* Back button */}
       <SafeAreaView style={{ position: "absolute", top: 0, left: 0, right: 0 }}>
         <Pressable onPress={onCancel} style={{ padding: 24, paddingTop: Platform.OS === 'android' ? 40 : 24 }}>
-          <Ionicons name="chevron-back" size={32} color="#FFFFFF" />
+          <Ionicons name="chevron-back" size={32} color={isDark ? "#FFFFFF" : "#0f172a"} />
         </Pressable>
       </SafeAreaView>
 
@@ -203,59 +194,65 @@ function AIGeneratingScreen({ onCancel }: { onCancel?: () => void }) {
         {/* Center Icon & Rings */}
         <View style={{ width: 220, height: 220, alignItems: "center", justifyContent: "center", marginBottom: 20 }}>
           {/* Ring 1 */}
-          <View style={{ position: 'absolute', width: 200, height: 200, borderRadius: 100, borderWidth: 1, borderColor: "rgba(255,255,255,0.03)" }} />
+          <View style={{ position: 'absolute', width: 200, height: 200, borderRadius: 100, borderWidth: 1, borderColor: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)" }} />
           {/* Ring 2 */}
-          <View style={{ position: 'absolute', width: 140, height: 140, borderRadius: 70, borderWidth: 1, borderColor: "rgba(255,255,255,0.06)" }} />
+          <View style={{ position: 'absolute', width: 140, height: 140, borderRadius: 70, borderWidth: 1, borderColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }} />
           
           {/* Flashcard */}
           <Animated.View style={{
             width: 90, height: 124, borderRadius: 12,
-            backgroundColor: "#20154D",
-            borderWidth: 1.5, borderColor: "#4C3896",
+            backgroundColor: isDark ? "#20154D" : "#ffffff",
+            borderWidth: 1.5, borderColor: isDark ? "#4C3896" : "rgba(0,0,0,0.05)",
             alignItems: 'center', justifyContent: 'center',
             transform: [
               { rotate: swayRotate },
               { translateY: swayTranslateY }
             ],
-            shadowColor: '#4C3896', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 20
+            shadowColor: isDark ? '#4C3896' : '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: isDark ? 0.5 : 0.05, shadowRadius: 20
           }}>
-             <Ionicons name="flash" size={54} color="#E5D9FF" style={{ transform: [{ skewX: "-5deg" }] }} />
+             <Ionicons name="flash" size={54} color={isDark ? "#E5D9FF" : "#6366f1"} style={{ transform: [{ skewX: "-5deg" }] }} />
              {/* Faint lines on card */}
-             <View style={{ position: 'absolute', left: 14, top: 24, width: 30, height: 1.5, backgroundColor: 'rgba(229,217,255,0.2)' }} />
-             <View style={{ position: 'absolute', left: 14, top: 38, width: 50, height: 1.5, backgroundColor: 'rgba(229,217,255,0.2)' }} />
+             <View style={{ position: 'absolute', left: 14, top: 24, width: 30, height: 1.5, backgroundColor: isDark ? 'rgba(229,217,255,0.2)' : 'rgba(0,0,0,0.05)' }} />
+             <View style={{ position: 'absolute', left: 14, top: 38, width: 50, height: 1.5, backgroundColor: isDark ? 'rgba(229,217,255,0.2)' : 'rgba(0,0,0,0.05)' }} />
           </Animated.View>
         </View>
 
-        {/* Blinking Text */}
+        {/* Blinking Text with Gradient */}
         <Animated.View style={{ marginBottom: 20, opacity: blink }}>
-          <Text style={{
-            fontSize: 30, 
-            fontWeight: "800",
-            textAlign: "center", 
-            lineHeight: 38,
-            color: "#E5DAFF"
-          }}>
-            Generating your{"\n"}flashcards...
-          </Text>
+          <MaskedView
+            maskElement={
+              <View style={{ backgroundColor: 'transparent', justifyContent: 'center', alignItems: 'center' }}>
+                <Text style={{
+                  fontSize: 30, 
+                  fontWeight: "800",
+                  textAlign: "center", 
+                  lineHeight: 38,
+                }}>
+                  Generating your{"\n"}flashcards...
+                </Text>
+              </View>
+            }
+            style={{ width: SCREEN_WIDTH, height: 80 }}
+          >
+            <LinearGradient
+              colors={['#5FC9FF', '#C384FF']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={{ flex: 1 }}
+            />
+          </MaskedView>
         </Animated.View>
 
         {/* Subtitle */}
         <Text style={{
-          fontSize: 16, color: "#7B88A0", textAlign: "center", fontWeight: "500", lineHeight: 24, paddingHorizontal: 20, marginBottom: 50
+          fontSize: 16, color: isDark ? "#7B88A0" : "#64748b", textAlign: "center", fontWeight: "500", lineHeight: 24, paddingHorizontal: 20, marginBottom: 50
         }}>
-          This might take a moment{"\n"}depending on your upload size
+          The conversion may take a while depending on{"\n"}the size of your upload
         </Text>
 
-        {/* Dots Pagination */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 24, gap: 10 }}>
-          <Animated.View style={[{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#846BFE" }, getDotStyle(0.5)]} />
-          <Animated.View style={[{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#846BFE" }, getDotStyle(1.5)]} />
-          <Animated.View style={[{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#846BFE" }, getDotStyle(2.5)]} />
-        </View>
-
         {/* Progress Bar Track */}
-        <View style={{ width: 220, height: 4, borderRadius: 2, backgroundColor: "#201D38", overflow: 'hidden' }}>
-          <Animated.View style={{ width: barWidth, height: '100%', backgroundColor: "#5D45A5", borderRadius: 2 }} />
+        <View style={{ width: 220, height: 4, borderRadius: 2, backgroundColor: isDark ? "#201D38" : "#e2e8f0", overflow: 'hidden' }}>
+          <Animated.View style={{ width: barWidth, height: '100%', backgroundColor: isDark ? "#5D45A5" : "#6366f1", borderRadius: 2 }} />
         </View>
 
       </View>
@@ -2824,6 +2821,7 @@ export default function HomeScreen() {
   const [creationStep, setCreationStep] = useState<"setup" | "drafting">("setup");
   const [creationMode, setCreationMode] = useState<"pick" | "quiz">("pick");
   const [aiGenPhase, setAiGenPhase] = useState<null | "select" | "generating">(null);
+  const [aiGenCharCount, setAiGenCharCount] = useState(0);
   const [pendingAiFile, setPendingAiFile] = useState<{ text: string; fileName: string } | null>(null);
 
   const [fcTitle, setFcTitle] = useState("");
@@ -3130,6 +3128,7 @@ export default function HomeScreen() {
 
   const handleGenerateWithAI = async (text: string, fileName: string) => {
     isBackgroundGen.current = false;
+    setAiGenCharCount(text.length);
     setAiGenPhase("generating");
     try {
       const { key, prompt: backendPrompt, error: keyError } = await fetchGeminiKey();
@@ -3139,9 +3138,10 @@ export default function HomeScreen() {
       
       const GEMINI_URL = `https://asia-south1-aiplatform.googleapis.com/v1/projects/guardian-495515/locations/asia-south1/publishers/google/models/gemini-3.5-flash:generateContent?key=${key}`;
       
-      const CHUNK_SIZE = 30000;
-      const chunks: string[] = [];
+      const CHUNK_SIZE = 20000;
+      let chunks: string[] = [];
       for (let i = 0; i < text.length; i += CHUNK_SIZE) chunks.push(text.slice(i, i + CHUNK_SIZE));
+      if (chunks.length > 10) chunks = chunks.slice(0, 10);
       console.log(`[AI Generation] Document split into ${chunks.length} chunk(s) (Chunk size: ${CHUNK_SIZE} chars)`);
       const CONCURRENCY = chunks.length || 1;
       const results: string[] = [];
@@ -3165,17 +3165,17 @@ export default function HomeScreen() {
               minFlashcards = "24-30";
               expectedFlashcards = "24-36";
             } else if (docSize >= 10000 && docSize < 15000) {
-              minFlashcards = "36-42";
-              expectedFlashcards = "36-54";
+              minFlashcards = "27-32";
+              expectedFlashcards = "27-40";
             } else if (docSize >= 15000 && docSize < 20000) {
-              minFlashcards = "48-60";
-              expectedFlashcards = "48-72";
+              minFlashcards = "36-45";
+              expectedFlashcards = "36-54";
             } else if (docSize >= 20000 && docSize < 25000) {
-              minFlashcards = "60-72";
-              expectedFlashcards = "60-90";
+              minFlashcards = "45-54";
+              expectedFlashcards = "45-68";
             } else {
-              minFlashcards = "72-90";
-              expectedFlashcards = "72-108";
+              minFlashcards = "54-68";
+              expectedFlashcards = "54-81";
             }
 
             const scaleRangeBy1_3 = (rangeStr: string): string => {
@@ -3213,7 +3213,9 @@ export default function HomeScreen() {
       }
       const raw = results.join("\n");
       const parsed = parseQstText(raw);
-      if (parsed.questions.length === 0) throw new Error("AI didn't return any valid questions.");
+      if (!parsed || (parsed.questions.length === 0 && (!parsed.flashcards || parsed.flashcards.length === 0))) {
+        throw new Error("AI didn't return any valid questions or flashcards.");
+      }
       const localId = `ai_${Date.now()}_${Math.random().toString(36).slice(2)}`;
       const title = (parsed.title || fileName).replace(/\.[^.]+$/, "");
       const newQuiz: any = { id: localId, title, questions: parsed.questions.length, category: "AI Generated", time: "Just now", flashcards: parsed.flashcards || [], questionsList: parsed.questions.map((q: any) => ({ ...q, answers: [...q.answers].sort(() => Math.random() - 0.5) })), attempts: [], wrongQuestions: [], uniqueCorrectIds: [] };
@@ -8289,7 +8291,7 @@ export default function HomeScreen() {
       }} />
 
       {/* ── AI Generation Screen ── */}
-      {aiGenPhase === "generating" && <AIGeneratingScreen onCancel={() => { isBackgroundGen.current = true; setAiGenPhase(null); }} />}
+      {aiGenPhase === "generating" && <AIGeneratingScreen isDark={settingsDarkMode} documentCharCount={aiGenCharCount} onCancel={() => { isBackgroundGen.current = true; setAiGenPhase(null); }} />}
 
       {/* ── Battle Modals ── */}
       {(() => {
