@@ -123,6 +123,7 @@ function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true }: 
   const sway = React.useRef(new Animated.Value(0)).current;
   const blink = React.useRef(new Animated.Value(0.3)).current; // Start at 0.3
   const progress = React.useRef(new Animated.Value(0)).current;
+  const [showLongWait, setShowLongWait] = React.useState(false);
 
   React.useEffect(() => {
     // Subtle sway animation for the card
@@ -141,24 +142,21 @@ function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true }: 
       ])
     ).start();
 
-    // Dynamic duration based on char count
-    let duration = 30000;
-    if (documentCharCount >= 25000) {
-      duration = 60000;
-    } else if (documentCharCount >= 20000) {
-      duration = 45000;
-    } else if (documentCharCount >= 10000) {
-      duration = 40000;
-    }
-
-    // Fake progress bar filling
+    // Fake progress bar filling over exactly 60 seconds
     Animated.timing(progress, {
       toValue: 1,
-      duration,
+      duration: 60000,
       easing: Easing.out(Easing.ease),
       useNativeDriver: false 
     }).start();
-  }, [documentCharCount]);
+
+    // Show long wait text after 60s
+    const timer = setTimeout(() => {
+      setShowLongWait(true);
+    }, 60000);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   const swayRotate = sway.interpolate({ inputRange: [-1, 0], outputRange: ["-6deg", "0deg"] });
   const swayTranslateY = sway.interpolate({ inputRange: [-1, 0], outputRange: [-5, 0] });
@@ -251,6 +249,12 @@ function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true }: 
         <View style={{ width: 220, height: 4, borderRadius: 2, backgroundColor: isDark ? "#201D38" : "#e2e8f0", overflow: 'hidden' }}>
           <Animated.View style={{ width: barWidth, height: '100%', backgroundColor: isDark ? "#5D45A5" : "#6366f1", borderRadius: 2 }} />
         </View>
+
+        {showLongWait && (
+          <Text style={{ marginTop: 12, color: isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.4)", fontSize: 13, fontStyle: 'italic', position: 'absolute', bottom: -30 }}>
+            Taking longer than usual...
+          </Text>
+        )}
 
       </View>
     </View>
