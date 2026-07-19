@@ -78,7 +78,43 @@ const deleteFlashcardDeck = async (..._args: any[]) => ({ error: null });
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const KeyboardWrapper = Platform.OS === "ios" ? KeyboardAvoidingView : View;
 
-const MCQ_PROMPT = (text: string) => `## Output Format
+const MCQ_PROMPT = (text: string) => `## DOCUMENT SIZE: {{CHAR_COUNT}} chars
+## MAX CHUNK SIZE: 30,000 chars
+
+## FLASHCARD RULES
+- Extract EVERY testable fact. Do NOT summarize.
+- Split facts. NEVER combine.
+- Minimum flashcards: {{MIN_FLASHCARDS}} (based on char count below)
+
+## MCQ RULES
+- **CRITICAL: MCQs must ALWAYS be ≥ flashcards.**
+- Minimum MCQs: {{MIN_MCQS}} (same as min flashcards)
+- If flashcards > {{MIN_MCQS}}, generate at least as many MCQs as flashcards.
+- Final MCQs = MAX({{MIN_MCQS}}, total_flashcards)
+- Every MCQ must have exactly 4 options.
+- Exactly 1 option must be correct.
+- Wrong options should be plausible and relevant.
+- Avoid obvious giveaway answers and duplicate questions.
+
+## DENSITY EXPECTATION
+- For every 1000 characters, expect 2-4 flashcards and 2-4 MCQs.
+- This document ({{CHAR_COUNT}} chars) should generate:
+  - Expected flashcards: {{EXPECTED_FLASHCARDS}}
+  - Expected MCQs: {{EXPECTED_MCQS}}
+
+## DYNAMIC RULES (MAX CHUNK 30k)
+
+| Chunk Size | Min Flashcards | Min MCQs |
+| :--- | :---: | :---: |
+| Under 2k | 5-8 | 5-8 |
+| 2k-5k | 10-15 | 10-15 |
+| 5k-10k | 20-25 | 20-25 |
+| 10k-15k | 30-35 | 30-35 |
+| 15k-20k | 40-50 | 40-50 |
+| 20k-25k | 50-60 | 50-60 |
+| 25k-30k | 60-75 | 60-75 |
+
+## Output Format
 
 - Start every flashcard question with \`#\`
 - Start every correct flashcard answer with \`=\`
@@ -97,27 +133,6 @@ Example:
 - Joule
 - Pascal
 - Watt
-
-## Content Generation
-
-Generate at least {{MIN_FLASHCARDS}} flashcards and at least {{MIN_MCQS}} MCQs.
-
-Cover the entire document. Ensure every major topic, section, definition, formula, process, table, diagram (where relevant), and key concept is represented. Generate more than the minimum whenever needed for complete coverage.
-
-## Flashcard Rules
-
-- One flashcard should test one distinct concept.
-- Keep questions concise and unambiguous.
-- Answers should be brief, accurate, and directly supported by the document.
-- Avoid duplicate or nearly identical flashcards.
-
-## MCQ Rules
-
-- Every MCQ must have exactly 4 options.
-- Exactly 1 option must be correct.
-- Wrong options should be plausible and relevant.
-- Include conceptual, application, comparison, calculation, and reasoning questions where appropriate.
-- Avoid obvious giveaway answers and duplicate questions.
 
 ## General Rules
 
@@ -3090,26 +3105,6 @@ export default function HomeScreen() {
       
       const GEMINI_URL = `https://asia-south1-aiplatform.googleapis.com/v1/projects/guardian-495515/locations/asia-south1/publishers/google/models/gemini-3.5-flash:generateContent?key=${key}`;
       
-      const docSize = text.length;
-      let minFlashcards = "20";
-      let minMcqs = "20";
-      if (docSize < 10000) {
-        minFlashcards = "20";
-        minMcqs = "20";
-      } else if (docSize >= 10000 && docSize < 30000) {
-        minFlashcards = "30-50";
-        minMcqs = "25-40";
-      } else if (docSize >= 30000 && docSize < 60000) {
-        minFlashcards = "50-80";
-        minMcqs = "40-60";
-      } else if (docSize >= 60000 && docSize < 100000) {
-        minFlashcards = "80-120";
-        minMcqs = "60-100";
-      } else {
-        minFlashcards = "120-200";
-        minMcqs = "100-150";
-      }
-
       const CHUNK_SIZE = 30000;
       const chunks: string[] = [];
       for (let i = 0; i < text.length; i += CHUNK_SIZE) chunks.push(text.slice(i, i + CHUNK_SIZE));
@@ -3119,10 +3114,56 @@ export default function HomeScreen() {
         const batch = chunks.slice(i, i + CONCURRENCY);
         const batchResults = await Promise.all(
           batch.map(chunk => {
+            const docSize = chunk.length;
+            let minFlashcards = "20";
+            let minMcqs = "20";
+            let expectedFlashcards = "20-30";
+            let expectedMcqs = "20-30";
+
+            if (docSize < 2000) {
+              minFlashcards = "5-8";
+              minMcqs = "5-8";
+              expectedFlashcards = "5-10";
+              expectedMcqs = "5-10";
+            } else if (docSize >= 2000 && docSize < 5000) {
+              minFlashcards = "10-15";
+              minMcqs = "10-15";
+              expectedFlashcards = "10-20";
+              expectedMcqs = "10-20";
+            } else if (docSize >= 5000 && docSize < 10000) {
+              minFlashcards = "20-25";
+              minMcqs = "20-25";
+              expectedFlashcards = "20-30";
+              expectedMcqs = "20-30";
+            } else if (docSize >= 10000 && docSize < 15000) {
+              minFlashcards = "30-35";
+              minMcqs = "30-35";
+              expectedFlashcards = "30-45";
+              expectedMcqs = "30-45";
+            } else if (docSize >= 15000 && docSize < 20000) {
+              minFlashcards = "40-50";
+              minMcqs = "40-50";
+              expectedFlashcards = "40-60";
+              expectedMcqs = "40-60";
+            } else if (docSize >= 20000 && docSize < 25000) {
+              minFlashcards = "50-60";
+              minMcqs = "50-60";
+              expectedFlashcards = "50-75";
+              expectedMcqs = "50-75";
+            } else {
+              minFlashcards = "60-75";
+              minMcqs = "60-75";
+              expectedFlashcards = "60-90";
+              expectedMcqs = "60-90";
+            }
+
             const promptTemplate = backendPrompt || MCQ_PROMPT("");
             let fullPrompt = promptTemplate;
+            fullPrompt = fullPrompt.replace(/\{\{CHAR_COUNT\}\}/g, String(docSize));
             fullPrompt = fullPrompt.replace(/\{\{MIN_FLASHCARDS\}\}/g, minFlashcards);
             fullPrompt = fullPrompt.replace(/\{\{MIN_MCQS\}\}/g, minMcqs);
+            fullPrompt = fullPrompt.replace(/\{\{EXPECTED_FLASHCARDS\}\}/g, expectedFlashcards);
+            fullPrompt = fullPrompt.replace(/\{\{EXPECTED_MCQS\}\}/g, expectedMcqs);
 
             if (fullPrompt.includes("[PASTE YOUR TEXT HERE]")) {
               fullPrompt = fullPrompt.replace("[PASTE YOUR TEXT HERE]", chunk);
