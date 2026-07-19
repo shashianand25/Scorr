@@ -288,19 +288,19 @@ app.post('/api/parse-ppt', upload.single('file'), async (req, res) => {
 
 const GEMINI_MCQ_PROMPT_TEMPLATE = `## Output Format
 
-- Start every flashcard question with \`?\`
-- Start every correct flashcard answer with \`+\`
+- Start every flashcard question with \`#\`
+- Start every correct flashcard answer with \`=\`
 
-- Start every MCQ question with \`#\`
+- Start every MCQ question with \`?\`
 - Start the correct MCQ option with \`+\`
 - Start each incorrect MCQ option with \`-\`
 
 Example:
 
-? What is the SI unit of force?
-+ Newton
-
 # What is the SI unit of force?
+= Newton
+
+? What is the SI unit of force?
 + Newton
 - Joule
 - Pascal

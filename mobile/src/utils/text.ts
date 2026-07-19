@@ -8,7 +8,7 @@ export const questionsToSourceText = (title: string, category: string, qs: any[]
 
   if (flashcards && flashcards.length > 0) {
     body += "===FLASHCARDS===\n\n";
-    body += flashcards.map((f: any) => `? ${f.front}\n+ ${f.back}`).join('\n\n');
+    body += flashcards.map((f: any) => `# ${f.front}\n= ${f.back}`).join('\n\n');
     body += "\n\n";
   }
 
@@ -17,13 +17,13 @@ export const questionsToSourceText = (title: string, category: string, qs: any[]
     body += qs.map((q: any) => {
       if (q.prompt && Array.isArray(q.answers)) {
         const opts = q.answers.map((a: any) => `${a.isCorrect ? '+' : '-'} ${a.text}`).join('\n');
-        return `# ${q.prompt}\n${opts}`;
+        return `? ${q.prompt}\n${opts}`;
       }
       if (q.question && q.options) {
         const opts = Object.entries(q.options).map(([k, v]) =>
           `${k === q.answer ? '+' : '-'} ${v}`
         ).join('\n');
-        return `# ${q.question}\n${opts}`;
+        return `? ${q.question}\n${opts}`;
       }
       return '';
     }).filter(Boolean).join('\n\n');
