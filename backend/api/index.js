@@ -286,87 +286,108 @@ app.post('/api/parse-ppt', upload.single('file'), async (req, res) => {
   }
 });
 
-const GEMINI_MCQ_PROMPT_TEMPLATE = `You are an expert educator and assessment designer.
+const GEMINI_MCQ_PROMPT_TEMPLATE = `You are an expert educator.
 
-Convert the provided text into flashcards and multiple-choice questions (MCQs) for active recall.
+Your task is to convert the provided text into flashcards and multiple-choice questions for active recall.
 
-The text may be one chunk of a larger document.
+This is an EXHAUSTIVE EXTRACTION task, NOT a summarization task.
 
-Use only information explicitly present in the provided text. Do not infer, add, or correct information.
+The text may be only one section of a larger document.
 
-## Objective
+Use ONLY information explicitly present in the text.
 
-Create the maximum number of unique, high-quality flashcards the text can reasonably support.
+## OBJECTIVE
 
-This is an exhaustive knowledge extraction task, not a summary.
+Extract EVERY independently testable learning unit from the text.
 
-Every independently testable concept should become a flashcard whenever possible.
+A learning unit includes, but is not limited to:
+- Definitions
+- Key terms
+- Facts
+- Properties
+- Functions
+- Steps
+- Processes
+- Causes
+- Effects
+- Advantages
+- Disadvantages
+- Classifications
+- Categories
+- Rules
+- Exceptions
+- Examples
+- Comparisons
+- Relationships
+- Formulae
+- Table entries
+- List items
+- Important statements
 
-After generating the flashcards, generate at least one MCQ for every flashcard.
+Do NOT combine independent learning units.
 
-If a flashcard contains multiple independent facts, generate multiple MCQs testing different aspects of that flashcard.
+If one sentence contains three independently testable facts, create three flashcards.
 
-Do not skip concepts because they appear minor or are mentioned only once.
+When deciding between one flashcard or multiple flashcards, ALWAYS choose multiple unless the information cannot reasonably be studied separately.
 
-## Content Rules
+Continue until nearly every independently testable learning unit has become a flashcard.
 
-* Cover the entire text from beginning to end.
-* Cover every topic, subsection, paragraph, definition, key term, process, comparison, formula, table, list, example, exception, and important statement.
-* If the text already contains MCQs, recreate exactly the same number of MCQs only. You may still generate flashcards.
-* Otherwise, generate original flashcards and MCQs.
-* Generate at least 20 flashcards and 20 MCQs whenever the text contains sufficient information.
-* Treat 20 as a minimum, not a target.
-* Continue until nearly every independently testable fact has been converted into a flashcard.
-* Never invent or repeat information.
+## FLASHCARDS
 
-## Flashcard Rules
+- Every learning unit should become a flashcard whenever possible.
+- One learning unit per flashcard.
+- Keep flashcards concise.
+- Never merge unrelated facts.
+- Never skip information because it seems minor.
 
-* One primary concept per flashcard whenever possible.
-* Split paragraphs containing multiple independent facts into multiple flashcards.
-* Every definition should become a flashcard.
-* Every key term should become a flashcard.
-* Flashcards should be concise and complete.
+## MCQS
 
-## MCQ Rules
+Generate at least ONE MCQ for EVERY flashcard.
 
-* Every flashcard must have at least one corresponding MCQ.
-* The number of MCQs must never be less than the number of flashcards.
-* Important flashcards containing multiple facts should generate multiple MCQs.
-* Every MCQ must have exactly one correct answer and exactly three incorrect answers.
-* Incorrect answers should be plausible but incorrect based only on the provided text.
-* Avoid duplicate or nearly identical MCQs.
+If a flashcard contains multiple testable details, generate multiple MCQs covering different aspects.
 
-## Output Format
+Requirements:
+- Exactly one correct answer.
+- Exactly three incorrect answers.
+- Wrong answers should be plausible but incorrect.
+- Avoid duplicate questions.
+
+The number of MCQs must NEVER be less than the number of flashcards.
+
+## EXISTING QUESTIONS
+
+If the text already contains MCQs, recreate every existing MCQ exactly.
+
+Still generate flashcards from the remaining content.
+
+## OUTPUT
 
 ===FLASHCARDS===
 
-# Term or Concept
-= Definition or explanation
-
-# Another Term
-= Definition or explanation
+# Concept
+= Explanation
 
 ===MCQS===
 
 ? Question
 
-+ Correct Answer
-- Wrong Answer
-- Wrong Answer
-- Wrong Answer
++ Correct answer
+- Wrong answer
+- Wrong answer
+- Wrong answer
 
-## Formatting Rules
+## FORMAT
 
-* Flashcard titles start with \`#\`
-* Flashcard answers start with \`=\`
-* Questions start with \`?\`
-* Correct answers start with \`+\`
-* Incorrect answers start with \`-\`
-* Do not number items.
-* Output only the formatted flashcards and MCQs.
+Flashcard title: #
+Flashcard answer: =
+Question: ?
+Correct answer: +
+Incorrect answer: -
+
+Output ONLY the formatted flashcards and MCQs.
 
 Text:
-[The extracted document text is inserted here]`;
+{{TEXT}}`;
 
 // ── Gemini Config ───────────────────────────────────────────────────────────
 app.get('/api/gemini-config', (req, res) => {
