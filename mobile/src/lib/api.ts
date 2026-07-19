@@ -333,8 +333,27 @@ export async function fetchVersionConfig(): Promise<{ config: VersionConfig | nu
 
 import * as FileSystem from "expo-file-system/legacy";
 
-export async function parsePdfFromBackend(fileUri: string, fileName: string): Promise<{ text: string; error?: string }> {
+export async function parsePdfFromBackend(fileUri: string, fileName: string, fileSize: number = 0): Promise<{ text: string; error?: string }> {
   try {
+    if (fileSize > 0 && fileSize < 4.2 * 1024 * 1024) {
+      try {
+        const uploadResult = await FileSystem.uploadAsync(`${BASE_URL}/api/parse-pdf`, fileUri, {
+          httpMethod: 'POST',
+          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+          fieldName: 'file',
+        });
+        
+        if (uploadResult.status === 200) {
+          const data = JSON.parse(uploadResult.body);
+          if (data.text) {
+            return { text: data.text };
+          }
+        }
+      } catch (backendErr) {
+        console.log("[parsePdfFromBackend] Backend parsing failed, falling back to local...", backendErr);
+      }
+    }
+
     const text = await extractText(fileUri);
     if (!text || text.trim() === "") {
       return { text: "", error: "Could not extract text from this PDF. It might be a scanned document containing only images." };

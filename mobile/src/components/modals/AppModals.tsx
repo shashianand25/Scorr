@@ -1685,7 +1685,7 @@ export function AppModals({ p }: { p: any }) {
                           try {
                             let text = "";
                             if (ext === "pdf") {
-                              const pr = await (p.parsePdfFromBackend || (() => {}))(fileUri, fileName);
+                              const pr = await (p.parsePdfFromBackend || (() => {}))(fileUri, fileName, fileSize);
                               if (pr.error) throw new Error(pr.error);
                               text = pr.text;
                             } else if (ext === "ppt" || ext === "pptx") {
@@ -1790,7 +1790,7 @@ export function AppModals({ p }: { p: any }) {
                           try {
                             let text = "";
                             if (ext === "pdf") {
-                              const pdfResult = await (p.parsePdfFromBackend || (() => {}))(fileUri, fileName);
+                              const pdfResult = await (p.parsePdfFromBackend || (() => {}))(fileUri, fileName, fileSize);
                               if (pdfResult.error) {
                                 throw new Error(`Backend PDF parsing failed: ${pdfResult.error}`);
                               }
