@@ -286,84 +286,55 @@ app.post('/api/parse-ppt', upload.single('file'), async (req, res) => {
   }
 });
 
-const GEMINI_MCQ_PROMPT_TEMPLATE = `**Generation Rules:**
-- Generate AT LEAST 1 MCQ per flashcard.
-- If a flashcard contains complex information, generate 2-3 MCQs.
-- Total MCQs must be ≥ total flashcards.
-- Each MCQ must have EXACTLY: 1 question (?), 1 correct answer (+), 3 wrong answers (-).
-- Wrong answers must be plausible distractors based ONLY on the provided text.
+const GEMINI_MCQ_PROMPT_TEMPLATE = `## Output Format
 
----
+- Start every flashcard question with \`?\`
+- Start every correct flashcard answer with \`+\`
 
-## EXISTING MCQs IN TEXT
+- Start every MCQ question with \`#\`
+- Start the correct MCQ option with \`+\`
+- Start each incorrect MCQ option with \`-\`
 
-If the provided text already contains MCQs:
-1. Recreate EVERY existing MCQ exactly as written.
-2. Do NOT modify, remove, or rephrase them.
-3. Still generate flashcards from ALL content.
-4. Still generate ADDITIONAL MCQs for flashcards that lack them.
-5. Existing MCQs count toward the total MCQ requirement.
+Example:
 
----
+? What is the SI unit of force?
++ Newton
 
-## FORMATTING RULES
+# What is the SI unit of force?
++ Newton
+- Joule
+- Pascal
+- Watt
 
-| Symbol | Used For | Count Required |
-| :--- | :--- | :--- |
-| \`#\` | Flashcard title/term | 1 per flashcard |
-| \`=\` | Flashcard answer/definition | 1 per flashcard |
-| \`?\` | MCQ question | 1 per MCQ |
-| \`+\` | Correct answer | 1 per MCQ |
-| \`-\` | Wrong answer | 3 per MCQ |
+## Content Generation
 
-**Common Mistakes to Avoid:**
-- Do NOT use \`=\` for MCQs (only for flashcards)
-- Do NOT use \`#\` for MCQs (only for flashcards)
-- Do NOT use \`+\` for wrong answers
-- Do NOT use \`-\` for correct answers
-- Do NOT combine multiple facts in one flashcard
-- Do NOT use fewer than 3 wrong answers per MCQ
+Generate at least {{MIN_FLASHCARDS}} flashcards and at least {{MIN_MCQS}} MCQs.
 
----
+Cover the entire document. Ensure every major topic, section, definition, formula, process, table, diagram (where relevant), and key concept is represented. Generate more than the minimum whenever needed for complete coverage.
 
-## OUTPUT FORMAT
+## Flashcard Rules
 
-===FLASHCARDS===
+- One flashcard should test one distinct concept.
+- Keep questions concise and unambiguous.
+- Answers should be brief, accurate, and directly supported by the document.
+- Avoid duplicate or nearly identical flashcards.
 
-# Term 1
-= Definition 1
+## MCQ Rules
 
-# Term 2
-= Definition 2
+- Every MCQ must have exactly 4 options.
+- Exactly 1 option must be correct.
+- Wrong options should be plausible and relevant.
+- Include conceptual, application, comparison, calculation, and reasoning questions where appropriate.
+- Avoid obvious giveaway answers and duplicate questions.
 
-===MCQS===
+## General Rules
 
-? Question 1
-+ Correct answer 1
-- Wrong answer 1
-- Wrong answer 2
-- Wrong answer 3
+- Do not invent information not present in the document.
+- Do not generate trivial or repetitive questions just to reach the minimum.
+- Preserve technical terms, notation, and formulas from the source where appropriate.
+- Output only the formatted flashcards and MCQs. Do not include explanations, headings, or markdown.
 
-? Question 2
-+ Correct answer 2
-- Wrong answer 1
-- Wrong answer 2
-- Wrong answer 3
-
----
-
-## BEFORE YOU OUTPUT
-
-1. Scan the entire text and count all learning units.
-2. Ensure every learning unit has become a flashcard.
-3. Ensure total MCQs ≥ total flashcards.
-4. If existing MCQs are present, ensure they are recreated exactly.
-5. Output ONLY the formatted flashcards and MCQs. No extra text.
-
----
-
-Now convert the following text:
-
+Text:
 [PASTE YOUR TEXT HERE]`;
 
 // ── Gemini Config ───────────────────────────────────────────────────────────
