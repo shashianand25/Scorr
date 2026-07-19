@@ -286,108 +286,85 @@ app.post('/api/parse-ppt', upload.single('file'), async (req, res) => {
   }
 });
 
-const GEMINI_MCQ_PROMPT_TEMPLATE = `You are an expert educator.
+const GEMINI_MCQ_PROMPT_TEMPLATE = `**Generation Rules:**
+- Generate AT LEAST 1 MCQ per flashcard.
+- If a flashcard contains complex information, generate 2-3 MCQs.
+- Total MCQs must be ≥ total flashcards.
+- Each MCQ must have EXACTLY: 1 question (?), 1 correct answer (+), 3 wrong answers (-).
+- Wrong answers must be plausible distractors based ONLY on the provided text.
 
-Your task is to convert the provided text into flashcards and multiple-choice questions for active recall.
+---
 
-This is an EXHAUSTIVE EXTRACTION task, NOT a summarization task.
+## EXISTING MCQs IN TEXT
 
-The text may be only one section of a larger document.
+If the provided text already contains MCQs:
+1. Recreate EVERY existing MCQ exactly as written.
+2. Do NOT modify, remove, or rephrase them.
+3. Still generate flashcards from ALL content.
+4. Still generate ADDITIONAL MCQs for flashcards that lack them.
+5. Existing MCQs count toward the total MCQ requirement.
 
-Use ONLY information explicitly present in the text.
+---
 
-## OBJECTIVE
+## FORMATTING RULES
 
-Extract EVERY independently testable learning unit from the text.
+| Symbol | Used For | Count Required |
+| :--- | :--- | :--- |
+| \`#\` | Flashcard title/term | 1 per flashcard |
+| \`=\` | Flashcard answer/definition | 1 per flashcard |
+| \`?\` | MCQ question | 1 per MCQ |
+| \`+\` | Correct answer | 1 per MCQ |
+| \`-\` | Wrong answer | 3 per MCQ |
 
-A learning unit includes, but is not limited to:
-- Definitions
-- Key terms
-- Facts
-- Properties
-- Functions
-- Steps
-- Processes
-- Causes
-- Effects
-- Advantages
-- Disadvantages
-- Classifications
-- Categories
-- Rules
-- Exceptions
-- Examples
-- Comparisons
-- Relationships
-- Formulae
-- Table entries
-- List items
-- Important statements
+**Common Mistakes to Avoid:**
+- Do NOT use \`=\` for MCQs (only for flashcards)
+- Do NOT use \`#\` for MCQs (only for flashcards)
+- Do NOT use \`+\` for wrong answers
+- Do NOT use \`-\` for correct answers
+- Do NOT combine multiple facts in one flashcard
+- Do NOT use fewer than 3 wrong answers per MCQ
 
-Do NOT combine independent learning units.
+---
 
-If one sentence contains three independently testable facts, create three flashcards.
-
-When deciding between one flashcard or multiple flashcards, ALWAYS choose multiple unless the information cannot reasonably be studied separately.
-
-Continue until nearly every independently testable learning unit has become a flashcard.
-
-## FLASHCARDS
-
-- Every learning unit should become a flashcard whenever possible.
-- One learning unit per flashcard.
-- Keep flashcards concise.
-- Never merge unrelated facts.
-- Never skip information because it seems minor.
-
-## MCQS
-
-Generate at least ONE MCQ for EVERY flashcard.
-
-If a flashcard contains multiple testable details, generate multiple MCQs covering different aspects.
-
-Requirements:
-- Exactly one correct answer.
-- Exactly three incorrect answers.
-- Wrong answers should be plausible but incorrect.
-- Avoid duplicate questions.
-
-The number of MCQs must NEVER be less than the number of flashcards.
-
-## EXISTING QUESTIONS
-
-If the text already contains MCQs, recreate every existing MCQ exactly.
-
-Still generate flashcards from the remaining content.
-
-## OUTPUT
+## OUTPUT FORMAT
 
 ===FLASHCARDS===
 
-# Concept
-= Explanation
+# Term 1
+= Definition 1
+
+# Term 2
+= Definition 2
 
 ===MCQS===
 
-? Question
+? Question 1
++ Correct answer 1
+- Wrong answer 1
+- Wrong answer 2
+- Wrong answer 3
 
-+ Correct answer
-- Wrong answer
-- Wrong answer
-- Wrong answer
+? Question 2
++ Correct answer 2
+- Wrong answer 1
+- Wrong answer 2
+- Wrong answer 3
 
-## FORMAT
+---
 
-Flashcard title: #
-Flashcard answer: =
-Question: ?
-Correct answer: +
-Incorrect answer: -
+## BEFORE YOU OUTPUT
 
-Output ONLY the formatted flashcards and MCQs.
+1. Scan the entire text and count all learning units.
+2. Ensure every learning unit has become a flashcard.
+3. Ensure total MCQs ≥ total flashcards.
+4. If existing MCQs are present, ensure they are recreated exactly.
+5. Output ONLY the formatted flashcards and MCQs. No extra text.
 
-Text:
-{{TEXT}}`;
+---
+
+Now convert the following text:
+
+[PASTE YOUR TEXT HERE]`;
 
 // ── Gemini Config ───────────────────────────────────────────────────────────
 app.get('/api/gemini-config', (req, res) => {
