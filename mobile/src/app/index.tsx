@@ -7618,12 +7618,14 @@ export default function HomeScreen() {
                 {/* ── Jump Back In ── */}
                 {jumpItems.length > 0 && !homeSearch && (
                   <View style={{ marginTop: 20, marginBottom: 8 }}>
-                    <Text style={{
-                      fontSize: 18, fontWeight: "700", color: txt,
-                      paddingHorizontal: 20, marginBottom: 14,
-                    }}>
-                      Jump back in
-                    </Text>
+                    <View style={{ paddingHorizontal: 20, marginBottom: 14 }}>
+                      <Text style={{ fontSize: 18, fontWeight: "700", color: txt, marginBottom: 2 }}>
+                        Continue learning
+                      </Text>
+                      <Text style={{ fontSize: 13, color: muted }}>
+                        In-progress decks or new decks waiting to start
+                      </Text>
+                    </View>
 
                     <ScrollView
                       horizontal
