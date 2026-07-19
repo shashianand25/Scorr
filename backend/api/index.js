@@ -302,33 +302,27 @@ This is **not** a summarization task. It is an exhaustive knowledge extraction t
 
 Treat every meaningful piece of information as a candidate for active recall.
 
-Whenever multiple valid flashcards or MCQs can be created from the same concept, prefer generating multiple unique recall items that test different aspects instead of one broad question.
-
 Missing important information is considered an incorrect response.
 
 ### Content Generation
 
 * Cover the entire provided text exhaustively from beginning to end.
-* Every topic, subsection, paragraph, table, list, formula, definition, comparison, process, example, key term, and important statement should be represented by one or more flashcards and one or more MCQs whenever appropriate.
-* Do not skip concepts simply because they appear minor or is mentioned only once.
+* Every major topic, subsection, paragraph, table, list, formula, definition, comparison, process, and example should be represented by one or more flashcards and MCQs where appropriate.
 * Do not ignore later sections of the text.
 * If the provided text already contains MCQs, recreate exactly the same number of MCQs only. Do not generate additional MCQs. You may still generate flashcards from the content.
 * If the provided text does not contain MCQs, generate original flashcards and MCQs based only on the provided text.
 * Generate the **maximum number of unique, high-quality flashcards and MCQs** that the provided text can reasonably support.
 * There is **no upper limit** on the number of flashcards or MCQs.
 * If the text contains sufficient information, generate **at least 20 flashcards and at least 20 MCQs**.
-* Treat 20 only as a minimum, never as the target.
-* If the text supports more than 20, continue generating additional items until nearly every meaningful concept, definition, fact, process, mechanism, comparison, list item, table entry, and example has been converted into active recall.
+* If the text supports more than 20, continue generating additional items until nearly every meaningful concept and fact has been converted into active recall.
 * Never stop generating simply because you have reached the minimum.
-* If the text genuinely cannot support 20 unique flashcards or MCQs without repetition, generate the maximum number of unique, high-quality items possible.
 * Never invent facts or repeat questions simply to satisfy a minimum count.
 
 ### Coverage Requirements
 
 Convert information at the smallest meaningful unit.
 
-Whenever appropriate, create separate flashcards and MCQs for:
-
+Each flashcard term should have >=1 quiz for that card
 * Definitions
 * Key terms
 * Important facts
@@ -359,8 +353,6 @@ Whenever appropriate, create separate flashcards and MCQs for:
 * Bullet points
 * Important statements
 
-Every definition, key term, list item, and independently testable fact should normally generate at least one flashcard and one MCQ.
-
 If a paragraph contains multiple independent facts, generate multiple flashcards and multiple MCQs instead of combining them into one.
 
 Split compound sentences into multiple recall items whenever they contain multiple independent facts.
@@ -386,8 +378,7 @@ Avoid combining unrelated concepts into a single flashcard or MCQ.
 * Incorrect answers should be plausible, relevant, and clearly incorrect based only on the provided text.
 * Avoid trivial wording changes from flashcards whenever possible.
 * Avoid duplicate or nearly identical questions.
-* Every flashcard should normally have at least one corresponding MCQ.
-* Concepts containing multiple independent facts should generate multiple distinct MCQs whenever appropriate.
+* Every major concept should normally produce at least one flashcard and one MCQ.
 
 ### Output Format
 
@@ -410,7 +401,6 @@ Then output all MCQs under the \`===MCQS===\` header.
 ? Question
 
 + Correct Answer
-
 - Wrong Answer
 - Wrong Answer
 - Wrong Answer
