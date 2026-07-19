@@ -1665,7 +1665,6 @@ export function AppModals({ p }: { p: any }) {
                     reader.onload = (ev) => {
                       const text = ev.target?.result as string;
                       console.log("[Web-Extraction] Extracted raw text length:", text ? text.length : 0);
-                      console.log("[Web-Extraction] Extracted raw text:\n", text);
                       (p.setShowAddMenu || (() => {}))(false);
                       setTimeout(() => (p.handleGenerateWithAI || (() => {}))(text, file.name), 150);
                     };
@@ -1701,7 +1700,6 @@ export function AppModals({ p }: { p: any }) {
                               text = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.UTF8 });
                             }
                             console.log("[Mobile-Extraction] Extracted raw text length:", text ? text.length : 0);
-                            console.log("[Mobile-Extraction] Extracted raw text:\n", text);
                             (p.setShowAddMenu || (() => {}))(false);
                             setTimeout(() => (p.handleGenerateWithAI || (() => {}))(text, fileName), 150);
                           } catch (err: any) {
