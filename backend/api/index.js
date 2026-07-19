@@ -288,6 +288,8 @@ app.post('/api/parse-ppt', upload.single('file'), async (req, res) => {
 
 const GEMINI_MCQ_PROMPT_TEMPLATE = `You are an expert tutor and you need to get me full marks,
 Generate at least {{MIN_FLASHCARDS}} flashcards covering all the given text
+Flashcards are TERM → DEFINITION, NOT question → answer.**
+
 Example:
 
 # What is the SI unit of force?

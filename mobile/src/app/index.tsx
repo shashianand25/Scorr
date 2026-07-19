@@ -80,6 +80,8 @@ const KeyboardWrapper = Platform.OS === "ios" ? KeyboardAvoidingView : View;
 
 const MCQ_PROMPT = (text: string) => `You are an expert tutor and you need to get me full marks,
 Generate at least {{MIN_FLASHCARDS}} flashcards covering all the given text
+Flashcards are TERM → DEFINITION, NOT question → answer.**
+
 Example:
 
 # What is the SI unit of force?
