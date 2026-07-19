@@ -79,7 +79,9 @@ const deleteFlashcardDeck = async (..._args: any[]) => ({ error: null });
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const KeyboardWrapper = Platform.OS === "ios" ? KeyboardAvoidingView : View;
 
-const FLASHCARD_PROMPT = (text: string) => `You are an expert tutor and you need to get me full marks.
+const COMBINED_PROMPT = (text: string) => `You are an expert tutor and you need to get me full marks.
+
+Generate TWO sections based on the text below.
 
 ===FLASHCARDS===
 Generate at least {{MIN_FLASHCARDS}} flashcards covering all the given text.
@@ -88,15 +90,8 @@ Example:
 # Pharmacology
 = The science dealing with drugs
 
-If this is a list of questions generate exactly that many flashcards as given.
-
-Text:
-${text}`;
-
-const MCQ_ONLY_PROMPT = (text: string) => `You are an expert tutor and you need to get me full marks.
-
 ===MCQS===
-Generate at least {{MIN_MCQS}} quiz covering all the given text.
+Generate at least {{MIN_MCQS}} multiple choice questions covering all the given text.
 Example:
 ? What is the SI unit of force?
 + Newton
@@ -104,7 +99,7 @@ Example:
 - Pascal
 - Watt
 
-If this is a list of questions generate exactly that many questions as given.
+If the provided text is just a list of questions, generate exactly that many flashcards and questions as given.
 
 Text:
 ${text}`;
@@ -3193,13 +3188,11 @@ export default function HomeScreen() {
             minMcqs = scaleRangeBy1_3(minFlashcards);
             expectedMcqs = scaleRangeBy1_3(expectedFlashcards);
 
-            let flashcardPrompt = FLASHCARD_PROMPT(chunk);
-            flashcardPrompt = flashcardPrompt.replace(/\{\{MIN_FLASHCARDS\}\}/g, minFlashcards);
-            flashcardPrompt = flashcardPrompt.replace(/\{\{EXPECTED_FLASHCARDS\}\}/g, expectedFlashcards);
-
-            let mcqPrompt = MCQ_ONLY_PROMPT(chunk);
-            mcqPrompt = mcqPrompt.replace(/\{\{MIN_MCQS\}\}/g, minMcqs);
-            mcqPrompt = mcqPrompt.replace(/\{\{EXPECTED_MCQS\}\}/g, expectedMcqs);
+            let combinedPrompt = COMBINED_PROMPT(chunk);
+            combinedPrompt = combinedPrompt.replace(/\{\{MIN_FLASHCARDS\}\}/g, minFlashcards);
+            combinedPrompt = combinedPrompt.replace(/\{\{EXPECTED_FLASHCARDS\}\}/g, expectedFlashcards);
+            combinedPrompt = combinedPrompt.replace(/\{\{MIN_MCQS\}\}/g, minMcqs);
+            combinedPrompt = combinedPrompt.replace(/\{\{EXPECTED_MCQS\}\}/g, expectedMcqs);
 
             const fetchGen = (prompt: string) => fetch(GEMINI_URL, {
               method: "POST",
@@ -3207,8 +3200,7 @@ export default function HomeScreen() {
               body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 65536, temperature: 0.2 } }),
             }).then(async r => { if (!r.ok) throw new Error((await r.json())?.error?.message || r.statusText); return (await r.json())?.candidates?.[0]?.content?.parts?.[0]?.text || ""; });
 
-            // Run both in parallel
-            return Promise.all([fetchGen(flashcardPrompt), fetchGen(mcqPrompt)]).then(([fcText, mcqText]) => `${fcText}\n\n${mcqText}`);
+            return fetchGen(combinedPrompt);
           })
         );
         results.push(...batchResults);
