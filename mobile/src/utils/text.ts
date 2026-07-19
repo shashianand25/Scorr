@@ -89,21 +89,16 @@ export function parseQstText(text: string): { title: string; category: string; q
     const trimmed = line.trim();
     if (!trimmed) continue;
 
+    let nextSection = currentSection;
+
     if (trimmed.startsWith("===") && trimmed.endsWith("===")) {
       const sec = trimmed.replace(/=/g, "").trim().toUpperCase();
       if (sec === "FLASHCARDS") {
-        currentSection = "FLASHCARDS";
-        if (currentQuestion) { questions.push(currentQuestion); currentQuestion = null; }
-        if (currentFlashcard) { flashcards.push(currentFlashcard); currentFlashcard = null; }
+        nextSection = "FLASHCARDS";
       } else if (sec === "MCQS") {
-        currentSection = "MCQS";
-        if (currentQuestion) { questions.push(currentQuestion); currentQuestion = null; }
-        if (currentFlashcard) { flashcards.push(currentFlashcard); currentFlashcard = null; }
+        nextSection = "MCQS";
       }
-      continue;
-    }
-
-    if (trimmed.startsWith("@")) {
+    } else if (trimmed.startsWith("@")) {
       const parts = trimmed.substring(1).split(":");
       if (parts.length >= 2) {
         const key = parts[0].trim().toLowerCase();
@@ -112,38 +107,58 @@ export function parseQstText(text: string): { title: string; category: string; q
         if (key === "category") category = val;
       }
       continue;
+    } else {
+      // Dynamic section transitions based on line symbols
+      if (trimmed.startsWith("=")) {
+        nextSection = "FLASHCARDS";
+      } else if (trimmed.startsWith("-")) {
+        nextSection = "MCQS";
+      } else if (trimmed.startsWith("#")) {
+        // Standard: # starts flashcard
+        nextSection = "FLASHCARDS";
+      } else if (trimmed.startsWith("?")) {
+        // Standard: ? starts MCQ
+        nextSection = "MCQS";
+      } else if (trimmed.startsWith("+")) {
+        // Option starting with + starts MCQ
+        nextSection = "MCQS";
+      }
     }
-    
-    // Maintain backwards compatibility if sections aren't defined, default to MCQS
-    if (currentSection === "NONE" && (trimmed.startsWith("?") || trimmed.startsWith("#") || trimmed.startsWith("+") || trimmed.startsWith("-"))) {
-      // In new style: ? is flashcard front, # is MCQ. In old style: ? is MCQ, # is flashcard front.
-      // So default to NONE, but we can guess or use context. If the line starts with ? or #, we will let sections handle it.
-      currentSection = trimmed.startsWith("?") ? "MCQS" : "FLASHCARDS"; // sensible old style default fallback
+
+    if (nextSection !== currentSection) {
+      if (currentSection === "FLASHCARDS" && currentFlashcard) {
+        flashcards.push(currentFlashcard);
+        currentFlashcard = null;
+      } else if (currentSection === "MCQS" && currentQuestion) {
+        questions.push(currentQuestion);
+        currentQuestion = null;
+      }
+      currentSection = nextSection;
+    }
+
+    if (trimmed.startsWith("===") && trimmed.endsWith("===")) {
+      continue;
     }
 
     if (currentSection === "FLASHCARDS") {
-      if (trimmed.startsWith("?") || trimmed.startsWith("#")) {
+      if (trimmed.startsWith("#") || trimmed.startsWith("?")) {
         if (currentFlashcard) flashcards.push(currentFlashcard);
         currentFlashcard = {
           id: `f-${flashcards.length + 1}`,
           front: trimmed.substring(1).trim(),
           back: "",
         };
-      } else if ((trimmed.startsWith("+") || trimmed.startsWith("=")) && currentFlashcard) {
+      } else if ((trimmed.startsWith("=") || trimmed.startsWith("+")) && currentFlashcard) {
         currentFlashcard.back += (currentFlashcard.back ? " " : "") + trimmed.substring(1).trim();
       } else if (currentFlashcard) {
-        // Append to the active part (back if it started, otherwise front)
         if (currentFlashcard.back) {
            currentFlashcard.back += " " + trimmed;
         } else {
            currentFlashcard.front += " " + trimmed;
         }
       }
-      continue;
-    }
-
-    if (currentSection === "MCQS") {
-      if (trimmed.startsWith("#") || trimmed.startsWith("?")) {
+    } else if (currentSection === "MCQS") {
+      if (trimmed.startsWith("?") || trimmed.startsWith("#")) {
         if (currentQuestion) questions.push(currentQuestion);
         currentQuestion = {
           id: `q-${questions.length + 1}`,
@@ -151,21 +166,21 @@ export function parseQstText(text: string): { title: string; category: string; q
           answers: [],
           type: "single_choice",
         };
-        continue;
-      }
-
-      if (trimmed.startsWith("[Image:") && trimmed.endsWith("]")) {
+      } else if (trimmed.startsWith("[Image:") && trimmed.endsWith("]")) {
         const url = trimmed.substring(7, trimmed.length - 1).trim();
         if (currentQuestion) currentQuestion.imageUrl = url;
-        continue;
-      }
-
-      if (currentQuestion) {
+      } else if (currentQuestion) {
         if (trimmed.startsWith("+")) {
           currentQuestion.answers.push({ id: `a-${currentQuestion.id}-${currentQuestion.answers.length + 1}`, text: trimmed.substring(1).trim(), isCorrect: true });
         } else if (trimmed.startsWith("-") || trimmed.startsWith("*")) {
           currentQuestion.answers.push({ id: `a-${currentQuestion.id}-${currentQuestion.answers.length + 1}`, text: trimmed.substring(1).trim(), isCorrect: false });
-        } else currentQuestion.answers.length ? currentQuestion.answers[currentQuestion.answers.length - 1].text += ` ${trimmed}` : currentQuestion.prompt += ` ${trimmed}`;
+        } else {
+          if (currentQuestion.answers.length > 0) {
+            currentQuestion.answers[currentQuestion.answers.length - 1].text += ` ${trimmed}`;
+          } else {
+            currentQuestion.prompt += ` ${trimmed}`;
+          }
+        }
       }
     }
   }
