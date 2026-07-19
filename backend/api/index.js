@@ -288,107 +288,55 @@ app.post('/api/parse-ppt', upload.single('file'), async (req, res) => {
 
 const GEMINI_MCQ_PROMPT_TEMPLATE = `You are an expert educator and assessment designer.
 
-Convert the provided text into high-quality flashcards and multiple-choice questions for active recall.
+Convert the provided text into flashcards and multiple-choice questions (MCQs) for active recall.
 
-The provided text may be one chunk of a larger document.
-Generate flashcards and questions using only the information in the provided text.
-Do not assume, infer, or add information that is not explicitly stated in the provided text.
+The text may be one chunk of a larger document.
 
-### Primary Objective
+Use only information explicitly present in the provided text. Do not infer, add, or correct information.
 
-Your primary objective is to convert the provided text into the largest possible collection of useful, non-duplicate flashcards and MCQs while maintaining high quality.
+## Objective
 
-This is **not** a summarization task. It is an exhaustive knowledge extraction task.
+Create the maximum number of unique, high-quality flashcards the text can reasonably support.
 
-Treat every meaningful piece of information as a candidate for active recall.
+This is an exhaustive knowledge extraction task, not a summary.
 
-Missing important information is considered an incorrect response.
+Every independently testable concept should become a flashcard whenever possible.
 
-### Content Generation
+After generating the flashcards, generate at least one MCQ for every flashcard.
 
-* Cover the entire provided text exhaustively from beginning to end.
-* Every major topic, subsection, paragraph, table, list, formula, definition, comparison, process, and example should be represented by one or more flashcards and MCQs where appropriate.
-* Do not ignore later sections of the text.
-* If the provided text already contains MCQs, recreate exactly the same number of MCQs only. Do not generate additional MCQs. You may still generate flashcards from the content.
-* If the provided text does not contain MCQs, generate original flashcards and MCQs based only on the provided text.
-* Generate the **maximum number of unique, high-quality flashcards and MCQs** that the provided text can reasonably support.
-* There is **no upper limit** on the number of flashcards or MCQs.
-* If the text contains sufficient information, generate **at least 20 flashcards and at least 20 MCQs**.
-* If the text supports more than 20, continue generating additional items until nearly every meaningful concept and fact has been converted into active recall.
-* Never stop generating simply because you have reached the minimum.
-* If the text genuinely cannot support 20 unique flashcards or MCQs without repetition, generate the maximum number of unique, high-quality items possible.
-* Never invent facts or repeat questions simply to satisfy a minimum count.
+If a flashcard contains multiple independent facts, generate multiple MCQs testing different aspects of that flashcard.
 
-### Coverage Requirements
+Do not skip concepts because they appear minor or are mentioned only once.
 
-Convert information at the smallest meaningful unit.
+## Content Rules
 
-Whenever appropriate, create separate flashcards and MCQs for:
+* Cover the entire text from beginning to end.
+* Cover every topic, subsection, paragraph, definition, key term, process, comparison, formula, table, list, example, exception, and important statement.
+* If the text already contains MCQs, recreate exactly the same number of MCQs only. You may still generate flashcards.
+* Otherwise, generate original flashcards and MCQs.
+* Generate at least 20 flashcards and 20 MCQs whenever the text contains sufficient information.
+* Treat 20 as a minimum, not a target.
+* Continue until nearly every independently testable fact has been converted into a flashcard.
+* Never invent or repeat information.
 
-* Definitions
-* Key terms
-* Important facts
-* Concepts
-* Processes
-* Individual process steps
-* Mechanisms
-* Causes
-* Effects
-* Symptoms
-* Characteristics
-* Functions
-* Classifications
-* Categories
-* Types
-* Components
-* Relationships
-* Comparisons
-* Advantages
-* Disadvantages
-* Examples
-* Exceptions
-* Rules
-* Formulas
-* Equations
-* Tables
-* Numbered lists
-* Bullet points
-* Important statements
+## Flashcard Rules
 
-If a paragraph contains multiple independent facts, generate multiple flashcards and multiple MCQs instead of combining them into one.
+* One primary concept per flashcard whenever possible.
+* Split paragraphs containing multiple independent facts into multiple flashcards.
+* Every definition should become a flashcard.
+* Every key term should become a flashcard.
+* Flashcards should be concise and complete.
 
-Split compound sentences into multiple recall items whenever they contain multiple independent facts.
+## MCQ Rules
 
-Prefer several focused flashcards over one broad flashcard.
+* Every flashcard must have at least one corresponding MCQ.
+* The number of MCQs must never be less than the number of flashcards.
+* Important flashcards containing multiple facts should generate multiple MCQs.
+* Every MCQ must have exactly one correct answer and exactly three incorrect answers.
+* Incorrect answers should be plausible but incorrect based only on the provided text.
+* Avoid duplicate or nearly identical MCQs.
 
-Prefer several focused MCQs over one broad MCQ.
-
-Avoid combining unrelated concepts into a single flashcard or MCQ.
-
-### Flashcard Rules
-
-* Each flashcard should focus on one primary concept whenever possible.
-* Flashcards should be concise but complete.
-* Use terminology from the provided text.
-* Do not include information that is not explicitly present in the provided text.
-
-### MCQ Rules
-
-* Each MCQ must assess understanding, application, comparison, identification, or recall.
-* Every MCQ must have exactly **one** correct answer.
-* Every MCQ must contain exactly **three** incorrect answers.
-* Incorrect answers should be plausible, relevant, and clearly incorrect based only on the provided text.
-* Avoid trivial wording changes from flashcards whenever possible.
-* Avoid duplicate or nearly identical questions.
-* Every major concept should normally produce at least one flashcard and one MCQ.
-
-### Output Format
-
-Output your response using the EXACT following format.
-
-First output all flashcards under the \`===FLASHCARDS===\` header.
-
-Then output all MCQs under the \`===MCQS===\` header.
+## Output Format
 
 ===FLASHCARDS===
 
@@ -407,15 +355,14 @@ Then output all MCQs under the \`===MCQS===\` header.
 - Wrong Answer
 - Wrong Answer
 
-### Formatting Rules
+## Formatting Rules
 
-* Every flashcard title must start with \`#\`.
-* Every flashcard answer must start with \`=\`.
-* Every MCQ must start with \`?\`.
-* The correct answer must start with \`+\`.
-* Every incorrect answer must start with \`-\`.
-* Do not number flashcards or questions.
-* Do not include explanations, notes, markdown, code fences, or extra headings beyond the required headers.
+* Flashcard titles start with \`#\`
+* Flashcard answers start with \`=\`
+* Questions start with \`?\`
+* Correct answers start with \`+\`
+* Incorrect answers start with \`-\`
+* Do not number items.
 * Output only the formatted flashcards and MCQs.
 
 Text:
