@@ -1419,9 +1419,13 @@ export default function HomeScreen() {
       }
       if (exitSession) {
         setActiveSession(null);
+        setSelectedQuiz(null);
         if (sessionToSave?.quizId) {
           const sq = sessionToSave.quizId === "sample_quiz" ? sampleQuiz : quizzes.find((q: any) => q.id === sessionToSave.quizId);
-          if (sq) setSelectedQuiz(sq);
+          if (sq) {
+            setViewingInsightsQuiz(sq);
+            setActiveTab("insights");
+          }
         }
       }
       return;
@@ -1430,9 +1434,13 @@ export default function HomeScreen() {
     if (sessionToSave.attemptSaved) {
       if (exitSession) {
         setActiveSession(null);
+        setSelectedQuiz(null);
         if (sessionToSave?.quizId) {
           const sq = sessionToSave.quizId === "sample_quiz" ? sampleQuiz : quizzes.find((q: any) => q.id === sessionToSave.quizId);
-          if (sq) setSelectedQuiz(sq);
+          if (sq) {
+            setViewingInsightsQuiz(sq);
+            setActiveTab("insights");
+          }
         }
       }
       return;
@@ -1467,9 +1475,13 @@ export default function HomeScreen() {
     if (correctCount === 0 && wrongCount === 0) {
       if (exitSession) {
         setActiveSession(null);
+        setSelectedQuiz(null);
         if (sessionToSave?.quizId) {
           const sq = sessionToSave.quizId === "sample_quiz" ? sampleQuiz : quizzes.find((q: any) => q.id === sessionToSave.quizId);
-          if (sq) setSelectedQuiz(sq);
+          if (sq) {
+            setViewingInsightsQuiz(sq);
+            setActiveTab("insights");
+          }
         }
       } else {
         setActiveSession((prev: any) => prev ? { ...prev, attemptSaved: true } : prev);
@@ -1517,7 +1529,9 @@ export default function HomeScreen() {
 
       if (exitSession) {
         setActiveSession(null);
-        setSelectedQuiz(updatedSample);
+        setSelectedQuiz(null);
+        setViewingInsightsQuiz(updatedSample);
+        setActiveTab("insights");
       } else {
         setActiveSession((curr: any) => curr ? { ...curr, attemptSaved: true, targetAttemptId: curr.targetAttemptId || baseAttemptData.id, retryOfAttemptNum: curr.retryOfAttemptNum || updatedAttempts.length } : null);
       }
@@ -1549,8 +1563,12 @@ export default function HomeScreen() {
 
     if (exitSession) {
       setActiveSession(null);
+      setSelectedQuiz(null);
       const updatedQ = updatedQuizzes.find((q: any) => q.id === sessionToSave.quizId);
-      if (updatedQ) setSelectedQuiz(updatedQ);
+      if (updatedQ) {
+        setViewingInsightsQuiz(updatedQ);
+        setActiveTab("insights");
+      }
     } else {
       const updatedQ = updatedQuizzes.find((q: any) => q.id === sessionToSave.quizId);
       const attemptLength = updatedQ?.attempts?.length || 1;
@@ -2012,23 +2030,23 @@ export default function HomeScreen() {
         {/* Practice Modes */}
         <Text style={{ fontSize: 16, fontWeight: "600", color: textMain, marginTop: 12, marginBottom: 12, marginLeft: 4 }}>Practice</Text>
         <View style={{ flexDirection: "row", gap: 10, marginBottom: 24 }}>
-          <Pressable onPress={() => handleOpenQuizOptions(quiz)} style={({pressed}) => [{ flex: 1, backgroundColor: cardBg, borderRadius: 16, paddingVertical: 16, paddingHorizontal: 12, borderWidth: 1, borderColor: border, flexDirection: "row", alignItems: "center" }, pressed && {opacity: 0.8}]}>
-            <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: isDark ? "#20264A" : "#e0e7ff", alignItems: "center", justifyContent: "center", marginRight: 8 }}>
+          <Pressable onPress={() => handleOpenQuizOptions(quiz)} style={({pressed}) => [{ flex: 1, backgroundColor: cardBg, borderRadius: 16, paddingVertical: 16, paddingHorizontal: 8, borderWidth: 1, borderColor: border, flexDirection: "row", alignItems: "center" }, pressed && {opacity: 0.8}]}>
+            <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: isDark ? "#20264A" : "#e0e7ff", alignItems: "center", justifyContent: "center", marginRight: 6 }}>
               <Ionicons name="help-circle" size={18} color={isDark ? "#7C9DFF" : "#4338ca"} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 16, fontWeight: "700", color: textMain, marginBottom: 4 }} numberOfLines={1}>Quiz</Text>
-              <Text style={{ fontSize: 12, color: isDark ? "rgba(255,255,255,0.8)" : textSub }} numberOfLines={1}>{(quiz.questionsList || []).length} Questions</Text>
+              <Text style={{ fontSize: 15, fontWeight: "700", color: textMain, marginBottom: 4 }} adjustsFontSizeToFit numberOfLines={1}>Quiz</Text>
+              <Text style={{ fontSize: 12, color: isDark ? "rgba(255,255,255,0.8)" : textSub }} numberOfLines={1}>{(quiz.questionsList || []).length} Qs</Text>
             </View>
             <Feather name="chevron-right" size={16} color={isDark ? "#FFFFFF" : "#9ca3af"} style={{ opacity: isDark ? 0.8 : 1 }} />
           </Pressable>
 
-          <Pressable onPress={() => setStudyModeModalVisible(true)} style={({pressed}) => [{ flex: 1, backgroundColor: cardBg, borderRadius: 16, paddingVertical: 16, paddingHorizontal: 12, borderWidth: 1, borderColor: border, flexDirection: "row", alignItems: "center" }, pressed && {opacity: 0.8}]}>
-            <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: isDark ? "#2B2560" : "#ede9fe", alignItems: "center", justifyContent: "center", marginRight: 8 }}>
+          <Pressable onPress={() => setStudyModeModalVisible(true)} style={({pressed}) => [{ flex: 1, backgroundColor: cardBg, borderRadius: 16, paddingVertical: 16, paddingHorizontal: 8, borderWidth: 1, borderColor: border, flexDirection: "row", alignItems: "center" }, pressed && {opacity: 0.8}]}>
+            <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: isDark ? "#2B2560" : "#ede9fe", alignItems: "center", justifyContent: "center", marginRight: 6 }}>
               <Ionicons name="albums" size={16} color={isDark ? "#B5A8FF" : "#7c3aed"} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 16, fontWeight: "700", color: textMain, marginBottom: 4 }} numberOfLines={1}>Flashcards</Text>
+              <Text style={{ fontSize: 15, fontWeight: "700", color: textMain, marginBottom: 4 }} adjustsFontSizeToFit numberOfLines={1}>Flashcards</Text>
               <Text style={{ fontSize: 12, color: isDark ? "rgba(255,255,255,0.8)" : textSub }} numberOfLines={1}>{(quiz.flashcards || []).length} Cards</Text>
             </View>
             <Feather name="chevron-right" size={16} color={isDark ? "#FFFFFF" : "#9ca3af"} style={{ opacity: isDark ? 0.8 : 1 }} />
