@@ -3140,10 +3140,10 @@ export default function HomeScreen() {
       
       const GEMINI_URL = `https://asia-south1-aiplatform.googleapis.com/v1/projects/guardian-495515/locations/asia-south1/publishers/google/models/gemini-3.5-flash:generateContent?key=${key}`;
       
-      const CHUNK_SIZE = 30000;
+      const CHUNK_SIZE = 20000;
       let chunks: string[] = [];
       for (let i = 0; i < text.length; i += CHUNK_SIZE) chunks.push(text.slice(i, i + CHUNK_SIZE));
-      if (chunks.length > 8) chunks = chunks.slice(0, 8); // Max 240k chars
+      if (chunks.length > 8) chunks = chunks.slice(0, 8); // Max 160k chars
       console.log(`[AI Generation] Document split into ${chunks.length} chunk(s) (Chunk size: ${CHUNK_SIZE} chars)`);
       const CONCURRENCY = chunks.length || 1;
       const results: string[] = [];
