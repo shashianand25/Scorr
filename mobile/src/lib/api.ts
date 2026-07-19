@@ -309,11 +309,11 @@ export async function deleteMobileQuiz(
 // ── AI Generation ────────────────────────────────────────────────────────
 
 /**
- * Fetches the Gemini API key from the backend to securely use on the client.
+ * Fetches the Gemini API key and prompt from the backend to securely use on the client.
  */
-export async function fetchGeminiKey(): Promise<{ key: string | null; error: string | null }> {
-  const { data, error } = await apiFetch<{ key: string }>("/api/gemini-config");
-  return { key: data?.key ?? null, error };
+export async function fetchGeminiKey(): Promise<{ key: string | null; prompt: string | null; error: string | null }> {
+  const { data, error } = await apiFetch<{ key: string; prompt: string }>("/api/gemini-config");
+  return { key: data?.key ?? null, prompt: data?.prompt ?? null, error };
 }
 
 // ── App Updates ────────────────────────────────────────────────────────

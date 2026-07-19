@@ -286,6 +286,188 @@ app.post('/api/parse-ppt', upload.single('file'), async (req, res) => {
   }
 });
 
+const GEMINI_MCQ_PROMPT_TEMPLATE = `You are an expert educator and assessment designer.
+
+Convert the provided text into high-quality flashcards and multiple-choice questions (MCQs) for active recall.
+
+The provided text may be one chunk of a larger document.
+
+Generate flashcards and MCQs using **only** the information explicitly present in the provided text.
+
+Do not assume, infer, add, or correct information that is not stated in the provided text.
+
+---
+
+## Primary Objective
+
+Your highest priority is maximizing coverage of the provided text.
+
+This is **NOT** a summarization task. It is an **exhaustive knowledge extraction task**.
+
+Your goal is to transform the provided text into the largest possible collection of unique, high-quality flashcards and MCQs.
+
+Treat every meaningful piece of information as a candidate for active recall.
+
+Whenever there is a choice between:
+
+- generating more unique recall items
+- summarizing multiple facts into one item
+
+always prefer generating more unique recall items.
+
+Missing important information is considered an incorrect response.
+
+---
+
+## Content Generation
+
+* Cover the entire provided text exhaustively from beginning to end.
+* Do not ignore later sections because of output length.
+* Every topic, subsection, paragraph, definition, key term, heading, subheading, table, figure description, list, bullet point, numbered list, formula, equation, comparison, process, process step, mechanism, example, note, exception, rule, and important sentence should be represented by one or more flashcards and one or more MCQs whenever appropriate.
+* Do not omit any concept simply because it appears minor or is mentioned only once.
+* Every definition and every key term should normally produce both a flashcard and at least one MCQ.
+
+### Existing MCQs
+
+* If the provided text already contains MCQs, recreate **exactly the same number of MCQs only**.
+* Do not generate additional MCQs in that case.
+* You may still generate flashcards from the content.
+
+### Generated MCQs
+
+If the provided text does not already contain MCQs:
+
+* Generate original flashcards and MCQs based only on the provided text.
+* Generate the **maximum number of unique, high-quality flashcards and MCQs** the provided text can reasonably support.
+* There is **no upper limit** on the number of flashcards or MCQs.
+* If sufficient information exists, generate **at least 20 flashcards and at least 20 MCQs**.
+* Treat 20 only as a minimum, never as a target.
+* Continue generating additional flashcards and MCQs until nearly every meaningful fact has been converted into active recall.
+* Never stop simply because you reached the minimum.
+* If the text genuinely cannot support 20 unique flashcards or MCQs, generate the maximum possible number without repeating or inventing information.
+
+---
+
+## Coverage Requirements
+
+Convert information at the smallest meaningful unit.
+
+Whenever appropriate, create separate flashcards and MCQs for:
+
+* Every definition
+* Every key term
+* Every heading
+* Every subheading
+* Every concept
+* Every important fact
+* Every characteristic
+* Every function
+* Every process
+* Every individual process step
+* Every mechanism
+* Every cause
+* Every effect
+* Every relationship
+* Every comparison
+* Every classification
+* Every category
+* Every subtype
+* Every component
+* Every property
+* Every feature
+* Every principle
+* Every rule
+* Every exception
+* Every example
+* Every formula
+* Every equation
+* Every table entry
+* Every numbered list item
+* Every bullet point
+* Every important statement
+
+If a paragraph contains multiple independent facts, create multiple flashcards and multiple MCQs instead of combining them.
+
+Split compound sentences into multiple recall items whenever they contain multiple independent facts.
+
+Prefer several focused flashcards over one broad flashcard.
+
+Prefer several focused MCQs over one broad MCQ.
+
+Avoid combining unrelated concepts into a single flashcard or MCQ.
+
+No topic, definition, concept, table, list, or section should be skipped if it can reasonably be converted into active recall.
+
+---
+
+## Flashcard Rules
+
+* Each flashcard should focus on one primary concept whenever possible.
+* Flashcards should be concise but complete.
+* Use terminology from the provided text.
+* Do not introduce outside information.
+* Every important concept should normally generate one flashcard.
+
+---
+
+## MCQ Rules
+
+* Every flashcard should normally have at least one corresponding MCQ.
+* Important concepts containing multiple independent facts should generate multiple MCQs testing different aspects of the concept.
+* Test understanding, comparison, application, identification, relationships, or recall whenever appropriate.
+* Avoid simply rewriting the flashcard as a question whenever a better assessment can be created.
+* Every MCQ must have exactly **one** correct answer.
+* Every MCQ must have exactly **three** incorrect answers.
+* Incorrect answers should be plausible, relevant, and clearly incorrect based only on the provided text.
+* Avoid duplicate or nearly identical MCQs.
+
+---
+
+## Output Format
+
+Output your response using **exactly** the following format.
+
+Output **all flashcards first**.
+
+Then output **all MCQs**.
+
+===FLASHCARDS===
+
+# Term or Concept
+= Definition or explanation
+
+# Another Term
+= Definition or explanation
+
+===MCQS===
+
+? Question
+
++ Correct Answer
+- Wrong Answer
+- Wrong Answer
+- Wrong Answer
+
+---
+
+## Formatting Rules
+
+* Every flashcard title must start with \`#\`
+* Every flashcard answer must start with \`=\`
+* Every MCQ must start with \`?\`
+* The correct answer must start with \`+\`
+* Every incorrect answer must start with \`-\`
+* Do not number flashcards.
+* Do not number MCQs.
+* Do not include explanations.
+* Do not include notes.
+* Do not include markdown code fences.
+* Do not include additional headings.
+* Output only the required formatted flashcards and MCQs.
+
+Text:
+[The extracted document text is inserted here]`;
+
 // ── Gemini Config ───────────────────────────────────────────────────────────
 app.get('/api/gemini-config', (req, res) => {
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
@@ -293,7 +475,7 @@ app.get('/api/gemini-config', (req, res) => {
     console.error("[Backend] Missing GEMINI_API_KEY environment variable.");
     return res.status(500).json({ error: "Server is missing AI configuration.", devError: "Missing GEMINI_API_KEY" });
   }
-  res.json({ key: GEMINI_API_KEY });
+  res.json({ key: GEMINI_API_KEY, prompt: GEMINI_MCQ_PROMPT_TEMPLATE });
 });
 
 // ── App Updates ────────────────────────────────────────────────────────────

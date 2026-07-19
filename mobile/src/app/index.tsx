@@ -78,102 +78,184 @@ const deleteFlashcardDeck = async (..._args: any[]) => ({ error: null });
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const KeyboardWrapper = Platform.OS === "ios" ? KeyboardAvoidingView : View;
 
-// ── AI Generation (Client-Side proxying via Backend) ───────────────────────
 const MCQ_PROMPT = (text: string) => `You are an expert educator and assessment designer.
 
-Convert the provided text into high-quality flashcards and multiple-choice questions for active recall.
+Convert the provided text into high-quality flashcards and multiple-choice questions (MCQs) for active recall.
 
 The provided text may be one chunk of a larger document.
-Generate flashcards and questions using only the information in the provided text.
-Do not assume, infer, or add information that is not explicitly present in the provided text.
 
-### Content Generation
+Generate flashcards and MCQs using **only** the information explicitly present in the provided text.
 
-* Cover the entire provided text exhaustively. Missing major concepts, sections, definitions, processes, examples, tables, lists, formulas, or comparisons is considered an incorrect response.
-* Treat the output as a complete study deck, not a summary.
-* Every major topic and subsection should be represented by one or more flashcards and one or more MCQs where appropriate.
-* If the provided text already contains MCQs, recreate exactly the same number of MCQs only. Do not create additional MCQs. You may still generate flashcards from the content.
-* If the text does not contain MCQs, generate original flashcards and MCQs based only on the provided text.
-* Generate at least **20 flashcards** and **20 MCQs** whenever the text contains enough information to support them.
-* If the text is information-dense, generate substantially more than 20 items. There is no upper limit. Continue generating unique flashcards and MCQs until nearly every meaningful fact has been converted into active recall.
-* If the text is too short to support 20 unique flashcards or 20 unique MCQs without repetition, generate the maximum number of high-quality, non-duplicate items possible.
-* Prioritize completeness over brevity. Missing important information is a worse error than generating additional high-quality questions.
-* Do not omit later sections of the text because of output length. Continue until the entire provided text has been covered.
+Do not assume, infer, add, or correct information that is not stated in the provided text.
 
-### Coverage Requirements
+---
 
-* Convert nearly every meaningful piece of information into active recall whenever practical.
-* Create flashcards for:
-  * Definitions
-  * Key terms
-  * Important concepts
-  * Processes and sequences
-  * Classifications
-  * Formulas
-  * Comparisons
-  * Tables
-  * Lists
-  * Relationships
-* If a paragraph contains multiple independent facts, create multiple flashcards and multiple MCQs instead of combining them into one.
-* Long lists should be broken into multiple questions whenever appropriate.
-* Multi-step processes should generate separate questions for important steps whenever possible.
-* Comparisons should generate comparison-based MCQs.
-* Avoid combining several unrelated facts into a single flashcard or MCQ.
-* Prefer many focused questions over fewer broad questions.
-* Do not generate duplicate or nearly identical flashcards or MCQs.
+## Primary Objective
 
-### Flashcard Rules
+Your highest priority is maximizing coverage of the provided text.
 
-* Flashcards should be concise while remaining complete.
-* Each flashcard should test one primary concept whenever possible.
-* Use clear terminology from the source text.
-* Do not include information not found in the provided text.
+This is **NOT** a summarization task. It is an **exhaustive knowledge extraction task**.
 
-### MCQ Rules
+Your goal is to transform the provided text into the largest possible collection of unique, high-quality flashcards and MCQs.
 
-* Every MCQ must assess understanding, application, identification, comparison, or recall based only on the provided text.
-* Avoid trivial wording changes from the flashcards whenever possible.
-* Each MCQ must have exactly one correct answer.
-* Each MCQ must contain exactly three incorrect answers.
+Treat every meaningful piece of information as a candidate for active recall.
+
+Whenever there is a choice between:
+
+- generating more unique recall items
+- summarizing multiple facts into one item
+
+always prefer generating more unique recall items.
+
+Missing important information is considered an incorrect response.
+
+---
+
+## Content Generation
+
+* Cover the entire provided text exhaustively from beginning to end.
+* Do not ignore later sections because of output length.
+* Every topic, subsection, paragraph, definition, key term, heading, subheading, table, figure description, list, bullet point, numbered list, formula, equation, comparison, process, process step, mechanism, example, note, exception, rule, and important sentence should be represented by one or more flashcards and one or more MCQs whenever appropriate.
+* Do not omit any concept simply because it appears minor or is mentioned only once.
+* Every definition and every key term should normally produce both a flashcard and at least one MCQ.
+
+### Existing MCQs
+
+* If the provided text already contains MCQs, recreate **exactly the same number of MCQs only**.
+* Do not generate additional MCQs in that case.
+* You may still generate flashcards from the content.
+
+### Generated MCQs
+
+If the provided text does not already contain MCQs:
+
+* Generate original flashcards and MCQs based only on the provided text.
+* Generate the **maximum number of unique, high-quality flashcards and MCQs** the provided text can reasonably support.
+* There is **no upper limit** on the number of flashcards or MCQs.
+* If sufficient information exists, generate **at least 20 flashcards and at least 20 MCQs**.
+* Treat 20 only as a minimum, never as a target.
+* Continue generating additional flashcards and MCQs until nearly every meaningful fact has been converted into active recall.
+* Never stop simply because you reached the minimum.
+* If the text genuinely cannot support 20 unique flashcards or MCQs, generate the maximum possible number without repeating or inventing information.
+
+---
+
+## Coverage Requirements
+
+Convert information at the smallest meaningful unit.
+
+Whenever appropriate, create separate flashcards and MCQs for:
+
+* Every definition
+* Every key term
+* Every heading
+* Every subheading
+* Every concept
+* Every important fact
+* Every characteristic
+* Every function
+* Every process
+* Every individual process step
+* Every mechanism
+* Every cause
+* Every effect
+* Every relationship
+* Every comparison
+* Every classification
+* Every category
+* Every subtype
+* Every component
+* Every property
+* Every feature
+* Every principle
+* Every rule
+* Every exception
+* Every example
+* Every formula
+* Every equation
+* Every table entry
+* Every numbered list item
+* Every bullet point
+* Every important statement
+
+If a paragraph contains multiple independent facts, create multiple flashcards and multiple MCQs instead of combining them.
+
+Split compound sentences into multiple recall items whenever they contain multiple independent facts.
+
+Prefer several focused flashcards over one broad flashcard.
+
+Prefer several focused MCQs over one broad MCQ.
+
+Avoid combining unrelated concepts into a single flashcard or MCQ.
+
+No topic, definition, concept, table, list, or section should be skipped if it can reasonably be converted into active recall.
+
+---
+
+## Flashcard Rules
+
+* Each flashcard should focus on one primary concept whenever possible.
+* Flashcards should be concise but complete.
+* Use terminology from the provided text.
+* Do not introduce outside information.
+* Every important concept should normally generate one flashcard.
+
+---
+
+## MCQ Rules
+
+* Every flashcard should normally have at least one corresponding MCQ.
+* Important concepts containing multiple independent facts should generate multiple MCQs testing different aspects of the concept.
+* Test understanding, comparison, application, identification, relationships, or recall whenever appropriate.
+* Avoid simply rewriting the flashcard as a question whenever a better assessment can be created.
+* Every MCQ must have exactly **one** correct answer.
+* Every MCQ must have exactly **three** incorrect answers.
 * Incorrect answers should be plausible, relevant, and clearly incorrect based only on the provided text.
-* Every major concept should usually produce at least one flashcard and one MCQ.
+* Avoid duplicate or nearly identical MCQs.
 
-### Output Format
+---
 
-Output your response using the EXACT following format.
+## Output Format
 
-First output all flashcards under the ===FLASHCARDS=== header.
+Output your response using **exactly** the following format.
 
-Then output all MCQs under the ===MCQS=== header.
+Output **all flashcards first**.
+
+Then output **all MCQs**.
 
 ===FLASHCARDS===
 
-# Term or Concept 1
-= Definition or explanation 1
+# Term or Concept
+= Definition or explanation
 
-# Term or Concept 2
-= Definition or explanation 2
+# Another Term
+= Definition or explanation
 
 ===MCQS===
 
-? Question 1
+? Question
 
 + Correct Answer
-
 - Wrong Answer
 - Wrong Answer
 - Wrong Answer
 
-### Formatting Rules
+---
 
-* Every flashcard title must start with \`#\`.
-* Every flashcard answer must start with \`=\`.
-* Every MCQ must start with \`?\`.
-* The correct answer must start with \`+\`.
-* Every incorrect answer must start with \`-\`.
-* Do not number flashcards or questions.
-* Do not include explanations, reasoning, notes, markdown, code fences, or extra headings beyond the required headers.
-* Output only the formatted flashcards and MCQs.
+## Formatting Rules
+
+* Every flashcard title must start with \`#\`
+* Every flashcard answer must start with \`=\`
+* Every MCQ must start with \`?\`
+* The correct answer must start with \`+\`
+* Every incorrect answer must start with \`-\`
+* Do not number flashcards.
+* Do not number MCQs.
+* Do not include explanations.
+* Do not include notes.
+* Do not include markdown code fences.
+* Do not include additional headings.
+* Output only the required formatted flashcards and MCQs.
 
 Text:
 ${text}`;
@@ -3132,7 +3214,7 @@ export default function HomeScreen() {
     isBackgroundGen.current = false;
     setAiGenPhase("generating");
     try {
-      const { key, error: keyError } = await fetchGeminiKey();
+      const { key, prompt: backendPrompt, error: keyError } = await fetchGeminiKey();
       if (keyError || !key) {
         throw new Error(keyError || "Could not fetch AI configuration from server.");
       }
@@ -3147,11 +3229,18 @@ export default function HomeScreen() {
       for (let i = 0; i < chunks.length; i += CONCURRENCY) {
         const batch = chunks.slice(i, i + CONCURRENCY);
         const batchResults = await Promise.all(
-          batch.map(chunk => fetch(GEMINI_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: MCQ_PROMPT(chunk) }] }], generationConfig: { maxOutputTokens: 65536, temperature: 0.2 } }),
-          }).then(async r => { if (!r.ok) throw new Error((await r.json())?.error?.message || r.statusText); return (await r.json())?.candidates?.[0]?.content?.parts?.[0]?.text || ""; }))
+          batch.map(chunk => {
+            const promptTemplate = backendPrompt || MCQ_PROMPT("");
+            const fullPrompt = promptTemplate.includes("[The extracted document text is inserted here]")
+              ? promptTemplate.replace("[The extracted document text is inserted here]", chunk)
+              : (backendPrompt ? `${promptTemplate}\n\nText:\n${chunk}` : MCQ_PROMPT(chunk));
+
+            return fetch(GEMINI_URL, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: fullPrompt }] }], generationConfig: { maxOutputTokens: 65536, temperature: 0.2 } }),
+            }).then(async r => { if (!r.ok) throw new Error((await r.json())?.error?.message || r.statusText); return (await r.json())?.candidates?.[0]?.content?.parts?.[0]?.text || ""; });
+          })
         );
         results.push(...batchResults);
       }
