@@ -286,15 +286,20 @@ app.post('/api/parse-ppt', upload.single('file'), async (req, res) => {
   }
 });
 
-const GEMINI_MCQ_PROMPT_TEMPLATE = `You are an expert tutor and you need to get me full marks,
-Generate at least {{MIN_FLASHCARDS}} flashcards covering all the given text
-Flashcards are TERM → DEFINITION, NOT question → answer.**
+const GEMINI_MCQ_PROMPT_TEMPLATE = `You are an expert tutor and you need to get me full marks.
 
+First output all flashcards under the ===FLASHCARDS=== header.
+Then output all quiz questions under the ===MCQS=== header.
+
+===FLASHCARDS===
+Generate at least {{MIN_FLASHCARDS}} flashcards covering all the given text.
+Flashcards are TERM → DEFINITION, NOT question → answer.
 Example:
-
 # What is the SI unit of force?
 = Newton
-Generate at least {{MIN_MCQS}} quiz covering all the given text
+
+===MCQS===
+Generate at least {{MIN_MCQS}} quiz covering all the given text.
 Example:
 ? What is the SI unit of force?
 + Newton
@@ -302,7 +307,7 @@ Example:
 - Pascal
 - Watt
 
-If this is a list of questions generate exactly that many questions and flashcards as given
+If this is a list of questions generate exactly that many questions and flashcards as given.
 
 Text:
 [PASTE YOUR TEXT HERE]`;
