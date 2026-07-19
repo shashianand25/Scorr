@@ -3075,40 +3075,39 @@ export default function HomeScreen() {
 
             if (docSize < 2000) {
               minFlashcards = "5-8";
-              minMcqs = "5-8";
               expectedFlashcards = "5-10";
-              expectedMcqs = "5-10";
             } else if (docSize >= 2000 && docSize < 5000) {
               minFlashcards = "10-15";
-              minMcqs = "10-15";
               expectedFlashcards = "10-20";
-              expectedMcqs = "10-20";
             } else if (docSize >= 5000 && docSize < 10000) {
               minFlashcards = "20-25";
-              minMcqs = "20-25";
               expectedFlashcards = "20-30";
-              expectedMcqs = "20-30";
             } else if (docSize >= 10000 && docSize < 15000) {
               minFlashcards = "30-35";
-              minMcqs = "30-35";
               expectedFlashcards = "30-45";
-              expectedMcqs = "30-45";
             } else if (docSize >= 15000 && docSize < 20000) {
               minFlashcards = "40-50";
-              minMcqs = "40-50";
               expectedFlashcards = "40-60";
-              expectedMcqs = "40-60";
             } else if (docSize >= 20000 && docSize < 25000) {
               minFlashcards = "50-60";
-              minMcqs = "50-60";
               expectedFlashcards = "50-75";
-              expectedMcqs = "50-75";
             } else {
               minFlashcards = "60-75";
-              minMcqs = "60-75";
               expectedFlashcards = "60-90";
-              expectedMcqs = "60-90";
             }
+
+            const scaleRangeBy1_3 = (rangeStr: string): string => {
+              const parts = rangeStr.split("-").map(Number);
+              if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                const low = Math.round(parts[0] * 1.3);
+                const high = Math.round(parts[1] * 1.3);
+                return `${low}-${high}`;
+              }
+              return rangeStr;
+            };
+
+            minMcqs = scaleRangeBy1_3(minFlashcards);
+            expectedMcqs = scaleRangeBy1_3(expectedFlashcards);
 
             const promptTemplate = backendPrompt || MCQ_PROMPT("");
             let fullPrompt = promptTemplate;
