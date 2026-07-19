@@ -142,18 +142,18 @@ function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true }: 
       ])
     ).start();
 
-    // Fake progress bar filling over exactly 60 seconds
+    // Fake progress bar filling over exactly 45 seconds
     Animated.timing(progress, {
       toValue: 1,
-      duration: 60000,
+      duration: 45000,
       easing: Easing.out(Easing.ease),
       useNativeDriver: false 
     }).start();
 
-    // Show long wait text after 60s
+    // Show long wait text after 45s
     const timer = setTimeout(() => {
       setShowLongWait(true);
-    }, 60000);
+    }, 45000);
 
     return () => clearTimeout(timer);
   }, []);
@@ -3139,7 +3139,7 @@ export default function HomeScreen() {
       
       const GEMINI_URL = `https://asia-south1-aiplatform.googleapis.com/v1/projects/guardian-495515/locations/asia-south1/publishers/google/models/gemini-3.5-flash:generateContent?key=${key}`;
       
-      const CHUNK_SIZE = 20000;
+      const CHUNK_SIZE = 15000;
       let chunks: string[] = [];
       for (let i = 0; i < text.length; i += CHUNK_SIZE) chunks.push(text.slice(i, i + CHUNK_SIZE));
       if (chunks.length > 8) chunks = chunks.slice(0, 8); // Max 160k chars
