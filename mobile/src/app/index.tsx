@@ -108,13 +108,15 @@ Missing important information is considered an incorrect response.
 * If the text contains sufficient information, generate **at least 20 flashcards and at least 20 MCQs**.
 * If the text supports more than 20, continue generating additional items until nearly every meaningful concept and fact has been converted into active recall.
 * Never stop generating simply because you have reached the minimum.
+* If the text genuinely cannot support 20 unique flashcards or MCQs without repetition, generate the maximum number of unique, high-quality items possible.
 * Never invent facts or repeat questions simply to satisfy a minimum count.
 
 ### Coverage Requirements
 
 Convert information at the smallest meaningful unit.
 
-Each flashcard term should have >=1 quiz for that card
+Whenever appropriate, create separate flashcards and MCQs for:
+
 * Definitions
 * Key terms
 * Important facts
@@ -7459,25 +7461,25 @@ export default function HomeScreen() {
           const inProgressQuizzes = quizzes.filter((q: any) => {
             const uniqueCount = (q.uniqueCorrectIds || []).length;
             const qCount = q.questions || 1;
-            return (q.attempts || []).length > 0 && uniqueCount < qCount;
+            return uniqueCount < qCount;
           });
-          const inProgressDecks = flashcardDecks.filter((d: any) =>
-            (d.cards || []).some((c: any) => c.sm2_nextReviewDate)
-          );
+          const inProgressDecks = flashcardDecks.filter((d: any) => (d.cards || []).length > 0);
 
           type JumpItem = { id: string; title: string; type: "quiz"|"flashcard"; progress: number; label: string; raw: any; };
           const jumpItems: JumpItem[] = [
             ...inProgressQuizzes.slice(0, 4).map((q: any): JumpItem => {
               const done = (q.uniqueCorrectIds || []).length;
               const total = q.questions || 1;
+              const isNew = (q.attempts || []).length === 0;
               return { id: q.id, title: q.title, type: "quiz", progress: done / total,
-                label: `${Math.round((done / total) * 100)}% complete`, raw: q };
+                label: isNew ? "Not started" : `${Math.round((done / total) * 100)}% complete`, raw: q };
             }),
             ...inProgressDecks.slice(0, 3).map((d: any): JumpItem => {
               const cards = d.cards || [];
               const studied = cards.filter((c: any) => !!c.sm2_nextReviewDate).length;
+              const isNew = studied === 0;
               return { id: d.id, title: d.title, type: "flashcard", progress: cards.length > 0 ? studied / cards.length : 0,
-                label: `${studied}/${cards.length} cards sorted`, raw: d };
+                label: isNew ? "Not started" : `${studied}/${cards.length} cards sorted`, raw: d };
             }),
           ];
 

@@ -316,13 +316,15 @@ Missing important information is considered an incorrect response.
 * If the text contains sufficient information, generate **at least 20 flashcards and at least 20 MCQs**.
 * If the text supports more than 20, continue generating additional items until nearly every meaningful concept and fact has been converted into active recall.
 * Never stop generating simply because you have reached the minimum.
+* If the text genuinely cannot support 20 unique flashcards or MCQs without repetition, generate the maximum number of unique, high-quality items possible.
 * Never invent facts or repeat questions simply to satisfy a minimum count.
 
 ### Coverage Requirements
 
 Convert information at the smallest meaningful unit.
 
-Each flashcard term should have >=1 quiz for that card
+Whenever appropriate, create separate flashcards and MCQs for:
+
 * Definitions
 * Key terms
 * Important facts
