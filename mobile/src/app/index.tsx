@@ -3158,26 +3158,26 @@ export default function HomeScreen() {
             let expectedMcqs = "20-30";
 
             if (docSize < 2000) {
-              minFlashcards = "10-15";
-              expectedFlashcards = "12-18";
+              minFlashcards = "11-17";
+              expectedFlashcards = "13-20";
             } else if (docSize >= 2000 && docSize < 5000) {
-              minFlashcards = "20-25";
-              expectedFlashcards = "24-30";
+              minFlashcards = "22-28";
+              expectedFlashcards = "26-33";
             } else if (docSize >= 5000 && docSize < 10000) {
-              minFlashcards = "24-30";
-              expectedFlashcards = "24-36";
+              minFlashcards = "26-33";
+              expectedFlashcards = "26-40";
             } else if (docSize >= 10000 && docSize < 15000) {
-              minFlashcards = "27-32";
-              expectedFlashcards = "27-40";
+              minFlashcards = "30-35";
+              expectedFlashcards = "30-44";
             } else if (docSize >= 15000 && docSize < 20000) {
-              minFlashcards = "36-45";
-              expectedFlashcards = "36-54";
+              minFlashcards = "40-50";
+              expectedFlashcards = "40-59";
             } else if (docSize >= 20000 && docSize < 25000) {
-              minFlashcards = "45-54";
-              expectedFlashcards = "45-68";
+              minFlashcards = "50-59";
+              expectedFlashcards = "50-75";
             } else {
-              minFlashcards = "54-68";
-              expectedFlashcards = "54-81";
+              minFlashcards = "59-75";
+              expectedFlashcards = "59-89";
             }
 
             const scaleRangeBy1_3 = (rangeStr: string): string => {
