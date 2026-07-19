@@ -3069,7 +3069,7 @@ export default function HomeScreen() {
       const chunks: string[] = [];
       for (let i = 0; i < text.length; i += CHUNK_SIZE) chunks.push(text.slice(i, i + CHUNK_SIZE));
       console.log(`[AI Generation] Document split into ${chunks.length} chunk(s) (Chunk size: ${CHUNK_SIZE} chars)`);
-      const CONCURRENCY = 3;
+      const CONCURRENCY = 6;
       const results: string[] = [];
       for (let i = 0; i < chunks.length; i += CONCURRENCY) {
         const batch = chunks.slice(i, i + CONCURRENCY);
