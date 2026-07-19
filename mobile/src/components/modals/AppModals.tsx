@@ -1664,6 +1664,8 @@ export function AppModals({ p }: { p: any }) {
                     const reader = new FileReader();
                     reader.onload = (ev) => {
                       const text = ev.target?.result as string;
+                      console.log("[Web-Extraction] Extracted raw text length:", text ? text.length : 0);
+                      console.log("[Web-Extraction] Extracted raw text:\n", text);
                       (p.setShowAddMenu || (() => {}))(false);
                       setTimeout(() => (p.handleGenerateWithAI || (() => {}))(text, file.name), 150);
                     };
@@ -1676,7 +1678,7 @@ export function AppModals({ p }: { p: any }) {
                       const result = await DocumentPicker.getDocumentAsync({ type: "*/*", copyToCacheDirectory: true });
                       if (!result.canceled && result.assets?.[0]) {
                         const { uri: fileUri, name: fileName, size: fileSize = 0 } = result.assets[0];
-                        const ext = fileName.split(".").pop()?.toLowerCase();
+                         const ext = fileName.split(".").pop()?.toLowerCase();
                         if (ext === "pdf" && !p.isConnected) { (p.setOfflineModalParams || (() => {}))({ title: "Can't Generate", message: "PDF conversion requires internet." }); return; }
                         if (ext && !["txt", "qst", "md", "docx", "pdf", "ppt", "pptx"].includes(ext)) { Alert.alert("Unsupported File", `Supported: .txt, .docx, .pdf, .ppt, .pptx. Got .${ext}`); return; }
                         (p.setAiGenPhase || (() => {}))("generating");
@@ -1698,6 +1700,8 @@ export function AppModals({ p }: { p: any }) {
                             } else {
                               text = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.UTF8 });
                             }
+                            console.log("[Mobile-Extraction] Extracted raw text length:", text ? text.length : 0);
+                            console.log("[Mobile-Extraction] Extracted raw text:\n", text);
                             (p.setShowAddMenu || (() => {}))(false);
                             setTimeout(() => (p.handleGenerateWithAI || (() => {}))(text, fileName), 150);
                           } catch (err: any) {
