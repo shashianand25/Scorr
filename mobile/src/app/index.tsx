@@ -1417,12 +1417,24 @@ export default function HomeScreen() {
       if (sessionToSave && !sessionToSave.isFinished && sessionToSave.quizId) {
         setSavedSessions(prev => ({ ...prev, [sessionToSave.quizId]: sessionToSave }));
       }
-      if (exitSession) setActiveSession(null);
+      if (exitSession) {
+        setActiveSession(null);
+        if (sessionToSave?.quizId) {
+          const sq = sessionToSave.quizId === "sample_quiz" ? sampleQuiz : quizzes.find((q: any) => q.id === sessionToSave.quizId);
+          if (sq) setSelectedQuiz(sq);
+        }
+      }
       return;
     }
 
     if (sessionToSave.attemptSaved) {
-      if (exitSession) setActiveSession(null);
+      if (exitSession) {
+        setActiveSession(null);
+        if (sessionToSave?.quizId) {
+          const sq = sessionToSave.quizId === "sample_quiz" ? sampleQuiz : quizzes.find((q: any) => q.id === sessionToSave.quizId);
+          if (sq) setSelectedQuiz(sq);
+        }
+      }
       return;
     }
 
@@ -1455,6 +1467,10 @@ export default function HomeScreen() {
     if (correctCount === 0 && wrongCount === 0) {
       if (exitSession) {
         setActiveSession(null);
+        if (sessionToSave?.quizId) {
+          const sq = sessionToSave.quizId === "sample_quiz" ? sampleQuiz : quizzes.find((q: any) => q.id === sessionToSave.quizId);
+          if (sq) setSelectedQuiz(sq);
+        }
       } else {
         setActiveSession((prev: any) => prev ? { ...prev, attemptSaved: true } : prev);
       }
@@ -1501,6 +1517,7 @@ export default function HomeScreen() {
 
       if (exitSession) {
         setActiveSession(null);
+        setSelectedQuiz(updatedSample);
       } else {
         setActiveSession((curr: any) => curr ? { ...curr, attemptSaved: true, targetAttemptId: curr.targetAttemptId || baseAttemptData.id, retryOfAttemptNum: curr.retryOfAttemptNum || updatedAttempts.length } : null);
       }
@@ -1532,6 +1549,8 @@ export default function HomeScreen() {
 
     if (exitSession) {
       setActiveSession(null);
+      const updatedQ = updatedQuizzes.find((q: any) => q.id === sessionToSave.quizId);
+      if (updatedQ) setSelectedQuiz(updatedQ);
     } else {
       const updatedQ = updatedQuizzes.find((q: any) => q.id === sessionToSave.quizId);
       const attemptLength = updatedQ?.attempts?.length || 1;
@@ -7412,23 +7431,26 @@ export default function HomeScreen() {
           });
           const inProgressDecks = flashcardDecks.filter((d: any) => (d.cards || []).length > 0);
 
-          type JumpItem = { id: string; title: string; type: "quiz"|"flashcard"; progress: number; label: string; raw: any; };
-          const jumpItems: JumpItem[] = [
-            ...inProgressQuizzes.slice(0, 4).map((q: any): JumpItem => {
+          type JumpItem = { id: string; title: string; type: "quiz"|"flashcard"; progress: number; label: string; raw: any; ts?: number; };
+          const allJumpCandidates: JumpItem[] = [
+            ...inProgressQuizzes.map((q: any, i: number): JumpItem => {
               const done = (q.uniqueCorrectIds || []).length;
               const total = q.questions || 1;
               const isNew = (q.attempts || []).length === 0;
+              const ts = isNew ? Date.now() - (i * 1000) : (q.attempts[0]?.date || 0);
               return { id: q.id, title: q.title, type: "quiz", progress: done / total,
-                label: isNew ? "Not started" : `${Math.round((done / total) * 100)}% complete`, raw: q };
+                label: isNew ? "Not started" : `${Math.round((done / total) * 100)}% complete`, raw: q, ts };
             }),
-            ...inProgressDecks.slice(0, 3).map((d: any): JumpItem => {
+            ...inProgressDecks.map((d: any, i: number): JumpItem => {
               const cards = d.cards || [];
               const studied = cards.filter((c: any) => !!c.sm2_nextReviewDate).length;
               const isNew = studied === 0;
+              const ts = isNew ? Date.now() - (i * 1000) : (d.attempts?.[d.attempts.length - 1]?.date || 0);
               return { id: d.id, title: d.title, type: "flashcard", progress: cards.length > 0 ? studied / cards.length : 0,
-                label: isNew ? "Not started" : `${studied}/${cards.length} cards sorted`, raw: d };
+                label: isNew ? "Not started" : `${studied}/${cards.length} cards sorted`, raw: d, ts };
             }),
           ];
+          const jumpItems: JumpItem[] = allJumpCandidates.sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, 5);
 
           type RecentItem = { id: string; title: string; type: "quiz"|"flashcard"; sub: string; raw: any; ts: number; };
           const allRecents: RecentItem[] = [
