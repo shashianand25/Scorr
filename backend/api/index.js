@@ -286,68 +286,21 @@ app.post('/api/parse-ppt', upload.single('file'), async (req, res) => {
   }
 });
 
-const GEMINI_MCQ_PROMPT_TEMPLATE = `## DOCUMENT SIZE: {{CHAR_COUNT}} chars
-## MAX CHUNK SIZE: 30,000 chars
-
-## FLASHCARD RULES
-- Extract EVERY testable fact. Do NOT summarize.
-- Split facts. NEVER combine.
-- Minimum flashcards: {{MIN_FLASHCARDS}} (based on char count below)
-
-## MCQ RULES
-- **CRITICAL: MCQs must ALWAYS be ≥ flashcards.**
-- Minimum MCQs: {{MIN_MCQS}} (same as min flashcards)
-- If flashcards > {{MIN_MCQS}}, generate at least as many MCQs as flashcards.
-- Final MCQs = MAX({{MIN_MCQS}}, total_flashcards)
-- Every MCQ must have exactly 4 options.
-- Exactly 1 option must be correct.
-- Wrong options should be plausible and relevant.
-- Avoid obvious giveaway answers and duplicate questions.
-
-## DENSITY EXPECTATION
-- For every 1000 characters, expect 2-4 flashcards and 2-4 MCQs.
-- This document ({{CHAR_COUNT}} chars) should generate:
-  - Expected flashcards: {{EXPECTED_FLASHCARDS}}
-  - Expected MCQs: {{EXPECTED_MCQS}}
-
-## DYNAMIC RULES (MAX CHUNK 30k)
-
-| Chunk Size | Min Flashcards | Min MCQs |
-| :--- | :---: | :---: |
-| Under 2k | 5-8 | 5-8 |
-| 2k-5k | 10-15 | 10-15 |
-| 5k-10k | 20-25 | 20-25 |
-| 10k-15k | 30-35 | 30-35 |
-| 15k-20k | 40-50 | 40-50 |
-| 20k-25k | 50-60 | 50-60 |
-| 25k-30k | 60-75 | 60-75 |
-
-## Output Format
-
-- Start every flashcard question with \`#\`
-- Start every correct flashcard answer with \`=\`
-
-- Start every MCQ question with \`?\`
-- Start the correct MCQ option with \`+\`
-- Start each incorrect MCQ option with \`-\`
-
+const GEMINI_MCQ_PROMPT_TEMPLATE = `You are an expert tutor and you need to get me full marks,
+Generate at least {{MIN_FLASHCARDS}} flashcards covering all the given text
 Example:
 
 # What is the SI unit of force?
 = Newton
-
+Generate at least {{MIN_MCQS}} quiz covering all the given text
+Example:
 ? What is the SI unit of force?
 + Newton
 - Joule
 - Pascal
 - Watt
 
-## General Rules
-
-- Do not invent information not present in the document.
-- Do not generate trivial or repetitive questions just to reach the minimum.
-- Preserve technical terms, notation, and formulas from the source where appropriate.
-- Output only the formatted flashcards and MCQs. Do not include explanations, headings, or markdown.
+If this is a list of questions generate exactly that many questions and flashcards as given
 
 Text:
 [PASTE YOUR TEXT HERE]`;
