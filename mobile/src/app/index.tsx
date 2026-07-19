@@ -134,7 +134,7 @@ function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true }: 
     Animated.loop(
       Animated.sequence([
         Animated.timing(sway, { toValue: -1, duration: 2500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(sway, { toValue: 1, duration: 2500, easing: Easing.inOut(Easing.sin), useNativeDriver: true })
+        Animated.timing(sway, { toValue: 0, duration: 2500, easing: Easing.inOut(Easing.sin), useNativeDriver: true })
       ])
     ).start();
 
@@ -165,8 +165,8 @@ function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true }: 
     }).start();
   }, [documentCharCount]);
 
-  const swayRotate = sway.interpolate({ inputRange: [-1, 1], outputRange: ["-6deg", "6deg"] });
-  const swayTranslateY = sway.interpolate({ inputRange: [-1, 1], outputRange: [-5, 5] });
+  const swayRotate = sway.interpolate({ inputRange: [-1, 0], outputRange: ["-6deg", "0deg"] });
+  const swayTranslateY = sway.interpolate({ inputRange: [-1, 0], outputRange: [-5, 0] });
   
   const barWidth = progress.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] });
 
@@ -210,10 +210,12 @@ function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true }: 
             ],
             shadowColor: isDark ? '#4C3896' : '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: isDark ? 0.5 : 0.05, shadowRadius: 20
           }}>
-             <Ionicons name="flash" size={54} color={isDark ? "#E5D9FF" : "#6366f1"} style={{ transform: [{ skewX: "-5deg" }] }} />
              {/* Faint lines on card */}
-             <View style={{ position: 'absolute', left: 14, top: 24, width: 30, height: 1.5, backgroundColor: isDark ? 'rgba(229,217,255,0.2)' : 'rgba(0,0,0,0.05)' }} />
-             <View style={{ position: 'absolute', left: 14, top: 38, width: 50, height: 1.5, backgroundColor: isDark ? 'rgba(229,217,255,0.2)' : 'rgba(0,0,0,0.05)' }} />
+             <View style={{ position: 'absolute', left: 14, top: 24, width: 30, height: 2, backgroundColor: isDark ? 'rgba(229,217,255,0.3)' : 'rgba(0,0,0,0.1)' }} />
+             <View style={{ position: 'absolute', left: 14, top: 44, width: 50, height: 2, backgroundColor: isDark ? 'rgba(229,217,255,0.15)' : 'rgba(0,0,0,0.05)' }} />
+             <View style={{ position: 'absolute', left: 14, top: 60, width: 62, height: 2, backgroundColor: isDark ? 'rgba(229,217,255,0.15)' : 'rgba(0,0,0,0.05)' }} />
+             <View style={{ position: 'absolute', left: 14, top: 76, width: 45, height: 2, backgroundColor: isDark ? 'rgba(229,217,255,0.15)' : 'rgba(0,0,0,0.05)' }} />
+             <View style={{ position: 'absolute', left: 14, top: 92, width: 55, height: 2, backgroundColor: isDark ? 'rgba(229,217,255,0.15)' : 'rgba(0,0,0,0.05)' }} />
           </Animated.View>
         </View>
 
@@ -3138,10 +3140,10 @@ export default function HomeScreen() {
       
       const GEMINI_URL = `https://asia-south1-aiplatform.googleapis.com/v1/projects/guardian-495515/locations/asia-south1/publishers/google/models/gemini-3.5-flash:generateContent?key=${key}`;
       
-      const CHUNK_SIZE = 20000;
+      const CHUNK_SIZE = 30000;
       let chunks: string[] = [];
       for (let i = 0; i < text.length; i += CHUNK_SIZE) chunks.push(text.slice(i, i + CHUNK_SIZE));
-      if (chunks.length > 10) chunks = chunks.slice(0, 10);
+      if (chunks.length > 8) chunks = chunks.slice(0, 8); // Max 240k chars
       console.log(`[AI Generation] Document split into ${chunks.length} chunk(s) (Chunk size: ${CHUNK_SIZE} chars)`);
       const CONCURRENCY = chunks.length || 1;
       const results: string[] = [];
