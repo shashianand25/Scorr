@@ -1798,6 +1798,9 @@ export function AppModals({ p }: { p: any }) {
                             } else if (ext === "ppt" || ext === "pptx") {
                               const pptResult = await (p.parsePptFromBackend || (() => {}))(fileUri, fileName);
                               if (pptResult.error) {
+                                if (String(pptResult.error).includes('PAYLOAD_TOO_LARGE') || String(pptResult.error).includes('413')) {
+                                  throw new Error("PPT upload limit 4.5 mb, try uploading pdf for a larger size");
+                                }
                                 throw new Error(`Backend PPT parsing failed: ${pptResult.error}`);
                               }
                               text = pptResult.text;
