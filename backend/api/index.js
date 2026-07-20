@@ -174,7 +174,7 @@ app.get('/api/mobile-quizzes', async (req, res) => {
     const quizzes = result.rows.map(r => ({
       ...r,
       questionCount: r.question_count,
-      sourceText: undefined, // Omit massive sourceText to save bandwidth and prevent RN chunking bugs
+      sourceText: r.source_text,
       wrongQuestions: typeof r.wrong_questions === 'string' ? JSON.parse(r.wrong_questions) : r.wrong_questions,
       uniqueCorrectIds: typeof r.unique_correct_ids === 'string' ? JSON.parse(r.unique_correct_ids) : r.unique_correct_ids,
       attempts: typeof r.attempts === 'string' ? JSON.parse(r.attempts) : r.attempts
