@@ -391,7 +391,12 @@ export async function parsePptFromBackend(fileUri: string, fileName: string): Pr
     
     const data = JSON.parse(uploadResult.body);
     if (data.error) return { text: "", error: data.error };
-    return { text: data.text || "" };
+    
+    if (!data.text || data.text.trim() === "") {
+      return { text: "", error: "Could not extract text from this file. It might be a document containing only images." };
+    }
+    
+    return { text: data.text };
   } catch (err: any) {
     let errMsg = err?.message || "Upload failed";
     if (errMsg.includes(BASE_URL) || errMsg.includes("recall-backend") || errMsg.includes("UnknownHostException") || errMsg.includes("Network request failed")) {
