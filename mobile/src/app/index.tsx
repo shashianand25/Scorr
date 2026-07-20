@@ -448,7 +448,12 @@ export default function HomeScreen() {
                 // Append any completely new quizzes from the server
                 const newFromServer = normalizedQuizzes.filter(n => !cleanLocal.find(l => l.id === n.id || l.neonId === n.id));
 
-                return [...updatedLocal, ...newFromServer];
+                const combined = [...updatedLocal, ...newFromServer];
+                return combined.filter((q: any) => {
+                  const qc = typeof q.questions === "number" ? q.questions : (q.questionsList?.length || 0);
+                  const cc = q.flashcards?.length || 0;
+                  return qc > 0 || cc > 0;
+                });
               });
 
               // Backfill local-only quizzes that aren't in Neon yet (exclude sample_quiz — it must never be uploaded)
@@ -560,14 +565,18 @@ export default function HomeScreen() {
           AsyncStorage.getItem(`quizforge_flashcard_decks`),
         ]);
         if (qRaw) {
-          const parsed = JSON.parse(qRaw);
+          const parsed = JSON.parse(qRaw).filter((q: any) => {
+            const qc = typeof q.questions === "number" ? q.questions : (q.questionsList?.length || 0);
+            const cc = q.flashcards?.length || 0;
+            return qc > 0 || cc > 0;
+          });
           setQuizzes(prev => prev.length === 0 ? parsed : prev);
         }
         if (sRaw) {
           setStarredQuestions(new Set(JSON.parse(sRaw)));
         }
         if (dRaw) {
-          const parsed = JSON.parse(dRaw);
+          const parsed = JSON.parse(dRaw).filter((d: any) => d.cards && d.cards.length > 0);
           setFlashcardDecks(prev => prev.length === 0 ? parsed : prev);
         }
         setDataLoaded(true);
@@ -3166,17 +3175,17 @@ export default function HomeScreen() {
               minFlashcards = "22-27";
               expectedFlashcards = "22-32";
             } else if (docSize >= 10000 && docSize < 15000) {
-              minFlashcards = "24-29";
-              expectedFlashcards = "24-36";
+              minFlashcards = "27-29";
+              expectedFlashcards = "27-36";
             } else if (docSize >= 15000 && docSize < 20000) {
-              minFlashcards = "32-41";
-              expectedFlashcards = "32-49";
+              minFlashcards = "36-41";
+              expectedFlashcards = "36-49";
             } else if (docSize >= 20000 && docSize < 25000) {
-              minFlashcards = "41-49";
-              expectedFlashcards = "41-61";
+              minFlashcards = "46-49";
+              expectedFlashcards = "46-61";
             } else {
-              minFlashcards = "49-61";
-              expectedFlashcards = "49-73";
+              minFlashcards = "55-61";
+              expectedFlashcards = "55-73";
             }
 
             const scaleRangeBy1_3 = (rangeStr: string): string => {
@@ -5144,12 +5153,16 @@ export default function HomeScreen() {
 
         const isCoursesTab = libraryTab === "courses";
 
-        const filteredQuizzes = [...quizzes].reverse().filter((q: any) =>
-          !librarySearch || q.title.toLowerCase().includes(librarySearch.toLowerCase())
-        );
-        const filteredDecks = flashcardDecks.filter((d: any) =>
-          !librarySearch || d.title.toLowerCase().includes(librarySearch.toLowerCase())
-        );
+        const filteredQuizzes = [...quizzes].reverse().filter((q: any) => {
+          const qc = typeof q.questions === "number" ? q.questions : (q.questionsList?.length || 0);
+          const cc = q.flashcards?.length || 0;
+          if (qc === 0 && cc === 0) return false;
+          return !librarySearch || q.title.toLowerCase().includes(librarySearch.toLowerCase());
+        });
+        const filteredDecks = flashcardDecks.filter((d: any) => {
+          if (!d.cards || d.cards.length === 0) return false;
+          return !librarySearch || d.title.toLowerCase().includes(librarySearch.toLowerCase());
+        });
 
         const groupByTime = (items: any[], getDate: (item: any) => number) => {
           const now = Date.now();
@@ -7498,7 +7511,16 @@ export default function HomeScreen() {
                 label: isNew ? "Not started" : `${studied}/${cards.length} cards sorted`, raw: d, ts, isNew };
             }),
           ];
-          const jumpItems: JumpItem[] = allJumpCandidates.sort((a, b) => {
+          const jumpItems: JumpItem[] = allJumpCandidates.filter((q: any) => {
+            if (q.type === "quiz") {
+              const qc = typeof q.raw.questions === "number" ? q.raw.questions : (q.raw.questionsList?.length || 0);
+              const cc = q.raw.flashcards?.length || 0;
+              return qc > 0 || cc > 0;
+            } else if (q.type === "flashcard") {
+              return q.raw.cards && q.raw.cards.length > 0;
+            }
+            return true;
+          }).sort((a, b) => {
             if (a.isNew !== b.isNew) return a.isNew ? 1 : -1;
             return (b.ts || 0) - (a.ts || 0);
           }).slice(0, 5);
