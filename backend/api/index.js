@@ -9,7 +9,7 @@ require('dotenv').config();
 const upload = multer({ storage: multer.memoryStorage() });
 
 const app = express();
-const resend = new Resend(process.env.RESEND_API_KEY);
+const resend = new Resend('re_Kt6jhDqQ_FPcQUafA3aH3TkursCPxBcnW');
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
@@ -76,16 +76,12 @@ app.post('/api/feedback', async (req, res) => {
     );
 
     // Send Email via Resend
-    if (process.env.RESEND_API_KEY) {
-      await resend.emails.send({
-        from: 'onboarding@resend.dev',
-        to: process.env.ADMIN_EMAIL || 'shashianand2005@gmail.com',
-        subject: `New Recall Feedback from ${userEmail || 'Anonymous'}`,
-        text: `User ID: ${userId || 'N/A'}\nUser Email: ${userEmail || 'N/A'}\n\nFeedback:\n${message}`
-      });
-    } else {
-      console.warn("Feedback not emailed: RESEND_API_KEY is missing from environment.");
-    }
+    await resend.emails.send({
+      from: 'onboarding@resend.dev',
+      to: 'shashianand2005@gmail.com',
+      subject: `New Recall Feedback from ${userEmail || 'Anonymous'}`,
+      text: `User ID: ${userId || 'N/A'}\nUser Email: ${userEmail || 'N/A'}\n\nFeedback:\n${message}`
+    });
 
     res.json({ ok: true });
   } catch (err) {
