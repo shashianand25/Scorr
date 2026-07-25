@@ -319,6 +319,30 @@ export async function fetchGeminiKey(): Promise<{ key: string | null; prompt: st
   return { key: data?.key ?? null, prompt: data?.prompt ?? null, error };
 }
 
+export interface AppConfig {
+  aiConfig: {
+    geminiKey: string;
+    modelUrl: string;
+    promptTemplate: string;
+    chunkSize: number;
+    maxChunks: number;
+    generationRanges: Array<{ max: number; minF: string; expF: string }>;
+  };
+  fileLimits: {
+    pdfExtractThresholdMB: number;
+    pptMaxMB: number;
+  };
+  appLinks: {
+    playStoreUrl: string;
+    tutorialUrl: string;
+  };
+}
+
+export async function fetchAppConfig(): Promise<{ config: AppConfig | null; error: string | null }> {
+  const { data, error } = await apiFetch<AppConfig>("/api/app-config");
+  return { config: data ?? null, error };
+}
+
 
 // ── App Updates ────────────────────────────────────────────────────────
 
@@ -337,9 +361,9 @@ export async function fetchVersionConfig(): Promise<{ config: VersionConfig | nu
 
 import * as FileSystem from "expo-file-system/legacy";
 
-export async function parsePdfFromBackend(fileUri: string, fileName: string, fileSize: number = 0): Promise<{ text: string; error?: string }> {
+export async function parsePdfFromBackend(fileUri: string, fileName: string, fileSize: number = 0, extractThresholdMB: number = 4.2): Promise<{ text: string; error?: string }> {
   try {
-    if (fileSize > 0 && fileSize < 4.2 * 1024 * 1024) {
+    if (fileSize > 0 && fileSize < extractThresholdMB * 1024 * 1024) {
       try {
         const uploadResult = await FileSystem.uploadAsync(`${BASE_URL}/api/parse-pdf`, fileUri, {
           httpMethod: 'POST',

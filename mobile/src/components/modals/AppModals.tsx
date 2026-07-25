@@ -861,8 +861,9 @@ export function AppModals({ p }: { p: any }) {
                     }}
                     style={({ pressed }) => ({
                       backgroundColor: p.settingsDarkMode ? "#172033" : "#ffffff",
-                      borderRadius: 20, padding: 20, flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+                      borderRadius: 16, padding: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between",
                       borderWidth: 1, borderColor: p.settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)",
+                      marginBottom: 12,
                       opacity: pressed ? 0.8 : 1
                     })}
                   >
@@ -880,6 +881,34 @@ export function AppModals({ p }: { p: any }) {
                     <Ionicons name="chevron-forward" size={20} color={p.settingsDarkMode ? "#6e727a" : "#94a3b8"} />
                   </Pressable>
                 )}
+                {/* Report Card Action */}
+                <Pressable
+                  onPress={() => {
+                    (p.onViewReportCard || (() => {}))(p.selectedAttemptForModal.attempt, p.selectedAttemptForModal.quizId);
+                    (p.setSelectedAttemptForModal || (() => {}))(null);
+                  }}
+                  style={({ pressed }) => ({
+                    backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.03)" : "#ffffff",
+                    borderRadius: 16, padding: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+                    borderWidth: 1, borderColor: p.settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)",
+                    marginBottom: 12,
+                    opacity: pressed ? 0.8 : 1
+                  })}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
+                    <Text style={{ fontSize: 24 }}>📝</Text>
+                    <View>
+                      <Text style={{ fontSize: 16, fontWeight: "700", color: p.settingsDarkMode ? "#ffffff" : "#111827" }}>
+                        Report Card
+                      </Text>
+                      <Text style={{ fontSize: 13, fontWeight: "500", color: p.settingsDarkMode ? "#94a3b8" : "#64748b", marginTop: 4 }}>
+                        Review your answers and explanations
+                      </Text>
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={p.settingsDarkMode ? "#6e727a" : "#94a3b8"} />
+                </Pressable>
+
                 {/* Delete Attempt Action */}
                 <Pressable
                   onPress={() => {
@@ -888,7 +917,7 @@ export function AppModals({ p }: { p: any }) {
                   }}
                   style={({ pressed }) => ({
                     backgroundColor: p.settingsDarkMode ? "rgba(239, 68, 68, 0.05)" : "rgba(239, 68, 68, 0.05)",
-                    borderRadius: 20, padding: 20, flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+                    borderRadius: 16, padding: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between",
                     borderWidth: 1, borderColor: "rgba(239, 68, 68, 0.15)",
                     opacity: pressed ? 0.8 : 1
                   })}
@@ -1789,20 +1818,22 @@ export function AppModals({ p }: { p: any }) {
                         setTimeout(async () => {
                           try {
                             let text = "";
+                            const pdfThreshold = p.appConfig?.fileLimits?.pdfExtractThresholdMB || 4.2;
                             if (ext === "pdf") {
-                              const pdfResult = await (p.parsePdfFromBackend || (() => {}))(fileUri, fileName, fileSize);
+                              const pdfResult = await (p.parsePdfFromBackend || (() => {}))(fileUri, fileName, fileSize, pdfThreshold);
                               if (pdfResult.error) {
                                 throw new Error(`Backend PDF parsing failed: ${pdfResult.error}`);
                               }
                               text = pdfResult.text;
                             } else if (ext === "ppt" || ext === "pptx") {
-                              if (fileSize > 4.5 * 1024 * 1024) {
-                                throw new Error("PPT upload limit 4.5 mb, try uploading pdf for a larger size");
+                              const pptMaxMB = p.appConfig?.fileLimits?.pptMaxMB || 4.5;
+                              if (fileSize > pptMaxMB * 1024 * 1024) {
+                                throw new Error(`PPT upload limit ${pptMaxMB} MB, try uploading pdf for a larger size`);
                               }
                               const pptResult = await (p.parsePptFromBackend || (() => {}))(fileUri, fileName);
                               if (pptResult.error) {
                                 if (String(pptResult.error).includes('PAYLOAD_TOO_LARGE') || String(pptResult.error).includes('413')) {
-                                  throw new Error("PPT upload limit 4.5 mb, try uploading pdf for a larger size");
+                                  throw new Error(`PPT upload limit ${pptMaxMB} MB, try uploading pdf for a larger size`);
                                 }
                                 throw new Error(`Backend PPT parsing failed: ${pptResult.error}`);
                               }

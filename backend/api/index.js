@@ -300,7 +300,7 @@ Then output all quiz questions under the ===MCQS=== header.
 Generate at least {{MIN_FLASHCARDS}} flashcards covering all the given text.
 Flashcards are TERM → DEFINITION, NOT question → answer.
 Example:
-# What is the SI unit of force?
+# SI unit of force
 = Newton
 
 ===MCQS===
@@ -325,6 +325,42 @@ app.get('/api/gemini-config', (req, res) => {
     return res.status(500).json({ error: "Server is missing AI configuration.", devError: "Missing GEMINI_API_KEY" });
   }
   res.json({ key: GEMINI_API_KEY, prompt: GEMINI_MCQ_PROMPT_TEMPLATE });
+});
+
+// ── App Config ──────────────────────────────────────────────────────────────
+app.get('/api/app-config', (req, res) => {
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+  if (!GEMINI_API_KEY) {
+    console.error("[Backend] Missing GEMINI_API_KEY environment variable.");
+    return res.status(500).json({ error: "Server is missing AI configuration.", devError: "Missing GEMINI_API_KEY" });
+  }
+
+  res.json({
+    aiConfig: {
+      geminiKey: GEMINI_API_KEY,
+      modelUrl: "https://asia-south1-aiplatform.googleapis.com/v1/projects/guardian-495515/locations/asia-south1/publishers/google/models/gemini-3.5-flash:generateContent",
+      promptTemplate: GEMINI_MCQ_PROMPT_TEMPLATE,
+      chunkSize: 15000,
+      maxChunks: 8,
+      generationRanges: [
+        { max: 2000, minF: "9-14", expF: "11-16" },
+        { max: 5000, minF: "18-23", expF: "22-27" },
+        { max: 10000, minF: "22-27", expF: "22-32" },
+        { max: 15000, minF: "27-29", expF: "27-36" },
+        { max: 20000, minF: "36-41", expF: "36-49" },
+        { max: 25000, minF: "46-49", expF: "46-61" },
+        { max: 9999999, minF: "55-61", expF: "55-73" }
+      ]
+    },
+    fileLimits: {
+      pdfExtractThresholdMB: 4.2,
+      pptMaxMB: 4.5
+    },
+    appLinks: {
+      playStoreUrl: "https://play.google.com/store/apps/details?id=com.radium230sorganization.quizforge",
+      tutorialUrl: "https://youtu.be/jLiU-vW5EuA"
+    }
+  });
 });
 
 

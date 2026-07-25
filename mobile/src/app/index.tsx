@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -40,7 +40,7 @@ import MaskedView from '@react-native-masked-view/masked-view';
 import { Buffer } from "buffer";
 import * as mammoth from "mammoth/mammoth.browser.js";
 import { signInWithGoogle, signInWithEmail, signUpWithEmail, signOutUser, onAuth, deleteAccount, resetPassword, type User } from "../lib/firebase";
-import { syncUserToNeon, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz, deleteUserFromNeon, sendFeedback, saveBattleHistory, fetchBattleHistory, parsePdfFromBackend, parsePptFromBackend, fetchGeminiKey } from "../lib/api";
+import { syncUserToNeon, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz, deleteUserFromNeon, sendFeedback, saveBattleHistory, fetchBattleHistory, parsePdfFromBackend, parsePptFromBackend, fetchGeminiKey, fetchAppConfig, type AppConfig } from "../lib/api";
 import { getUserErrorMessage } from "../utils/errors";
 import { createBattleRoom, joinBattleRoom, updateBattleScore, finishBattle, markPlayerFinished, listenToBattleRoom, getBattleRoom, type BattleRoom } from "../lib/multiplayer";
 import NetInfo from "@react-native-community/netinfo";
@@ -286,6 +286,16 @@ export default function HomeScreen() {
 
   useEffect(() => {
     AsyncStorage.getItem("user-language").then(setSavedAppLanguage);
+  }, []);
+
+  useEffect(() => {
+    fetchAppConfig().then(({ config, error }) => {
+      if (config) {
+        setAppConfig(config);
+      } else {
+        console.warn("[App Config] Failed to load config from backend:", error);
+      }
+    });
   }, []);
   const insets = useSafeAreaInsets();
 
@@ -716,6 +726,8 @@ export default function HomeScreen() {
 
 
 
+  const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
+  
   const [activeTab, setActiveTab] = useState<"home" | "add" | "guide" | "menu" | "insights" | "battle" | "library" | "flashcards" | "insights-flashcard" | "bookmarked-questions">("home");
   const [battleRoomCode, setBattleRoomCode] = useState("");
   const [battleRoomState, setBattleRoomState] = useState<BattleRoom | null>(null);
@@ -752,6 +764,41 @@ export default function HomeScreen() {
 
   const [showAddMenu, setShowAddMenu] = useState<boolean>(false);
   const [showWrongReview, setShowWrongReview] = useState<boolean>(false);
+  const [viewingReportCardData, setViewingReportCardData] = useState<{ attempt: any, quiz: any } | null>(null);
+
+  const reportCardQs = useMemo(() => {
+    const rcq: any[] = [];
+    const sourceQuestions = viewingReportCardData ? viewingReportCardData.quiz.questionsList : activeSession?.questions;
+    const sourceAnswers = viewingReportCardData ? viewingReportCardData.attempt.answers : activeSession?.answers;
+    
+    if (!sourceQuestions || !sourceAnswers) return rcq;
+    
+    const questionIdsInAttempt = viewingReportCardData ? viewingReportCardData.attempt.questionIds : null;
+
+    sourceQuestions.forEach((q: any) => {
+      if (questionIdsInAttempt && !questionIdsInAttempt.includes(q.id)) return;
+      
+      const selected = sourceAnswers[q.id] || [];
+      const correctIds = q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.id);
+      
+      let status = "skipped";
+      if (selected.length > 0) {
+        const isAllCorrect = selected.every((id: string) => correctIds.includes(id)) && selected.length === correctIds.length;
+        status = isAllCorrect ? "correct" : "wrong";
+      }
+
+      rcq.push({
+        id: q.id,
+        prompt: q.prompt,
+        explanation: q.explanation,
+        status,
+        selectedTexts: q.answers.filter((a: any) => selected.includes(a.id)).map((a: any) => a.text),
+        correctTexts: q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.text),
+      });
+    });
+    return rcq;
+  }, [viewingReportCardData, activeSession]);
+
   const [showQuizActions, setShowQuizActions] = useState<any | null>(null);
   const [renamingQuiz, setRenamingQuiz] = useState<any | null>(null);
   const [importErrorDetails, setImportErrorDetails] = useState<{ title: string; message: string; details?: string } | null>(null);
@@ -1533,7 +1580,8 @@ export default function HomeScreen() {
       return;
     }
 
-    const scorePct = questions.length > 0 ? Math.round((correctCount / questions.length) * 100) : 0;
+    const attemptedCount = correctCount + wrongCount;
+    const scorePct = attemptedCount > 0 ? Math.round((correctCount / attemptedCount) * 100) : 0;
     const targetAttemptId = sessionToSave.targetAttemptId;
     const retryOfAttemptNum = sessionToSave.retryOfAttemptNum;
     // Always create a new attempt entry — never modify the original score
@@ -1543,6 +1591,7 @@ export default function HomeScreen() {
       timestamp: Date.now(),
       wrongQuestionIds: wrongQsForQuiz.map(q => q.id),
       questionIds: sessionToSave.questions.map((q: any) => q.id),
+      answers: sessionToSave.answers,
       // Tag retries so the card can show "Retry of #N" instead of "Attempt #N"
       ...(targetAttemptId ? { mode: "retry", retryOfAttemptId: targetAttemptId, retryOfAttemptNum } : { mode: "full" }),
     };
@@ -2158,7 +2207,7 @@ export default function HomeScreen() {
             <Text style={{ fontSize: 12, color: isDark ? "#6B7280" : "#9ca3af", textAlign: "center" }}>Take a test to start tracking scores.</Text>
           </View>
         ) : (
-          <View style={{ gap: 10 }}>
+          <View style={{ gap: 8 }}>
             {attempts.slice(0, expandedAttemptsMap[quiz.id] ? attempts.length : 3).map((attempt: any, index: number) => {
               const attemptNum = attempts.length - index;
               const isRetry = attempt.mode === "retry";
@@ -2166,7 +2215,7 @@ export default function HomeScreen() {
                 <Pressable
                   key={attempt.id || index}
                   onPress={() => setSelectedAttemptForModal({ quizId: quiz.id, attempt, attemptNum })}
-                  style={({pressed}) => [{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: cardBg, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: border }, pressed && {opacity: 0.8}]}
+                  style={({pressed}) => [{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: cardBg, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14, borderWidth: 1, borderColor: border }, pressed && {opacity: 0.8}]}
                 >
                   <View style={{ flex: 1 }}>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
@@ -2177,7 +2226,7 @@ export default function HomeScreen() {
                         </View>
                       )}
                     </View>
-                    <Text style={{ fontSize: 12, color: textSub }}>{attempt.correct} correct · {attempt.wrong} wrong · {attempt.skipped} skipped</Text>
+                    <Text style={{ fontSize: 12, color: isDark ? "#ffffff" : textSub }}>{attempt.correct} correct · {attempt.wrong} wrong · {attempt.skipped} skipped</Text>
                   </View>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
                     <Text style={{ fontSize: 15, fontWeight: "500", color: textMain }}>{attempt.score}%</Text>
@@ -2561,6 +2610,13 @@ export default function HomeScreen() {
           } catch {}
         }
       });
+    }
+  };
+
+  const onViewReportCard = (attempt: any, quizId: string) => {
+    const q = quizzes.find((qz: any) => qz.id === quizId) || (quizId === "sample_quiz" ? sampleQuiz : null);
+    if (q) {
+      setViewingReportCardData({ attempt, quiz: q });
     }
   };
 
@@ -3141,17 +3197,23 @@ export default function HomeScreen() {
     setAiGenCharCount(text.length);
     setAiGenPhase("generating");
     try {
-      const { key, prompt: backendPrompt, error: keyError } = await fetchGeminiKey();
-      if (keyError || !key) {
-        throw new Error(keyError || "Could not fetch AI configuration from server.");
+      let config = appConfig;
+      if (!config) {
+        const { config: fetchedConfig, error } = await fetchAppConfig();
+        if (error || !fetchedConfig) {
+          throw new Error(error || "Could not fetch App configuration from server.");
+        }
+        config = fetchedConfig;
+        setAppConfig(config);
       }
       
-      const GEMINI_URL = `https://asia-south1-aiplatform.googleapis.com/v1/projects/guardian-495515/locations/asia-south1/publishers/google/models/gemini-3.5-flash:generateContent?key=${key}`;
+      const aiConfig = config.aiConfig;
+      const GEMINI_URL = `${aiConfig.modelUrl}?key=${aiConfig.geminiKey}`;
       
-      const CHUNK_SIZE = 15000;
+      const CHUNK_SIZE = aiConfig.chunkSize || 15000;
       let chunks: string[] = [];
       for (let i = 0; i < text.length; i += CHUNK_SIZE) chunks.push(text.slice(i, i + CHUNK_SIZE));
-      if (chunks.length > 8) chunks = chunks.slice(0, 8); // Max 160k chars
+      if (chunks.length > (aiConfig.maxChunks || 8)) chunks = chunks.slice(0, aiConfig.maxChunks || 8);
       console.log(`[AI Generation] Document split into ${chunks.length} chunk(s) (Chunk size: ${CHUNK_SIZE} chars)`);
       const CONCURRENCY = chunks.length || 1;
       const results: string[] = [];
@@ -3160,33 +3222,20 @@ export default function HomeScreen() {
         const batchResults = await Promise.all(
           batch.map(chunk => {
             const docSize = chunk.length;
-            let minFlashcards = "20";
-            let minMcqs = "20";
-            let expectedFlashcards = "20-30";
-            let expectedMcqs = "20-30";
-
-            if (docSize < 2000) {
-              minFlashcards = "9-14";
-              expectedFlashcards = "11-16";
-            } else if (docSize >= 2000 && docSize < 5000) {
-              minFlashcards = "18-23";
-              expectedFlashcards = "22-27";
-            } else if (docSize >= 5000 && docSize < 10000) {
-              minFlashcards = "22-27";
-              expectedFlashcards = "22-32";
-            } else if (docSize >= 10000 && docSize < 15000) {
-              minFlashcards = "27-29";
-              expectedFlashcards = "27-36";
-            } else if (docSize >= 15000 && docSize < 20000) {
-              minFlashcards = "36-41";
-              expectedFlashcards = "36-49";
-            } else if (docSize >= 20000 && docSize < 25000) {
-              minFlashcards = "46-49";
-              expectedFlashcards = "46-61";
-            } else {
-              minFlashcards = "55-61";
-              expectedFlashcards = "55-73";
-            }
+            
+            const ranges = aiConfig.generationRanges || [
+              { max: 2000, minF: "9-14", expF: "11-16" },
+              { max: 5000, minF: "18-23", expF: "22-27" },
+              { max: 10000, minF: "22-27", expF: "22-32" },
+              { max: 15000, minF: "27-29", expF: "27-36" },
+              { max: 20000, minF: "36-41", expF: "36-49" },
+              { max: 25000, minF: "46-49", expF: "46-61" },
+              { max: Infinity, minF: "55-61", expF: "55-73" }
+            ];
+            
+            const matchingRange = ranges.find(r => docSize < r.max) || ranges[ranges.length - 1];
+            const minFlashcards = matchingRange.minF;
+            const expectedFlashcards = matchingRange.expF;
 
             const scaleRangeBy1_3 = (rangeStr: string): string => {
               const parts = rangeStr.split("-").map(Number);
@@ -3198,10 +3247,12 @@ export default function HomeScreen() {
               return rangeStr;
             };
 
-            minMcqs = scaleRangeBy1_3(minFlashcards);
-            expectedMcqs = scaleRangeBy1_3(expectedFlashcards);
+            const minMcqs = scaleRangeBy1_3(minFlashcards);
+            const expectedMcqs = scaleRangeBy1_3(expectedFlashcards);
 
-            let combinedPrompt = COMBINED_PROMPT(chunk);
+            let combinedPrompt = aiConfig.promptTemplate 
+              ? aiConfig.promptTemplate.replace("[PASTE YOUR TEXT HERE]", chunk)
+              : COMBINED_PROMPT(chunk);
             combinedPrompt = combinedPrompt.replace(/\{\{MIN_FLASHCARDS\}\}/g, minFlashcards);
             combinedPrompt = combinedPrompt.replace(/\{\{EXPECTED_FLASHCARDS\}\}/g, expectedFlashcards);
             combinedPrompt = combinedPrompt.replace(/\{\{MIN_MCQS\}\}/g, minMcqs);
@@ -3955,43 +4006,6 @@ export default function HomeScreen() {
     let wrongCount = 0;
     let skippedCount = 0;
     const wrongQsForQuiz: any[] = [];
-    const reportCardQs: any[] = [];
-
-    questions.forEach((q: any) => {
-      const selected = activeSession.answers[q.id] || [];
-      const correctIds = q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.id);
-      
-      let status = "skipped";
-      if (selected.length === 0) {
-        skippedCount++;
-      } else {
-        const isAllCorrect = selected.every((id: string) => correctIds.includes(id)) && selected.length === correctIds.length;
-        if (isAllCorrect) {
-          status = "correct";
-          correctCount++;
-        } else {
-          status = "wrong";
-          wrongCount++;
-          wrongQsForQuiz.push({
-            id: q.id,
-            prompt: q.prompt,
-            imageUrl: q.imageUrl,
-            selected: q.answers.filter((a: any) => selected.includes(a.id)).map((a: any) => a.text).join(", "),
-            correct: q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.text).join(", "),
-          });
-        }
-      }
-
-      reportCardQs.push({
-        id: q.id,
-        prompt: q.prompt,
-        explanation: q.explanation,
-        status,
-        selectedTexts: q.answers.filter((a: any) => selected.includes(a.id)).map((a: any) => a.text),
-        correctTexts: q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.text),
-      });
-    });
-
     const wrongQuestionIds = wrongQsForQuiz.map((wq: any) => wq.id);
     const wrongQuestionObjects = questions.filter((q: any) => wrongQuestionIds.includes(q.id));
 
@@ -4153,85 +4167,10 @@ export default function HomeScreen() {
           >
             <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
               <Text style={{ fontSize: 24 }}>📝</Text>
-              <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Review Answers</Text>
+              <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Report Card</Text>
             </View>
             <Feather name="chevron-right" size={22} color={settingsDarkMode ? "#ffffff" : "#111827"} />
           </Pressable>
-
-          {/* Report Card Modal */}
-          <Modal visible={showWrongReview} animationType="slide" transparent={false} onRequestClose={() => setShowWrongReview(false)}>
-            <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#0b1021" : "#f8fafc" }}>
-              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 24, paddingTop: 60, paddingBottom: 20, borderBottomWidth: 1, borderBottomColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
-                <Text style={{ fontSize: 20, fontWeight: "600", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Report Card</Text>
-                <Pressable onPress={() => setShowWrongReview(false)} style={{ padding: 8 }}>
-                  <Ionicons name="close" size={28} color={settingsDarkMode ? "#ffffff" : "#111827"} />
-                </Pressable>
-              </View>
-              <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 20, paddingBottom: 100 }}>
-                {reportCardQs.map((q: any, idx: number) => (
-                  <View key={q.id} style={{ backgroundColor: settingsDarkMode ? "#161b2e" : "#ffffff", borderRadius: 16, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
-                    <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827", marginBottom: 16, lineHeight: 24 }}>
-                      {idx + 1}. {q.prompt}
-                    </Text>
-                    <View style={{ height: 1, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)", marginBottom: 16 }} />
-                    
-                    <Text style={{ fontSize: 13, fontWeight: "700", color: settingsDarkMode ? "#ffffff" : "#111827", marginBottom: 12 }}>
-                      Your answer:
-                    </Text>
-                    <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
-                      <View style={{ flex: 1 }}>
-                        {q.status === "skipped" ? (
-                          <Text style={{ fontSize: 15, color: settingsDarkMode ? "#ef4444" : "#dc2626", marginBottom: 16 }}>
-                            Skipped
-                          </Text>
-                        ) : (
-                          q.selectedTexts.map((text: string, i: number) => (
-                            <View key={i} style={{ flexDirection: "row", alignItems: "flex-start", marginBottom: i < q.selectedTexts.length - 1 ? 8 : 0 }}>
-                              {q.status === "wrong" && <Ionicons name="close" size={16} color="#ef4444" style={{ marginTop: 2, marginRight: 8 }} />}
-                              {q.status === "correct" && <Ionicons name="checkmark" size={16} color="#4ade80" style={{ marginTop: 2, marginRight: 8 }} />}
-                              <Text style={{ flex: 1, fontSize: 15, color: settingsDarkMode ? (q.status === "wrong" ? "#fca5a5" : "#cbd5e1") : (q.status === "wrong" ? "#b91c1c" : "#334155"), lineHeight: 22 }}>
-                                {text}
-                              </Text>
-                            </View>
-                          ))
-                        )}
-                      </View>
-                      <View style={{ marginLeft: 16 }}>
-                        {q.status === "wrong" ? (
-                          <Ionicons name="close-circle" size={24} color="#ef4444" />
-                        ) : q.status === "correct" ? (
-                          <Ionicons name="checkmark-circle" size={24} color="#4ade80" />
-                        ) : null}
-                      </View>
-                    </View>
-                    
-                    <Text style={{ fontSize: 13, fontWeight: "700", color: settingsDarkMode ? "#ffffff" : "#111827", marginBottom: 12 }}>
-                      Correct Answer:
-                    </Text>
-                    <View style={{ backgroundColor: "#65a30d", borderRadius: 8, padding: 16, marginBottom: q.explanation ? 16 : 0 }}>
-                      {q.correctTexts.map((text: string, i: number) => (
-                        <Text key={i} style={{ fontSize: 15, color: "#ffffff", fontWeight: "500", lineHeight: 22, marginBottom: i < q.correctTexts.length - 1 ? 8 : 0 }}>
-                          {text}
-                        </Text>
-                      ))}
-                    </View>
-
-                    {q.explanation && (
-                      <View>
-                        <Text style={{ fontSize: 13, fontWeight: "700", color: settingsDarkMode ? "#ffffff" : "#111827", marginBottom: 8 }}>
-                          Tip to remember:
-                        </Text>
-                        <Text style={{ fontSize: 14, color: settingsDarkMode ? "#cbd5e1" : "#475569", lineHeight: 20 }}>
-                          {q.explanation}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                ))}
-              </ScrollView>
-            </View>
-          </Modal>
-
         </ScrollView>
 
         {/* Bottom Pinned Continue Button */}
@@ -6676,7 +6615,11 @@ export default function HomeScreen() {
                   {/* Actions */}
                   <View style={{ gap: 12 }}>
                     <Pressable onPress={() => {
-                        setStudyQueue(studyingDeck.cards.map((c: any) => c.id));
+                        const savedIdx = studyingDeck.previewIndex || 0;
+                        const startIdx = savedIdx >= studyingDeck.cards.length ? 0 : savedIdx;
+                        const remainingCards = studyingDeck.cards.slice(startIdx);
+                        
+                        setStudyQueue(remainingCards.map((c: any) => c.id));
                         setStudyQueueTotal(studyingDeck.cards.length);
                         setIsPreviewMode(true);
                       }} style={({pressed}) => ({ backgroundColor: settingsDarkMode ? "#172033" : "#ffffff", borderRadius: 16, padding: 20, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", opacity: pressed ? 0.8 : 1 })}>
@@ -6926,6 +6869,12 @@ export default function HomeScreen() {
                         // Advance without updating SM2
                         const newQueue = studyQueue.slice(1);
                         setStudyQueue(newQueue);
+                        
+                        const newPreviewIndex = studyingDeck.cards.length - newQueue.length;
+                        const updatedDeck = { ...studyingDeck, previewIndex: newPreviewIndex };
+                        setStudyingDeck(updatedDeck);
+                        setFlashcardDecks((prev) => prev.map(d => d.id === studyingDeck.id ? updatedDeck : d));
+                        
                         setStudyFlipped(false);
                         flipAnim.setValue(0);
                         swipeX.setValue(0);
@@ -7199,7 +7148,10 @@ export default function HomeScreen() {
                   rel: false,
                   controls: true,
                 }}
-                onError={() => Linking.openURL("https://youtu.be/jLiU-vW5EuA")}
+                onError={() => {
+                  const url = appConfig?.appLinks?.tutorialUrl || "https://youtu.be/jLiU-vW5EuA";
+                  Linking.openURL(url);
+                }}
               />
             </View>
 
@@ -7820,7 +7772,7 @@ export default function HomeScreen() {
                       onPress={async () => {
                         try {
                           await Share.share({
-                            message: 'https://play.google.com/store/apps/details?id=com.radium230sorganization.quizforge'
+                            message: appConfig?.appLinks?.playStoreUrl || 'https://play.google.com/store/apps/details?id=com.radium230sorganization.quizforge'
                           });
                         } catch (error) {
                           console.log(error);
@@ -8263,9 +8215,89 @@ export default function HomeScreen() {
       )}
 
     </SafeAreaView>
+
+      {/* ── Report Card Modal ── */}
+      <Modal visible={showWrongReview || !!viewingReportCardData} animationType="slide" transparent={false} onRequestClose={() => { setShowWrongReview(false); setViewingReportCardData(null); }}>
+        <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#0b1021" : "#f8fafc" }}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 24, paddingTop: 60, paddingBottom: 20, borderBottomWidth: 1, borderBottomColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
+            <Text style={{ fontSize: 20, fontWeight: "600", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Report Card</Text>
+            <Pressable onPress={() => { setShowWrongReview(false); setViewingReportCardData(null); }} style={{ padding: 8 }}>
+              <Ionicons name="close" size={28} color={settingsDarkMode ? "#ffffff" : "#111827"} />
+            </Pressable>
+          </View>
+          <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 20, paddingBottom: 100 }}>
+            {reportCardQs.length === 0 && (
+              <Text style={{ textAlign: "center", color: settingsDarkMode ? "#9ca3af" : "#6b7280", marginTop: 40 }}>
+                No report card data available for this attempt.
+              </Text>
+            )}
+            {reportCardQs.map((q: any, idx: number) => (
+              <View key={q.id} style={{ backgroundColor: settingsDarkMode ? "#161b2e" : "#ffffff", borderRadius: 16, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
+                <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827", marginBottom: 16, lineHeight: 24 }}>
+                  {idx + 1}. {q.prompt}
+                </Text>
+                <View style={{ height: 1, backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)", marginBottom: 16 }} />
+                
+                <Text style={{ fontSize: 13, fontWeight: "700", color: settingsDarkMode ? "#ffffff" : "#111827", marginBottom: 12 }}>
+                  Your answer:
+                </Text>
+                <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
+                  <View style={{ flex: 1 }}>
+                    {q.status === "skipped" ? (
+                      <Text style={{ fontSize: 15, color: settingsDarkMode ? "#ef4444" : "#dc2626", marginBottom: 16 }}>
+                        Skipped
+                      </Text>
+                    ) : (
+                      q.selectedTexts.map((text: string, i: number) => (
+                        <View key={i} style={{ flexDirection: "row", alignItems: "flex-start", marginBottom: i < q.selectedTexts.length - 1 ? 8 : 0 }}>
+                          {q.status === "wrong" && <Ionicons name="close" size={16} color="#ef4444" style={{ marginTop: 2, marginRight: 8 }} />}
+                          {q.status === "correct" && <Ionicons name="checkmark" size={16} color="#4ade80" style={{ marginTop: 2, marginRight: 8 }} />}
+                          <Text style={{ flex: 1, fontSize: 15, color: settingsDarkMode ? (q.status === "wrong" ? "#fca5a5" : "#cbd5e1") : (q.status === "wrong" ? "#b91c1c" : "#334155"), lineHeight: 22 }}>
+                            {text}
+                          </Text>
+                        </View>
+                      ))
+                    )}
+                  </View>
+                  <View style={{ marginLeft: 16 }}>
+                    {q.status === "wrong" ? (
+                      <Ionicons name="close-circle" size={24} color="#ef4444" />
+                    ) : q.status === "correct" ? (
+                      <Ionicons name="checkmark-circle" size={24} color="#4ade80" />
+                    ) : null}
+                  </View>
+                </View>
+                
+                <Text style={{ fontSize: 13, fontWeight: "700", color: settingsDarkMode ? "#ffffff" : "#111827", marginBottom: 12 }}>
+                  Correct Answer:
+                </Text>
+                <View style={{ backgroundColor: "#65a30d", borderRadius: 8, padding: 16, marginBottom: q.explanation ? 16 : 0 }}>
+                  {q.correctTexts.map((text: string, i: number) => (
+                    <Text key={i} style={{ fontSize: 15, color: "#ffffff", fontWeight: "500", lineHeight: 22, marginBottom: i < q.correctTexts.length - 1 ? 8 : 0 }}>
+                      {text}
+                    </Text>
+                  ))}
+                </View>
+
+                {q.explanation && (
+                  <View>
+                    <Text style={{ fontSize: 13, fontWeight: "700", color: settingsDarkMode ? "#ffffff" : "#111827", marginBottom: 8 }}>
+                      Tip to remember:
+                    </Text>
+                    <Text style={{ fontSize: 14, color: settingsDarkMode ? "#cbd5e1" : "#475569", lineHeight: 20 }}>
+                      {q.explanation}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+      </Modal>
+
       {/* ── All Modals ── outside SafeAreaView so they never affect flex layout ── */}
       <AppModals p={{
-        showQuizActions, setShowQuizActions, renamingQuiz, setRenamingQuiz, renameTitle, setRenameTitle,
+        appConfig, showQuizActions, setShowQuizActions, renamingQuiz, setRenamingQuiz, renameTitle, setRenameTitle,
         isImporting, importErrorDetails, setImportErrorDetails, deletingQuizConfirm, setDeletingQuizConfirm,
         showResetConfirm, setShowResetConfirm, showDeleteAccountConfirm, setShowDeleteAccountConfirm,
         showLogoutConfirm, setShowLogoutConfirm,
@@ -8292,7 +8324,7 @@ export default function HomeScreen() {
         showTimeLimitDropdown, setShowTimeLimitDropdown, triggerConfettiBurst,
         neonUserReadyRef, setCreationMode, setCreationStep, setFcTitle, setFcCards,
         setFcCurrentIdx, setCardType, setEditingDeckId, updateMobileQuiz, deleteMobileQuiz,
-        sendFeedback, deleteAccount, deleteUserFromNeon, handleLogout: async () => {
+        sendFeedback, deleteAccount, deleteUserFromNeon, onViewReportCard, handleLogout: async () => {
           setSignOutLoading(true);
           await new Promise(r => setTimeout(r, 800));
           setQuizzes([]);
