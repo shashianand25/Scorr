@@ -115,15 +115,12 @@ export function AppModals({ p }: { p: any }) {
               }}
               style={{
                 flexDirection: "row", alignItems: "center", gap: 16,
-                paddingVertical: 17, paddingHorizontal: 24,
+                paddingVertical: 14, paddingHorizontal: 24,
               }}
               scaleTo={0.97}
             >
-              <View style={{ width: 44, height: 44, borderRadius: 12,
-                backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)", alignItems: "center", justifyContent: "center" }}>
-                <Ionicons name="eye-outline" size={22} color={p.settingsDarkMode ? "#ffffff" : "#0d0f14"} />
-              </View>
-              <Text style={{ fontSize: 16, fontWeight: "700", flex: 1,
+              <Ionicons name="eye-outline" size={22} color={p.settingsDarkMode ? "#ffffff" : "#0d0f14"} />
+              <Text style={{ fontSize: 15, fontWeight: "500", flex: 1,
                 color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>View</Text>
             </AnimatedPressable>
 
@@ -137,15 +134,12 @@ export function AppModals({ p }: { p: any }) {
               }}
               style={{
                 flexDirection: "row", alignItems: "center", gap: 16,
-                paddingVertical: 17, paddingHorizontal: 24,
+                paddingVertical: 14, paddingHorizontal: 24,
               }}
               scaleTo={0.97}
             >
-              <View style={{ width: 44, height: 44, borderRadius: 12,
-                backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" }}>
-                <Ionicons name="pencil-outline" size={22} color={p.settingsDarkMode ? "#ccccdd" : "#555566"} />
-              </View>
-              <Text style={{ fontSize: 16, fontWeight: "700", flex: 1,
+              <Ionicons name="pencil-outline" size={22} color={p.settingsDarkMode ? "#ffffff" : "#0d0f14"} />
+              <Text style={{ fontSize: 15, fontWeight: "500", flex: 1,
                 color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('actions.rename') || "Rename"}</Text>
             </AnimatedPressable>
 
@@ -158,14 +152,12 @@ export function AppModals({ p }: { p: any }) {
               }}
               style={{
                 flexDirection: "row", alignItems: "center", gap: 16,
-                paddingVertical: 17, paddingHorizontal: 24,
+                paddingVertical: 14, paddingHorizontal: 24,
               }}
               scaleTo={0.97}
             >
-              <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: "rgba(16,185,129,0.1)", alignItems: "center", justifyContent: "center" }}>
-                <Ionicons name="share-outline" size={22} color="#10b981" />
-              </View>
-              <Text style={{ fontSize: 16, fontWeight: "700", flex: 1, color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>
+              <Ionicons name="share-social-outline" size={22} color={p.settingsDarkMode ? "#ffffff" : "#0d0f14"} />
+              <Text style={{ fontSize: 15, fontWeight: "500", flex: 1, color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>
                 Share
               </Text>
             </AnimatedPressable>
@@ -188,14 +180,12 @@ export function AppModals({ p }: { p: any }) {
               }}
               style={{
                 flexDirection: "row", alignItems: "center", gap: 16,
-                paddingVertical: 17, paddingHorizontal: 24,
+                paddingVertical: 14, paddingHorizontal: 24,
               }}
               scaleTo={0.97}
             >
-              <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: "rgba(251, 146, 60, 0.1)", alignItems: "center", justifyContent: "center" }}>
-                <Ionicons name="refresh-outline" size={22} color="#fb923c" />
-              </View>
-              <Text style={{ fontSize: 16, fontWeight: "700", flex: 1, color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>
+              <Ionicons name="refresh-outline" size={22} color={p.settingsDarkMode ? "#ffffff" : "#0d0f14"} />
+              <Text style={{ fontSize: 15, fontWeight: "500", flex: 1, color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>
                 Clear attempts
               </Text>
             </AnimatedPressable>
@@ -210,16 +200,13 @@ export function AppModals({ p }: { p: any }) {
               }}
               style={{
                 flexDirection: "row", alignItems: "center", gap: 16,
-                paddingVertical: 17, paddingHorizontal: 24,
+                paddingVertical: 14, paddingHorizontal: 24,
                 marginBottom: insets.bottom + 10
               }}
               scaleTo={0.97}
             >
-              <View style={{ width: 44, height: 44, borderRadius: 12,
-                backgroundColor: "rgba(239,68,68,0.1)", alignItems: "center", justifyContent: "center" }}>
-                <Ionicons name="trash-outline" size={22} color="#ef4444" />
-              </View>
-              <Text style={{ fontSize: 16, fontWeight: "700", flex: 1, color: "#ef4444" }}>{t('actions.delete') || "Delete"}</Text>
+              <Ionicons name="trash-outline" size={22} color="#ef4444" />
+              <Text style={{ fontSize: 15, fontWeight: "500", flex: 1, color: "#ef4444" }}>{t('actions.delete') || "Delete"}</Text>
             </AnimatedPressable>
           </View>
         </Pressable>
