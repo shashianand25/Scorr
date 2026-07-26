@@ -36,8 +36,15 @@ export function AppModals({ p }: { p: any }) {
   const pendingAiFile = useRef<{ text: string; fileName: string } | null>(null);
   const totalQuestions = p.selectedQuiz?.questions ?? 0;
   const wrongCount = p.selectedQuiz?.wrongQuestions?.length ?? 0;
-  const attemptedIds: Set<string> = new Set((p.selectedQuiz?.attempts || []).flatMap((a: any) => a.questionIds || []));
-  const unansweredCount = p.selectedQuiz ? (p.selectedQuiz.questionsList || []).filter((q: any) => !attemptedIds.has(q.id)).length : totalQuestions;
+  const attemptedIds: Set<string> = new Set([
+    ...(p.selectedQuiz?.uniqueCorrectIds || []),
+    ...(p.selectedQuiz?.wrongQuestions || []).map((w: any) => w.id || w)
+  ]);
+  const unansweredCount = p.selectedQuiz 
+    ? (p.selectedQuiz.questionsList && p.selectedQuiz.questionsList.length > 0
+        ? p.selectedQuiz.questionsList.filter((q: any) => !attemptedIds.has(q.id)).length
+        : Math.max(0, totalQuestions - attemptedIds.size)) 
+    : totalQuestions;
   const questionCount = (() => {
     switch (p.selectionMode) {
       case "random": return Math.min(p.randomCount, totalQuestions);
@@ -1302,6 +1309,7 @@ export function AppModals({ p }: { p: any }) {
                             if (preset.id === "marathon") {
                               (p.setSelectionMode || (()=>{}))("all");
                               (p.setQuizTimeLimit || (()=>{}))(null);
+                              (p.setQuizPerQuestionTimer || (()=>{}))(null);
                               (p.setTimeLimitText || (()=>{}))("");
                               (p.setShuffleQuestions || (()=>{}))(false);
                               (p.setShuffleAnswers || (()=>{}))(false);
@@ -1318,6 +1326,7 @@ export function AppModals({ p }: { p: any }) {
                               (p.setSelectionMode || (()=>{}))("random");
                               (p.setRandomCount || (()=>{}))(Math.min(10, totalQuestions));
                               (p.setQuizTimeLimit || (()=>{}))(null);
+                              (p.setQuizPerQuestionTimer || (()=>{}))(null);
                               (p.setTimeLimitText || (()=>{}))("");
                             } else if (preset.id === "exam") {
                               (p.setSelectionMode || (()=>{}))("all");
@@ -1329,9 +1338,11 @@ export function AppModals({ p }: { p: any }) {
                             } else if (preset.id === "mistakes") {
                               (p.setSelectionMode || (()=>{}))("wrong");
                               (p.setQuizTimeLimit || (()=>{}))(null);
+                              (p.setQuizPerQuestionTimer || (()=>{}))(null);
                               (p.setTimeLimitText || (()=>{}))("");
                             } else if (preset.id === "custom") {
                               (p.setSelectionMode || (()=>{}))("range");
+                              (p.setQuizPerQuestionTimer || (()=>{}))(null);
                             }
                           }}
                           style={({ pressed }) => ({
@@ -1687,7 +1698,7 @@ export function AppModals({ p }: { p: any }) {
                 (p.setShowAddMenu || (() => {}))(false);
                 if (Platform.OS === "web") {
                   const input = document.createElement("input");
-                  input.type = "file"; input.accept = ".txt,.qst,.pdf,.docx,.md";
+                  input.type = "file"; input.accept = ".txt,.qst,.pdf,.doc,.docx,.md";
                   input.onchange = async (e: any) => {
                     const file = e.target.files?.[0]; if (!file) return;
                     const reader = new FileReader();
@@ -1708,7 +1719,7 @@ export function AppModals({ p }: { p: any }) {
                         const { uri: fileUri, name: fileName, size: fileSize = 0 } = result.assets[0];
                          const ext = fileName.split(".").pop()?.toLowerCase();
                         if (ext === "pdf" && !p.isConnected) { (p.setOfflineModalParams || (() => {}))({ title: "Can't Generate", message: "PDF conversion requires internet." }); return; }
-                        if (ext && !["txt", "qst", "md", "docx", "pdf", "ppt", "pptx"].includes(ext)) { Alert.alert("Unsupported File", `Supported: .txt, .docx, .pdf, .ppt, .pptx. Got .${ext}`); return; }
+                        if (ext && !["txt", "qst", "md", "doc", "docx", "pdf", "ppt", "pptx"].includes(ext)) { Alert.alert("Unsupported File", `Supported: .txt, .doc, .docx, .pdf, .ppt, .pptx. Got .${ext}`); return; }
                         (p.setAiGenPhase || (() => {}))("generating");
                         setTimeout(async () => {
                           try {
@@ -1721,10 +1732,30 @@ export function AppModals({ p }: { p: any }) {
                               const pr = await (p.parsePptFromBackend || (() => {}))(fileUri, fileName);
                               if (pr.error) throw new Error(pr.error);
                               text = pr.text;
-                            } else if (ext === "docx") {
+                            } else if (ext === "docx" || ext === "doc") {
                               const b64 = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.Base64 });
-                              const res = await mammoth.convertToHtml({ arrayBuffer: Buffer.from(b64, "base64") });
-                              text = res.value.replace(/<\/p>/gi, "\n").replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "");
+                              const buff = Buffer.from(b64, "base64");
+                              const result = await mammoth.convertToHtml({ arrayBuffer: buff });
+                              let htmlStr = result.value;
+                              
+                              // Extract images
+                              const imgRegex = /<img[^>]+src="data:image\/([^;]+);base64,([^"]+)"[^>]*>/g;
+                              let match;
+                              let processedHtml = htmlStr;
+                              while ((match = imgRegex.exec(htmlStr)) !== null) {
+                                const extName = match[1];
+                                const base64Data = match[2];
+                                const localFileName = `img_${Date.now()}_${Math.floor(Math.random()*10000)}.${extName}`;
+                                const localUri = (FileSystem.documentDirectory || "") + localFileName;
+                                await FileSystem.writeAsStringAsync(localUri, base64Data, { encoding: FileSystem.EncodingType.Base64 });
+                                processedHtml = processedHtml.replace(match[0], `\n[Image: ${localUri}]\n`);
+                              }
+                              
+                              // Convert remaining HTML to plain text
+                              processedHtml = processedHtml.replace(/<\/p>/gi, '\n');
+                              processedHtml = processedHtml.replace(/<br\s*\/?>/gi, '\n');
+                              processedHtml = processedHtml.replace(/<[^>]+>/g, '');
+                              text = processedHtml;
                             } else {
                               text = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.UTF8 });
                             }
@@ -1807,10 +1838,10 @@ export function AppModals({ p }: { p: any }) {
                           });
                           return;
                         }
-                        if (ext && !['txt', 'qst', 'md', 'docx', 'pdf', 'ppt', 'pptx'].includes(ext)) {
+                        if (ext && !['txt', 'qst', 'md', 'doc', 'docx', 'pdf', 'ppt', 'pptx'].includes(ext)) {
                           Alert.alert(
                             "Unsupported File",
-                            `You can upload only .txt, .docx, .pdf, .ppt, and .pptx files. Your uploaded file is .${ext}`
+                            `You can upload only .txt, .doc, .docx, .pdf, .ppt, and .pptx files. Your uploaded file is .${ext}`
                           );
                           return;
                         }
@@ -1838,7 +1869,7 @@ export function AppModals({ p }: { p: any }) {
                                 throw new Error(`Backend PPT parsing failed: ${pptResult.error}`);
                               }
                               text = pptResult.text;
-                            } else if (ext === "docx") {
+                            } else if (ext === "docx" || ext === "doc") {
                               const b64 = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.Base64 });
                               const buff = Buffer.from(b64, "base64");
                               const result = await mammoth.convertToHtml({ arrayBuffer: buff });
@@ -1871,7 +1902,7 @@ export function AppModals({ p }: { p: any }) {
                             (p.setIsImporting || (() => {}))(false);
                             setTimeout(() => (p.handleImportQst || (() => {}))(text, fileName, fileUri), 150);
                           } catch (err: any) {
-                            if (ext === "pdf" || ext === "docx" || ext === "ppt" || ext === "pptx") {
+                            if (ext === "pdf" || ext === "doc" || ext === "docx" || ext === "ppt" || ext === "pptx") {
                               (p.setIsImporting || (() => {}))(false);
                               Alert.alert("Error", typeof __DEV__ !== 'undefined' && __DEV__ ? `Failed to parse ${ext.toUpperCase()} file.\n\n${err.message}` : getUserErrorMessage(err));
                               return;
@@ -1882,7 +1913,7 @@ export function AppModals({ p }: { p: any }) {
                               setTimeout(() => (p.handleImportQst || (() => {}))(textFallback, fileName, fileUri), 150);
                             } catch (err2: any) {
                               (p.setIsImporting || (() => {}))(false);
-                              Alert.alert("Error", typeof __DEV__ !== 'undefined' && __DEV__ ? `Could not read the file. Make sure it is a valid .txt, .docx, or .pdf file.\n\n${err.message}` : getUserErrorMessage(err));
+                              Alert.alert("Error", typeof __DEV__ !== 'undefined' && __DEV__ ? `Could not read the file. Make sure it is a valid .txt, .doc, .docx, or .pdf file.\n\n${err.message}` : getUserErrorMessage(err));
                             }
                           }
                         }, 50);
@@ -1900,7 +1931,7 @@ export function AppModals({ p }: { p: any }) {
                   <Ionicons name="folder-outline" size={28} color={p.settingsDarkMode ? "#e2e8f0" : "#64748b"} />
                   <View style={{ flexDirection: "column", flex: 1 }}>
                     <Text style={{ fontSize: 17, fontWeight: "600",
-                      color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('create_menu.import_txt') || "Import file (.txt, .docx, .pdf)"}</Text>
+                      color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('create_menu.import_txt') || "Import file (.txt, .doc, .docx, .pdf)"}</Text>
                   </View>
                 </View>
               </AnimatedPressable>

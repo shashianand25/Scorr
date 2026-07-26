@@ -171,6 +171,18 @@ app.get('/api/battle-history', async (req, res) => {
 });
 
 // ── Mobile Quizzes ───────────────────────────────────────────────────────
+app.get('/api/share/quiz/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(`SELECT id, title, category, question_count, source_text FROM mobile_quizzes WHERE id = $1`, [id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Quiz not found' });
+    const r = result.rows[0];
+    res.json({ quiz: { ...r, questionCount: r.question_count } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/mobile-quizzes', async (req, res) => {
   const { userId } = req.query;
   try {

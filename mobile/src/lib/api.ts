@@ -14,7 +14,7 @@ import { Platform } from "react-native";
 
 import { extractText } from "expo-pdf-text-extract";
 
-const BASE_URL = "https://recall-backend-wheat.vercel.app";
+const BASE_URL = "https://api.scorrapp.com";
 
 // ── Helpers ────────────────────────────────────────────────────────────
 async function apiFetch<T>(
@@ -239,6 +239,15 @@ export interface NeonMobileQuiz {
   uniqueCorrectIds?: string[];
   createdAt: string;
   updatedAt: string;
+}
+
+export async function fetchSharedQuiz(
+  quizId: string
+): Promise<{ quiz: NeonMobileQuiz | null; error: string | null }> {
+  const { data, error } = await apiFetch<{ quiz: NeonMobileQuiz }>(
+    `/api/share/quiz/${encodeURIComponent(quizId)}`
+  );
+  return { quiz: data?.quiz ?? null, error };
 }
 
 /**

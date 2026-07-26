@@ -40,7 +40,7 @@ import MaskedView from '@react-native-masked-view/masked-view';
 import { Buffer } from "buffer";
 import * as mammoth from "mammoth/mammoth.browser.js";
 import { signInWithGoogle, signInWithEmail, signUpWithEmail, signOutUser, onAuth, deleteAccount, resetPassword, type User } from "../lib/firebase";
-import { syncUserToNeon, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz, deleteUserFromNeon, sendFeedback, saveBattleHistory, fetchBattleHistory, parsePdfFromBackend, parsePptFromBackend, fetchGeminiKey, fetchAppConfig, type AppConfig } from "../lib/api";
+import { syncUserToNeon, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz, deleteUserFromNeon, sendFeedback, saveBattleHistory, fetchBattleHistory, parsePdfFromBackend, parsePptFromBackend, fetchGeminiKey, fetchAppConfig, fetchSharedQuiz, type AppConfig } from "../lib/api";
 import { getUserErrorMessage } from "../utils/errors";
 import { createBattleRoom, joinBattleRoom, updateBattleScore, finishBattle, markPlayerFinished, listenToBattleRoom, getBattleRoom, type BattleRoom } from "../lib/multiplayer";
 import NetInfo from "@react-native-community/netinfo";
@@ -835,6 +835,72 @@ export default function HomeScreen() {
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const neonUserReadyRef = React.useRef<boolean>(false); // true once syncUserToNeon succeeds
   const [isSyncingData, setIsSyncingData] = useState(false);
+  const [pendingSharedQuizId, setPendingSharedQuizId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleUrl = (url: string | null) => {
+      if (!url) return;
+      if (url.includes('scorrapp.com/share/quiz/') || url.includes('scorr://share/quiz/') || url.includes('recall://share/quiz/')) {
+        let splitString = 'recall://share/quiz/';
+        if (url.includes('scorrapp.com/share/quiz/')) splitString = 'scorrapp.com/share/quiz/';
+        else if (url.includes('scorr://share/quiz/')) splitString = 'scorr://share/quiz/';
+        
+        const id = url.split(splitString)[1]?.split('?')[0]?.split('/')[0];
+        if (id) {
+          setPendingSharedQuizId(id);
+        }
+      }
+    };
+    
+    Linking.getInitialURL().then(handleUrl);
+    const subscription = Linking.addEventListener('url', ({ url }) => handleUrl(url));
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (pendingSharedQuizId && firebaseUser?.uid && isConnected) {
+      const id = pendingSharedQuizId;
+      setPendingSharedQuizId(null);
+      
+      const fetchAndImport = async () => {
+        try {
+          setIsImporting(true);
+          const { quiz, error } = await fetchSharedQuiz(id);
+          if (error || !quiz) {
+            throw new Error(error || "Course not found or no longer available.");
+          }
+          
+          const { quiz: savedQuiz, error: saveErr } = await createMobileQuiz({
+            userId: firebaseUser.uid,
+            title: quiz.title,
+            category: quiz.category,
+            questionCount: quiz.questionCount,
+            sourceText: quiz.sourceText,
+            attempts: [],
+            wrongQuestions: [],
+            uniqueCorrectIds: []
+          });
+          
+          if (saveErr || !savedQuiz) {
+            throw new Error(saveErr || "Failed to save the shared course.");
+          }
+          
+          setQuizzes((prev) => [savedQuiz, ...prev]);
+          setActiveTab("library");
+          setLibraryTab("courses");
+          Alert.alert("Success", `Imported shared course: ${quiz.title}`);
+        } catch (err: any) {
+          Alert.alert("Import Failed", err.message);
+        } finally {
+          setIsImporting(false);
+        }
+      };
+      
+      fetchAndImport();
+    }
+  }, [pendingSharedQuizId, firebaseUser, isConnected]);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [hasSeenLogin, setHasSeenLogin] = useState(false);
@@ -947,6 +1013,13 @@ export default function HomeScreen() {
       });
     }
   };
+
+  useEffect(() => {
+    if (speakingText) {
+      Speech.stop();
+      setSpeakingText(null);
+    }
+  }, [fcIndex, studyQueue, activeTab, studyingDeck]);
 
   const [showReconnectedToast, setShowReconnectedToast] = useState(false);
   const disconnectTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1177,8 +1250,10 @@ export default function HomeScreen() {
 
     const isPerQuestion = activeSession?.timePerQuestion != null;
     const isGlobal = activeSession?.quizTimeLimit != null;
+    const currentQId = activeSession?.questions?.[activeSession?.currentIndex]?.id;
+    const isCurrentQSubmitted = currentQId && activeSession?.submitted?.includes(currentQId);
 
-    if (activeSession && (isPerQuestion || isGlobal) && !activeSession.isFinished) {
+    if (activeSession && (isPerQuestion || isGlobal) && !activeSession.isFinished && (!isPerQuestion || !isCurrentQSubmitted)) {
       if (isPerQuestion) {
         setSessionTimeLeft(activeSession.timePerQuestion);
       } else if (sessionTimeLeft <= 0) {
@@ -1222,7 +1297,7 @@ export default function HomeScreen() {
         tickingPlayer.seekTo(0);
       } catch (e) {}
     };
-  }, [activeSession?.quizId, activeSession?.quizTimeLimit, activeSession?.timePerQuestion ? activeSession?.currentIndex : null, activeSession?.isFinished]);
+  }, [activeSession?.quizId, activeSession?.quizTimeLimit, activeSession?.timePerQuestion ? activeSession?.currentIndex : null, activeSession?.isFinished, activeSession?.submitted]);
 
   // Keep ref always pointing to the freshest closure (re-runs every render)
   React.useEffect(() => {
@@ -1245,23 +1320,24 @@ export default function HomeScreen() {
           }
           
           const nextIdx = currentSession.currentIndex + 1;
-          if (nextIdx < currentSession.questions.length) {
-            // Auto-advance
-            return {
-              ...currentSession,
-              answers: newAnswers,
-              submitted: newSubmitted,
-              currentIndex: nextIdx
-            };
-          } else {
-            // Finish quiz
-            return {
-              ...currentSession,
-              answers: newAnswers,
-              submitted: newSubmitted,
-              isFinished: true
-            };
+          const isBattle = currentSession.isBattle;
+          
+          if (autoSlideEnabled || isBattle) {
+            setTimeout(() => {
+              if (nextIdx < currentSession.questions.length) {
+                handleNavigateSession(nextIdx);
+                quizFlatListRef.current?.scrollToIndex({ index: nextIdx, animated: true });
+              } else {
+                handleFinishSession();
+              }
+            }, isBattle ? 0 : 800);
           }
+
+          return {
+            ...currentSession,
+            answers: newAnswers,
+            submitted: newSubmitted
+          };
         }
         
         // Global timer expired
@@ -2754,7 +2830,9 @@ export default function HomeScreen() {
     ...(selectedQuiz?.wrongQuestions || []).map((w: any) => w.id || w)
   ]);
   const unansweredCount = selectedQuiz
-    ? (selectedQuiz.questionsList || []).filter((q: any) => !attemptedIds.has(q.id)).length
+    ? (selectedQuiz.questionsList && selectedQuiz.questionsList.length > 0
+        ? selectedQuiz.questionsList.filter((q: any) => !attemptedIds.has(q.id)).length
+        : Math.max(0, totalQuestions - attemptedIds.size))
     : totalQuestions;
 
   // Compute how many questions will be used
@@ -3022,26 +3100,18 @@ export default function HomeScreen() {
         Alert.alert("Not Available", "Sharing is not available on web.");
         return;
       }
-      const isAvailable = await Sharing.isAvailableAsync();
-      if (!isAvailable) {
-        Alert.alert("Not Available", "Sharing is not available on this device.");
-        return;
-      }
       
-      const fileUri = await AsyncStorage.getItem(`quiz_file_${quiz.id}`);
-      if (!fileUri) {
-        Alert.alert("Error", "Original file not found.");
-        return;
-      }
+      const shareUrl = `https://scorrapp.com/share/quiz/${quiz.id}`;
+      const message = `Check out this quiz on Scorr: ${quiz.title}\n\nTap this link to open it in the app:\n${shareUrl}`;
       
-      const fileInfo = await FileSystem.getInfoAsync(fileUri);
-      if (!fileInfo.exists) {
-        Alert.alert("Error", "Original file not found on disk.");
-        return;
-      }
+      await Share.share({
+        message,
+        url: shareUrl,
+        title: `Share ${quiz.title}`,
+      });
       
-      await Sharing.shareAsync(fileUri, { dialogTitle: `Share ${quiz.title}` });
     } catch (err: any) {
+      console.warn("Share error:", err);
       Alert.alert("Error", typeof __DEV__ !== 'undefined' && __DEV__ ? err.message : getUserErrorMessage(err));
     }
   };
@@ -4948,7 +5018,9 @@ export default function HomeScreen() {
             }}
           >
             {/* ── FRONT FACE — full card with own background ── */}
-            <Animated.View style={{
+            <Animated.View 
+              pointerEvents={fcFlipped ? "none" : "auto"}
+              style={{
               position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
               borderRadius: 24, backgroundColor: cardBg,
               backfaceVisibility: "hidden", overflow: "hidden",
@@ -4975,7 +5047,9 @@ export default function HomeScreen() {
             </Animated.View>
 
             {/* ── BACK FACE — full card with own background ── */}
-            <Animated.View style={{
+            <Animated.View 
+              pointerEvents={fcFlipped ? "auto" : "none"}
+              style={{
               position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
               borderRadius: 24, backgroundColor: cardBg,
               backfaceVisibility: "hidden", overflow: "hidden",
@@ -6746,7 +6820,9 @@ export default function HomeScreen() {
                   }}
                 >
                   {/* FRONT FACE */}
-                  <Animated.View style={{
+                  <Animated.View 
+                    pointerEvents={studyFlipped ? "none" : "auto"}
+                    style={{
                     position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
                     borderRadius: 24, backgroundColor: isDark ? "#253344" : "#ffffff",
                     backfaceVisibility: "hidden", overflow: "hidden",
@@ -6791,7 +6867,9 @@ export default function HomeScreen() {
                   </Animated.View>
 
                   {/* BACK FACE */}
-                  <Animated.View style={{
+                  <Animated.View 
+                    pointerEvents={studyFlipped ? "auto" : "none"}
+                    style={{
                     position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
                     borderRadius: 24, backgroundColor: isDark ? "#253344" : "#ffffff",
                     backfaceVisibility: "hidden", overflow: "hidden",

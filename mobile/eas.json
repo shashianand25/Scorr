@@ -8,7 +8,7 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://recall-backend-wheat.vercel.app"
+        "EXPO_PUBLIC_API_URL": "https://api.scorrapp.com"
       }
     },
     "preview": {
@@ -17,12 +17,12 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://recall-backend-wheat.vercel.app"
+        "EXPO_PUBLIC_API_URL": "https://api.scorrapp.com"
       }
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://recall-backend-wheat.vercel.app"
+        "EXPO_PUBLIC_API_URL": "https://api.scorrapp.com"
       }
     }
   },
