@@ -2231,30 +2231,15 @@ export default function HomeScreen() {
           onPress={() => handleHostBattle(quiz.id, "insights")} 
           style={({pressed}) => [{ 
             backgroundColor: cardBg, borderRadius: 16, paddingVertical: 16, paddingHorizontal: 12, 
-            borderWidth: 1, borderColor: border, flexDirection: "row", alignItems: "center", marginBottom: 12
+            borderWidth: 1, borderColor: border, flexDirection: "row", alignItems: "center", marginBottom: 32
           }, pressed && {opacity: 0.8}]}
         >
           <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: isDark ? "rgba(244,63,94,0.15)" : "#ffe4e6", alignItems: "center", justifyContent: "center", marginRight: 12 }}>
             <Ionicons name="flame" size={18} color={isDark ? "#FB7185" : "#e11d48"} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 15, fontWeight: "700", color: textMain }} numberOfLines={1}>Multiplayer Battle</Text>
-          </View>
-          <Feather name="chevron-right" size={16} color={isDark ? "#FFFFFF" : "#9ca3af"} style={{ opacity: isDark ? 0.8 : 1 }} />
-        </Pressable>
-
-        <Pressable 
-          onPress={() => handleShareQuiz(quiz)} 
-          style={({pressed}) => [{ 
-            backgroundColor: cardBg, borderRadius: 16, paddingVertical: 16, paddingHorizontal: 12, 
-            borderWidth: 1, borderColor: border, flexDirection: "row", alignItems: "center", marginBottom: 32
-          }, pressed && {opacity: 0.8}]}
-        >
-          <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: isDark ? "rgba(139,143,240,0.18)" : "#e0e7ff", alignItems: "center", justifyContent: "center", marginRight: 12 }}>
-            <Ionicons name="share-social" size={18} color={isDark ? "#a5a8f5" : "#4338ca"} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 15, fontWeight: "700", color: textMain }} numberOfLines={1}>Share Course</Text>
+            <Text style={{ fontSize: 16, fontWeight: "700", color: textMain, marginBottom: 4 }} numberOfLines={1}>Multiplayer Battle</Text>
+            <Text style={{ fontSize: 12, color: isDark ? "rgba(255,255,255,0.8)" : textSub }} numberOfLines={1}>Challenge a friend in real-time</Text>
           </View>
           <Feather name="chevron-right" size={16} color={isDark ? "#FFFFFF" : "#9ca3af"} style={{ opacity: isDark ? 0.8 : 1 }} />
         </Pressable>
