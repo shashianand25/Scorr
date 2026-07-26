@@ -890,7 +890,12 @@ export default function HomeScreen() {
           setQuizzes((prev) => [savedQuiz, ...prev]);
           setActiveTab("library");
           setLibraryTab("courses");
-          Alert.alert("Success", `Imported shared course: ${quiz.title}`);
+          setCustomToast({
+            message: `Imported shared course: ${quiz.title}`,
+            icon: 'download-outline',
+            color: '#2dd4a7'
+          });
+          setTimeout(() => setCustomToast(null), 3500);
         } catch (err: any) {
           Alert.alert("Import Failed", err.message);
         } finally {
@@ -917,6 +922,7 @@ export default function HomeScreen() {
   const [isConnected, setIsConnected] = useState<boolean>(true);
   const [offlineModalParams, setOfflineModalParams] = useState<{ title: string; message: string; buttons?: { text: string; onPress: () => void; isPrimary?: boolean }[] } | null>(null);
   const [syncToastMessage, setSyncToastMessage] = useState<string | null>(null);
+  const [customToast, setCustomToast] = useState<{ message: string, icon: any, color: string } | null>(null);
 
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener(state => {
@@ -8177,6 +8183,16 @@ export default function HomeScreen() {
         <View style={{ position: "absolute", top: Platform.OS === "ios" ? 52 : 24, left: 20, right: 20, zIndex: 1000, backgroundColor: settingsDarkMode ? "#334155" : "#475569", padding: 12, borderRadius: 8, flexDirection: "row", alignItems: "center", gap: 10, elevation: 5, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6 }}>
           <Ionicons name="cloud-offline" size={20} color="#cbd5e1" />
           <Text style={{ color: "#f8fafc", fontSize: 13, fontWeight: "500", flex: 1 }}>{syncToastMessage}</Text>
+        </View>
+      )}
+
+      {/* Custom Toast */}
+      {!!customToast && (
+        <View style={{ position: "absolute", top: Platform.OS === "ios" ? 52 : 24, left: 20, right: 20, zIndex: 1000, backgroundColor: "#10142a", borderWidth: 1, borderColor: "rgba(139,143,240,0.2)", padding: 14, borderRadius: 12, flexDirection: "row", alignItems: "center", gap: 12, elevation: 5, shadowColor: "#000", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 10 }}>
+          <View style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: "rgba(45,212,167,0.15)", justifyContent: "center", alignItems: "center" }}>
+            <Ionicons name={customToast.icon} size={18} color={customToast.color} />
+          </View>
+          <Text style={{ color: "#fff", fontSize: 14, fontWeight: "600", flex: 1, lineHeight: 20 }}>{customToast.message}</Text>
         </View>
       )}
 
