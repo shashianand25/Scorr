@@ -57,7 +57,7 @@ async function apiFetch<T>(
     }
     
     // Sanitize to prevent exposing the backend URL on DNS/Network failures
-    if (errMsg.includes(BASE_URL) || errMsg.includes("recall-backend") || errMsg.includes("UnknownHostException") || errMsg.includes("Network request failed")) {
+    if (errMsg.includes(BASE_URL) || errMsg.includes("scorrapp") || errMsg.includes("UnknownHostException") || errMsg.includes("Network request failed")) {
       errMsg = "Network error: Please check your internet connection.";
     }
     
@@ -432,7 +432,7 @@ export async function parsePptFromBackend(fileUri: string, fileName: string): Pr
     return { text: data.text };
   } catch (err: any) {
     let errMsg = err?.message || "Upload failed";
-    if (errMsg.includes(BASE_URL) || errMsg.includes("recall-backend") || errMsg.includes("UnknownHostException") || errMsg.includes("Network request failed")) {
+    if (errMsg.includes(BASE_URL) || errMsg.includes("scorrapp") || errMsg.includes("UnknownHostException") || errMsg.includes("Network request failed")) {
       errMsg = "Network error: Please check your internet connection.";
     }
     return { text: "", error: errMsg };

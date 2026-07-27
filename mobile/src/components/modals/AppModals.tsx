@@ -33,6 +33,7 @@ const KeyboardWrapper = Platform.OS === "ios" ? KeyboardAvoidingView : View;
 export function AppModals({ p }: { p: any }) {
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
+  const optionsScrollRef = useRef<ScrollView>(null);
   const pendingAiFile = useRef<{ text: string; fileName: string } | null>(null);
   const totalQuestions = p.selectedQuiz?.questions ?? 0;
   const wrongCount = p.selectedQuiz?.wrongQuestions?.length ?? 0;
@@ -1278,13 +1279,13 @@ export function AppModals({ p }: { p: any }) {
                   </Pressable>
                 </View>
 
-                <ScrollView style={{ paddingHorizontal: 20 }} contentContainerStyle={{ paddingBottom: 100 }}>
+                <ScrollView ref={optionsScrollRef} style={{ paddingHorizontal: 20 }} contentContainerStyle={{ paddingBottom: 100 }}>
                   {[
                     { id: "marathon", title: "Marathon", sub: "All questions, no timer", icon: "help-circle", color: "#3b82f6" },
-                    { id: "timed", title: "Timed", sub: "60s per question", icon: "hourglass-outline", color: "#f59e0b" },
+                    { id: "unanswered", title: "Unanswered", sub: "Questions you haven't answered yet", icon: "layers-outline", color: "#f59e0b" },
                     { id: "pop", title: "Pop Quiz", sub: "10 random questions", icon: "flash", color: "#ef4444" },
-                    { id: "exam", title: "Exam", sub: "Timed, shuffled, no feedback", icon: "document-text", color: "#eab308" },
                     { id: "mistakes", title: "Mistakes", sub: "Review incorrect answers", icon: "bandage", color: "#f97316" },
+                    { id: "exam", title: "Exam", sub: "Timed, shuffled, no feedback", icon: "document-text", color: "#eab308" },
                     { id: "custom", title: "Custom", sub: "Configure your own settings", icon: "build", color: "#6366f1" },
                   ].map((preset) => {
                     const isActive = quizPreset === preset.id;
@@ -1301,10 +1302,10 @@ export function AppModals({ p }: { p: any }) {
                               (p.setShuffleQuestions || (()=>{}))(false);
                               (p.setShuffleAnswers || (()=>{}))(false);
                               (p.setShowAnswerOnSubmit || (()=>{}))(true);
-                            } else if (preset.id === "timed") {
-                              (p.setSelectionMode || (()=>{}))("all");
+                            } else if (preset.id === "unanswered") {
+                              (p.setSelectionMode || (()=>{}))("unanswered");
                               (p.setQuizTimeLimit || (()=>{}))(null);
-                              (p.setQuizPerQuestionTimer || (()=>{}))(60);
+                              (p.setQuizPerQuestionTimer || (()=>{}))(null);
                               (p.setTimeLimitText || (()=>{}))("");
                               (p.setShuffleQuestions || (()=>{}))(false);
                               (p.setShuffleAnswers || (()=>{}))(false);
@@ -1330,6 +1331,9 @@ export function AppModals({ p }: { p: any }) {
                             } else if (preset.id === "custom") {
                               (p.setSelectionMode || (()=>{}))("range");
                               (p.setQuizPerQuestionTimer || (()=>{}))(null);
+                              setTimeout(() => {
+                                optionsScrollRef.current?.scrollTo({ y: 380, animated: true });
+                              }, 300);
                             }
                           }}
                           style={({ pressed }) => ({
@@ -1918,7 +1922,7 @@ export function AppModals({ p }: { p: any }) {
                   <Ionicons name="folder-outline" size={28} color={p.settingsDarkMode ? "#e2e8f0" : "#64748b"} />
                   <View style={{ flexDirection: "column", flex: 1 }}>
                     <Text style={{ fontSize: 17, fontWeight: "600",
-                      color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('create_menu.import_txt') || "Import file (.txt, .doc, .docx, .pdf)"}</Text>
+                      color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('create_menu.import_txt') || "Import existing quiz (.txt, .doc, .docx, .pdf)"}</Text>
                   </View>
                 </View>
               </AnimatedPressable>

@@ -9,7 +9,8 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.radium230sorganization.quizforge"
+      "bundleIdentifier": "com.radium230sorganization.quizforge",
+      "associatedDomains": ["applinks:scorrapp.com"]
     },
     "android": {
       "adaptiveIcon": {
@@ -20,7 +21,17 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.radium230sorganization.quizforge",
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            { "scheme": "https", "host": "scorrapp.com", "pathPrefix": "/share/quiz" }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "output": "static",

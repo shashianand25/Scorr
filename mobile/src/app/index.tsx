@@ -177,7 +177,7 @@ function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true }: 
 
       {/* Back button */}
       <SafeAreaView style={{ position: "absolute", top: 0, left: 0, right: 0 }}>
-        <Pressable onPress={onCancel} style={{ padding: 24, paddingTop: Platform.OS === 'android' ? 40 : 24 }}>
+        <Pressable onPress={onCancel} style={{ padding: 24, paddingTop: Platform.OS === 'android' ? 40 : 24, alignSelf: 'flex-start' }}>
           <Ionicons name="chevron-back" size={32} color={isDark ? "#FFFFFF" : "#0f172a"} />
         </Pressable>
       </SafeAreaView>
@@ -261,6 +261,47 @@ function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true }: 
   );
 }
 
+function BackgroundProgressCard({ isDark }: { isDark: boolean }) {
+  const progress = React.useRef(new Animated.Value(0)).current;
+  const [pct, setPct] = useState(0);
+
+  React.useEffect(() => {
+    Animated.timing(progress, {
+      toValue: 1,
+      duration: 60000,
+      easing: Easing.out(Easing.ease),
+      useNativeDriver: false
+    }).start();
+    
+    const start = Date.now();
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - start;
+      setPct(Math.min(Math.floor((elapsed / 60000) * 100), 99));
+    }, 500);
+    return () => clearInterval(interval);
+  }, []);
+
+  const barWidth = progress.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] });
+
+  return (
+    <View style={{ marginHorizontal: 20, marginTop: 8, marginBottom: 12, padding: 18, borderRadius: 20, backgroundColor: isDark ? "#121021" : "#f8fafc", borderWidth: 1, borderColor: isDark ? "rgba(139, 92, 246, 0.4)" : "rgba(139, 92, 246, 0.3)" }}>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <ActivityIndicator color="#8b5cf6" size="small" />
+          <Text style={{ fontSize: 16, fontWeight: "700", color: isDark ? "#ffffff" : "#000000" }}>Generating flashcards...</Text>
+        </View>
+        <Text style={{ fontSize: 14, fontWeight: "600", color: "#8b5cf6" }}>{pct}%</Text>
+      </View>
+      <View style={{ height: 6, width: '100%', backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", borderRadius: 3, overflow: 'hidden', marginBottom: 12 }}>
+        <Animated.View style={{ width: barWidth, height: '100%', backgroundColor: "#8b5cf6", borderRadius: 3 }} />
+      </View>
+      <Text style={{ fontSize: 13, color: isDark ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.5)" }}>
+        You can continue using the app. We'll notify you when it's ready.
+      </Text>
+    </View>
+  );
+}
+
 export default function HomeScreen() {
   const { t, i18n } = useTranslation();
 
@@ -279,6 +320,7 @@ export default function HomeScreen() {
   const [dataLoaded, setDataLoaded] = useState(false);
   const [backgroundQuizReady, setBackgroundQuizReady] = useState<any>(null);
   const isBackgroundGen = React.useRef(false);
+  const [isGeneratingInBackground, setIsGeneratingInBackground] = useState(false);
 
   // Track which uid slot is currently loaded so we know when to switch
   const loadedUidRef = React.useRef<string | null | undefined>(undefined); // undefined = not loaded yet
@@ -3357,6 +3399,7 @@ export default function HomeScreen() {
       if (isBackgroundGen.current) {
         setBackgroundQuizReady(newQuiz);
         isBackgroundGen.current = false;
+        setIsGeneratingInBackground(false);
       } else {
         setAiGenPhase(null);
         setTimeout(() => {
@@ -3376,6 +3419,7 @@ export default function HomeScreen() {
         setAiGenPhase(null);
       } else {
         isBackgroundGen.current = false;
+        setIsGeneratingInBackground(false);
       }
       let errMsg = err.message || "Unknown error";
       if (errMsg.includes("generativelanguage.googleapis.com") || errMsg.includes("UnknownHostException") || errMsg.includes("Network request failed") || errMsg.toLowerCase().includes("failed to fetch") || errMsg.includes("Failed to connect to server")) {
@@ -4243,7 +4287,7 @@ export default function HomeScreen() {
           >
             <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
               <Text style={{ fontSize: 24 }}>📝</Text>
-              <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Report Card</Text>
+              <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Review Answers</Text>
             </View>
             <Feather name="chevron-right" size={22} color={settingsDarkMode ? "#ffffff" : "#111827"} />
           </Pressable>
@@ -5202,7 +5246,7 @@ export default function HomeScreen() {
         };
 
         const quizGroups = groupByTime(filteredQuizzes, (q: any) => {
-          const a = q.attempts || []; return a.length > 0 ? (a[0].date || 0) : 0;
+          const a = q.attempts || []; return a.length > 0 ? (a[0].timestamp || a[0].date || 0) : 0;
         });
         const deckGroups = groupByTime(filteredDecks, (d: any) => {
           const a = d.attempts || []; return a.length > 0 ? (a[a.length - 1].date || 0) : 0;
@@ -6705,7 +6749,18 @@ export default function HomeScreen() {
                       }} style={({pressed}) => ({ backgroundColor: settingsDarkMode ? "#172033" : "#ffffff", borderRadius: 16, padding: 20, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", opacity: pressed ? 0.8 : 1 })}>
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
                         <Text style={{ fontSize: 24 }}>📝</Text>
-                        <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Preview Flashcards</Text>
+                        <View>
+                          <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>
+                            {studyingDeck.previewIndex && studyingDeck.previewIndex > 0 && studyingDeck.previewIndex < studyingDeck.cards.length 
+                              ? "Resume Preview" 
+                              : "Preview Flashcards"}
+                          </Text>
+                          {studyingDeck.previewIndex && studyingDeck.previewIndex > 0 && studyingDeck.previewIndex < studyingDeck.cards.length ? (
+                            <Text style={{ fontSize: 13, color: settingsDarkMode ? "rgba(255,255,255,0.6)" : "#6b7280", marginTop: 2 }}>
+                              Continuing from card {studyingDeck.previewIndex + 1}
+                            </Text>
+                          ) : null}
+                        </View>
                       </View>
                       <Feather name="chevron-right" size={22} color={settingsDarkMode ? "#ffffff" : "#111827"} />
                     </Pressable>
@@ -7534,7 +7589,7 @@ export default function HomeScreen() {
               const done = (q.uniqueCorrectIds || []).length;
               const total = q.questions || 1;
               const isNew = (q.attempts || []).length === 0;
-              const ts = isNew ? -i : (q.attempts[0]?.date || 0);
+              const ts = isNew ? -i : (q.attempts[0]?.timestamp || q.attempts[0]?.date || 0);
               return { id: q.id, title: q.title, type: "quiz", progress: done / total,
                 label: isNew ? "Not started" : `${Math.round((done / total) * 100)}% complete`, raw: q, ts, isNew };
             }),
@@ -7578,7 +7633,7 @@ export default function HomeScreen() {
               return {
                 id: q.id, title: q.title, type: "quiz",
                 sub: `${q.questions || 0} questions  ·  ${cardCount} cards  ·  ${due} due`, raw: q,
-                ts: (q.attempts || []).length > 0 ? (q.attempts[0].date || 0) : 0,
+                ts: (q.attempts || []).length > 0 ? (q.attempts[0].timestamp || q.attempts[0].date || 0) : 0,
               };
             }),
             ...flashcardDecks.map((d: any): RecentItem => ({
@@ -7646,6 +7701,11 @@ export default function HomeScreen() {
                     )}
                   </AnimatedPressable>
                 </View>
+
+                {/* ── Background Progress Card ── */}
+                {isGeneratingInBackground && !homeSearch && (
+                  <BackgroundProgressCard isDark={settingsDarkMode} />
+                )}
 
                 {/* ── New user: sample try-it-out card ── */}
                 {!hasContent && !homeSearch && !sampleDismissed && sampleQuiz && (
@@ -8314,7 +8374,7 @@ export default function HomeScreen() {
       <Modal visible={showWrongReview || !!viewingReportCardData} animationType="slide" transparent={false} onRequestClose={() => { setShowWrongReview(false); setViewingReportCardData(null); }}>
         <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#0b1021" : "#f8fafc" }}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 24, paddingTop: 60, paddingBottom: 20, borderBottomWidth: 1, borderBottomColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
-            <Text style={{ fontSize: 20, fontWeight: "600", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Report Card</Text>
+            <Text style={{ fontSize: 20, fontWeight: "600", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Review Answers</Text>
             <Pressable onPress={() => { setShowWrongReview(false); setViewingReportCardData(null); }} style={{ padding: 8 }}>
               <Ionicons name="close" size={28} color={settingsDarkMode ? "#ffffff" : "#111827"} />
             </Pressable>
@@ -8322,7 +8382,7 @@ export default function HomeScreen() {
           <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 20, paddingBottom: 100 }}>
             {reportCardQs.length === 0 && (
               <Text style={{ textAlign: "center", color: settingsDarkMode ? "#9ca3af" : "#6b7280", marginTop: 40 }}>
-                No report card data available for this attempt.
+                No answer data available for this attempt.
               </Text>
             )}
             {reportCardQs.map((q: any, idx: number) => (
@@ -8437,7 +8497,7 @@ export default function HomeScreen() {
       }} />
 
       {/* ── AI Generation Screen ── */}
-      {aiGenPhase === "generating" && <AIGeneratingScreen isDark={settingsDarkMode} documentCharCount={aiGenCharCount} onCancel={() => { isBackgroundGen.current = true; setAiGenPhase(null); }} />}
+      {aiGenPhase === "generating" && <AIGeneratingScreen isDark={settingsDarkMode} documentCharCount={aiGenCharCount} onCancel={() => { setIsGeneratingInBackground(true); isBackgroundGen.current = true; setAiGenPhase(null); }} />}
 
       {/* ── Battle Modals ── */}
       {(() => {
