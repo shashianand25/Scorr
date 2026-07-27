@@ -62,7 +62,7 @@ export default function LoginPage() {
         flex: 1,
         display: "flex",
         flexDirection: "column",
-        justifyContent: "space-between",
+        justifyContent: "center",
         padding: "48px 56px",
         background: "linear-gradient(135deg, #0f1420 0%, #0b0f1a 100%)",
         borderRight: "1px solid #1f2937",
@@ -83,8 +83,8 @@ export default function LoginPage() {
           pointerEvents: "none",
         }} />
 
-        {/* Logo */}
-        <Link href="/" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 10 }}>
+        {/* Logo — pinned top-left */}
+        <Link href="/" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 10, position: "absolute", top: 48, left: 56 }}>
           <div style={{
             width: 36, height: 36, borderRadius: 10,
             background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
@@ -125,8 +125,8 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Bottom note */}
-        <p style={{ fontSize: 13, color: "#374151" }}>
+        {/* Bottom note — pinned bottom-left */}
+        <p style={{ fontSize: 13, color: "#374151", position: "absolute", bottom: 32, left: 56 }}>
           © {new Date().getFullYear()} Scorr App. All rights reserved.
         </p>
       </div>
