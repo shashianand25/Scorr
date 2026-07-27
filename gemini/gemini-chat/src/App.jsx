@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import './App.css';
 
 const VERTEX_URL = `https://asia-south1-aiplatform.googleapis.com/v1/projects/guardian-495515/locations/asia-south1/publishers/google/models/gemini-3.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`;
-const PDF_API = 'https://recall-backend-wheat.vercel.app/api/parse-pdf';
+const PDF_API = 'https://api.scorrapp.com/api/parse-pdf';
 
 const MCQ_PROMPT = (text, count) => `You are an expert educator and assessment designer.
 

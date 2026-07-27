@@ -78,7 +78,7 @@ app.post('/api/feedback', async (req, res) => {
     // Send Email via Resend
     if (process.env.RESEND_API_KEY) {
       await resend.emails.send({
-        from: 'onboarding@resend.dev',
+        from: 'support@scorrapp.com',
         to: process.env.ADMIN_EMAIL || 'shashianand2005@gmail.com',
         subject: `New Recall Feedback from ${userEmail || 'Anonymous'}`,
         text: `User ID: ${userId || 'N/A'}\nUser Email: ${userEmail || 'N/A'}\n\nFeedback:\n${message}`
