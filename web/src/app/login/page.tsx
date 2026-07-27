@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { signInWithEmail, signUpWithEmail, signInWithGoogle } from "@/lib/firebase";
 import { useAuthStore } from "@/store/auth";
-import { LogIn, UserPlus, Github } from "lucide-react";
+import { LogIn, UserPlus } from "lucide-react";
 import Link from "next/link";
 
 export default function LoginPage() {
