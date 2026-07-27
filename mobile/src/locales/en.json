@@ -108,7 +108,7 @@
     "attempts": "attempts"
   },
   "create_menu": {
-    "import_txt": "Import quiz from file (.txt, .docx, .pdf)",
+    "import_txt": "Import existing quiz (.txt, .docx, .pdf)",
     "create_manual": "Create quiz manually"
   }
 }
