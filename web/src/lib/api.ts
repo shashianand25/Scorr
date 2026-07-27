@@ -176,6 +176,21 @@ export async function fetchQuizHistory(userId: string): Promise<{ history: QuizH
 
 // ── Battle History ─────────────────────────────────────────────────────
 
+export async function saveBattleHistory(params: {
+  userId: string;
+  roomCode: string;
+  quizTitle: string;
+  myScore: number;
+  opponentScore: number;
+  opponentName: string;
+  won: boolean;
+}): Promise<{ error: string | null }> {
+  const { error } = await apiFetch<{ eventId: string }>("/api/battle-history", {
+    method: "POST", body: JSON.stringify(params),
+  });
+  return { error };
+}
+
 export async function fetchBattleHistory(userId: string): Promise<{ history: BattleHistoryEvent[]; error: string | null }> {
   const { data, error } = await apiFetch<{ history: BattleHistoryEvent[] }>(
     `/api/battle-history?userId=${encodeURIComponent(userId)}&limit=50`
