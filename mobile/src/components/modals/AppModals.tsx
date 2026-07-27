@@ -1752,28 +1752,17 @@ export function AppModals({ p }: { p: any }) {
             >
               <View style={{
                 borderRadius: 20, padding: 22,
-                backgroundColor: p.settingsDarkMode ? "#150f2e" : "#f5f3ff",
-                borderWidth: 1.5,
-                borderColor: p.settingsDarkMode ? "rgba(168,85,247,0.5)" : "rgba(139,92,246,0.35)",
+                backgroundColor: p.settingsDarkMode ? "#20253B" : "#ffffff",
                 overflow: "hidden",
               }}>
-                <View style={{ position: "absolute", top: -40, right: -40, width: 160, height: 160, borderRadius: 80, backgroundColor: "rgba(139,92,246,0.1)" }} />
-                <View style={{ position: "absolute", bottom: -20, left: -20, width: 100, height: 100, borderRadius: 50, backgroundColor: "rgba(168,85,247,0.07)" }} />
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 14 }}>
-                  <View style={{ width: 54, height: 54, borderRadius: 17, backgroundColor: "rgba(139,92,246,0.2)", alignItems: "center", justifyContent: "center" }}>
-                    <Text style={{ fontSize: 28 }}>🤖</Text>
-                  </View>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                  <Ionicons name="color-wand-outline" size={24} color="#3b82f6" />
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 19, fontWeight: "700", color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>Generate Quiz & Flashcards</Text>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginTop: 3 }}>
-                      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#a855f7" }} />
-                      <Text style={{ fontSize: 12, color: "#a855f7", fontWeight: "600", letterSpacing: 0.3 }}>Powered by AI</Text>
-                    </View>
+                    <Text style={{ fontSize: 17, fontWeight: "700", color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>Generate Quiz & Flashcards</Text>
+                    <Text style={{ fontSize: 12, color: "#a855f7", fontWeight: "600", marginTop: 2 }}>Powered by AI</Text>
                   </View>
                 </View>
-                <Text style={{ fontSize: 13.5, color: p.settingsDarkMode ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.45)", lineHeight: 20 }}>
-                  Upload PDF, DOCX, PPTX or paste notes — your full study set is ready in seconds.
-                </Text>
+
               </View>
             </AnimatedPressable>
 
@@ -1799,12 +1788,9 @@ export function AppModals({ p }: { p: any }) {
                 </View>
               </AnimatedPressable>
 
-            {/* Block 2 (Folder/Import) */}
-            <View style={{
-              backgroundColor: p.settingsDarkMode ? "#20253B" : "#ffffff",
-              borderRadius: 20,
-              paddingVertical: 12,
-            }}>
+              {/* Divider */}
+              <View style={{ height: 1, backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)", marginHorizontal: 16, marginVertical: 4 }} />
+
               {/* Import from File */}
               <AnimatedPressable
                 onPress={() => {
@@ -1918,15 +1904,15 @@ export function AppModals({ p }: { p: any }) {
                   }, 350);
                 }
               }}
-                style={{ paddingVertical: 16, paddingHorizontal: 20 }}
+                style={{ paddingVertical: 14, paddingHorizontal: 20 }}
                 scaleTo={0.97}
               >
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
-                  <Ionicons name="folder-open-outline" size={28} color="#10b981" />
+                  <Ionicons name="folder-open-outline" size={26} color="#94A3B8" />
                   <View style={{ flexDirection: "column", flex: 1 }}>
-                    <Text style={{ fontSize: 17, fontWeight: "600",
-                      color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>Import existing quiz</Text>
-                    <Text style={{ fontSize: 13, color: p.settingsDarkMode ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.4)", marginTop: 2 }}>Use .docx to preserve images</Text>
+                    <Text style={{ fontSize: 16, fontWeight: "600",
+                      color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>Import Existing Quiz</Text>
+                    <Text style={{ fontSize: 11, color: "#ffffff", marginTop: 2 }}>(Use .docx to preserve images)</Text>
                   </View>
                 </View>
               </AnimatedPressable>

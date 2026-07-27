@@ -7863,7 +7863,7 @@ export default function HomeScreen() {
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={{ fontSize: 16, fontWeight: "700", color: txt, marginBottom: 4 }}>Battle Arena</Text>
-                        <Text style={{ fontSize: 13, color: muted }}>Challenge friends in real-time matches</Text>
+                        <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.65)" }}>Challenge friends in real-time matches</Text>
                       </View>
                       <Feather name="chevron-right" size={20} color={muted} />
                     </Pressable>
@@ -7933,7 +7933,7 @@ export default function HomeScreen() {
                     >
                       <View style={{ flex: 1 }}>
                         <Text style={{ fontSize: 16, fontWeight: "700", color: txt, marginBottom: 4 }}>Invite your friends</Text>
-                        <Text style={{ fontSize: 13, color: muted }}>Learn together and grow faster</Text>
+                        <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.65)" }}>Learn together and grow faster</Text>
                       </View>
                       <View style={{ width: 48, height: 48, alignItems: "center", justifyContent: "center" }}>
                         <Text style={{ fontSize: 32 }}>💌</Text>
@@ -7954,7 +7954,7 @@ export default function HomeScreen() {
                     >
                       <View style={{ flex: 1 }}>
                         <Text style={{ fontSize: 16, fontWeight: "700", color: txt, marginBottom: 4 }}>Feedback</Text>
-                        <Text style={{ fontSize: 13, color: muted }}>Help us improve</Text>
+                        <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.65)" }}>Help us improve</Text>
                       </View>
                       <View style={{ width: 48, height: 48, alignItems: "center", justifyContent: "center" }}>
                         <Text style={{ fontSize: 32 }}>💡</Text>

@@ -1,115 +1,118 @@
 "use client";
-
-import { useEffect } from "react";
-import { useRouter, usePathname } from "next/navigation";
-import { useAuthStore } from "@/store/auth";
 import Link from "next/link";
-import { signOutUser } from "@/lib/firebase";
-import { 
-  LayoutDashboard, 
-  Library, 
-  PlusCircle, 
-  Settings, 
-  LogOut, 
-  Swords,
-  User as UserIcon
-} from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { useAuthStore } from "@/store/auth";
+import { useEffect, useState } from "react";
+
+const NAV = [
+  { href: "/dashboard", icon: "🏠", label: "Home" },
+  { href: "/library",   icon: "📚", label: "Library" },
+  { href: "/quiz/create", icon: "✨", label: "Create Quiz" },
+  { href: "/flashcards", icon: "🃏", label: "Flashcards" },
+  { href: "/battle",    icon: "⚔️", label: "Battle Arena" },
+  { href: "/history",   icon: "📊", label: "Stats & History" },
+];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuthStore();
+  const { user, loading, signOut } = useAuthStore();
   const router = useRouter();
   const pathname = usePathname();
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
-    if (!loading && !user) {
-      router.push("/login");
-    }
+    if (!loading && !user) router.push("/login");
   }, [user, loading, router]);
 
-  if (loading || !user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950">
-        <div className="w-8 h-8 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  const navItems = [
-    { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-    { label: "Library", href: "/library", icon: Library },
-    { label: "Battle Arena", href: "/arena", icon: Swords },
-    { label: "Create Quiz", href: "/create", icon: PlusCircle },
-  ];
+  if (loading || !user) return (
+    <div style={{ minHeight: "100vh", background: "#0b0f1a", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ width: 40, height: 40, border: "3px solid #1f2937", borderTop: "3px solid #6366f1", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
 
   return (
-    <div className="flex h-screen bg-slate-950 text-slate-100 overflow-hidden">
-      {/* Sidebar */}
-      <aside className="w-64 bg-slate-900/50 border-r border-slate-800 flex flex-col backdrop-blur-md">
-        <div className="p-6">
-          <Link href="/dashboard" className="text-2xl font-bold text-white tracking-tight flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-indigo-500 flex items-center justify-center">
-              <span className="text-white text-lg font-black">S</span>
-            </div>
-            Scorr
-          </Link>
+    <div style={{ display: "flex", minHeight: "100vh", background: "#0b0f1a", fontFamily: "'Inter', sans-serif" }}>
+      {/* ── Sidebar ── */}
+      <aside style={{
+        width: collapsed ? 72 : 240,
+        background: "#0f1420",
+        borderRight: "1px solid #1f2937",
+        display: "flex",
+        flexDirection: "column",
+        position: "fixed",
+        top: 0, left: 0, bottom: 0,
+        zIndex: 50,
+        transition: "width 0.2s ease",
+        overflow: "hidden",
+      }}>
+        {/* Logo */}
+        <div style={{ padding: "20px 16px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid #1f2937" }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+            background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <span style={{ color: "#fff", fontWeight: 900, fontSize: 18 }}>S</span>
+          </div>
+          {!collapsed && <span style={{ color: "#fff", fontWeight: 800, fontSize: 18, letterSpacing: "-0.5px", whiteSpace: "nowrap" }}>SCORR</span>}
         </div>
 
-        <nav className="flex-1 px-4 py-4 space-y-2">
-          {navItems.map((item) => {
-            const isActive = pathname.startsWith(item.href);
+        {/* Nav links */}
+        <nav style={{ flex: 1, padding: "12px 8px", display: "flex", flexDirection: "column", gap: 2 }}>
+          {NAV.map(({ href, icon, label }) => {
+            const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                  isActive
-                    ? "bg-indigo-500/10 text-indigo-400 font-semibold"
-                    : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
-                }`}
-              >
-                <item.icon size={20} className={isActive ? "text-indigo-400" : "text-slate-400"} />
-                {item.label}
+              <Link key={href} href={href} style={{
+                display: "flex", alignItems: "center", gap: 12,
+                padding: "10px 12px", borderRadius: 10, textDecoration: "none",
+                background: active ? "rgba(99,102,241,0.15)" : "transparent",
+                border: active ? "1px solid rgba(99,102,241,0.3)" : "1px solid transparent",
+                transition: "all 0.15s",
+              }}>
+                <span style={{ fontSize: 18, flexShrink: 0 }}>{icon}</span>
+                {!collapsed && <span style={{ fontSize: 14, fontWeight: active ? 600 : 500, color: active ? "#a5b4fc" : "#9ca3af", whiteSpace: "nowrap" }}>{label}</span>}
               </Link>
             );
           })}
         </nav>
 
-        <div className="p-4 border-t border-slate-800 space-y-2">
-          <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-slate-400 hover:bg-slate-800/50 hover:text-slate-200">
-            <Settings size={20} />
-            Settings
+        {/* User + collapse */}
+        <div style={{ padding: "12px 8px", borderTop: "1px solid #1f2937", display: "flex", flexDirection: "column", gap: 8 }}>
+          <button onClick={() => setCollapsed(!collapsed)} style={{
+            width: "100%", background: "transparent", border: "1px solid #1f2937",
+            borderRadius: 10, padding: "8px 12px", color: "#6b7280", cursor: "pointer",
+            fontSize: 13, display: "flex", alignItems: "center", justifyContent: collapsed ? "center" : "flex-start", gap: 8,
+          }}>
+            <span>{collapsed ? "→" : "←"}</span>
+            {!collapsed && <span>Collapse</span>}
           </button>
-          <button 
-            onClick={() => signOutUser()}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-red-400 hover:bg-red-500/10 hover:text-red-300"
-          >
-            <LogOut size={20} />
-            Sign Out
-          </button>
-          
-          <div className="mt-4 flex items-center gap-3 px-4 py-2">
-            <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center">
-              {user.photoURL ? (
-                <img src={user.photoURL} alt="Profile" className="w-10 h-10 rounded-full" />
-              ) : (
-                <UserIcon size={20} className="text-slate-400" />
-              )}
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <p className="text-sm font-semibold text-slate-200 truncate">{user.displayName || "User"}</p>
-              <p className="text-xs text-slate-500 truncate">{user.email}</p>
-            </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 4px" }}>
+            {user.photoURL ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={user.photoURL} alt="avatar" style={{ width: 32, height: 32, borderRadius: "50%", flexShrink: 0 }} />
+            ) : (
+              <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#6366f1", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <span style={{ color: "#fff", fontSize: 14, fontWeight: 700 }}>{(user.displayName || user.email || "U")[0].toUpperCase()}</span>
+              </div>
+            )}
+            {!collapsed && (
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#e5e7eb", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {user.displayName || "User"}
+                </div>
+                <button onClick={signOut} style={{ background: "none", border: "none", color: "#6b7280", fontSize: 12, cursor: "pointer", padding: 0, fontFamily: "inherit" }}>
+                  Sign out
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </aside>
 
-      {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto relative">
-        {/* Subtle Background Elements */}
-        <div className="absolute top-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-600/10 blur-[120px] pointer-events-none" />
-        <div className="relative z-10 p-8">
-          {children}
-        </div>
+      {/* ── Main content ── */}
+      <main style={{ flex: 1, marginLeft: collapsed ? 72 : 240, transition: "margin-left 0.2s ease", minHeight: "100vh" }}>
+        {children}
       </main>
     </div>
   );
