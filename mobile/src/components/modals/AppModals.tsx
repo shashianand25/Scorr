@@ -1756,7 +1756,7 @@ export function AppModals({ p }: { p: any }) {
                 overflow: "hidden",
               }}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                  <Ionicons name="color-wand-outline" size={24} color="#3b82f6" />
+                  <Ionicons name="color-wand-outline" size={24} color="#a855f7" />
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontSize: 17, fontWeight: "700", color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>Generate Quiz & Flashcards</Text>
                     <Text style={{ fontSize: 12, color: "#a855f7", fontWeight: "600", marginTop: 2 }}>Powered by AI</Text>

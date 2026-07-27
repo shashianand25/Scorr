@@ -284,20 +284,17 @@ function BackgroundProgressCard({ isDark }: { isDark: boolean }) {
   const barWidth = progress.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] });
 
   return (
-    <View style={{ marginHorizontal: 20, marginTop: 8, marginBottom: 12, padding: 18, borderRadius: 20, backgroundColor: isDark ? "#121021" : "#f8fafc", borderWidth: 1, borderColor: isDark ? "rgba(139, 92, 246, 0.4)" : "rgba(139, 92, 246, 0.3)" }}>
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-          <ActivityIndicator color="#8b5cf6" size="small" />
-          <Text style={{ fontSize: 16, fontWeight: "700", color: isDark ? "#ffffff" : "#000000" }}>Generating flashcards...</Text>
+    <View style={{ marginHorizontal: 20, marginTop: 10, marginBottom: 10, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12, backgroundColor: isDark ? "rgba(139, 92, 246, 0.15)" : "rgba(139, 92, 246, 0.1)", borderWidth: 1, borderColor: isDark ? "rgba(139, 92, 246, 0.3)" : "rgba(139, 92, 246, 0.2)", flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flex: 1 }}>
+        <ActivityIndicator color="#8b5cf6" size="small" />
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 13, fontWeight: "600", color: isDark ? "#ffffff" : "#000000" }}>Generating flashcards...</Text>
+          <View style={{ height: 4, width: '100%', backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)", borderRadius: 2, overflow: 'hidden', marginTop: 6 }}>
+            <Animated.View style={{ width: barWidth, height: '100%', backgroundColor: "#8b5cf6", borderRadius: 2 }} />
+          </View>
         </View>
-        <Text style={{ fontSize: 14, fontWeight: "600", color: "#8b5cf6" }}>{pct}%</Text>
       </View>
-      <View style={{ height: 6, width: '100%', backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", borderRadius: 3, overflow: 'hidden', marginBottom: 12 }}>
-        <Animated.View style={{ width: barWidth, height: '100%', backgroundColor: "#8b5cf6", borderRadius: 3 }} />
-      </View>
-      <Text style={{ fontSize: 13, color: isDark ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.5)" }}>
-        You can continue using the app. We'll notify you when it's ready.
-      </Text>
+      <Text style={{ fontSize: 13, fontWeight: "600", color: "#a855f7", marginLeft: 16, width: 36, textAlign: "right" }}>{pct}%</Text>
     </View>
   );
 }
