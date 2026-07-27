@@ -63,6 +63,7 @@ export default function LoginPage() {
         display: "flex",
         flexDirection: "column",
         justifyContent: "center",
+        alignItems: "center",
         padding: "48px 56px",
         background: "linear-gradient(135deg, #0f1420 0%, #0b0f1a 100%)",
         borderRight: "1px solid #1f2937",
@@ -96,7 +97,7 @@ export default function LoginPage() {
         </Link>
 
         {/* Center quote */}
-        <div style={{ position: "relative", zIndex: 1 }}>
+        <div style={{ position: "relative", zIndex: 1, maxWidth: 500, width: "100%" }}>
           <div style={{ fontSize: 13, color: "#6366f1", fontWeight: 700, letterSpacing: "2px", textTransform: "uppercase", marginBottom: 20 }}>
             AI-Powered Learning
           </div>
