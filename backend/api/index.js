@@ -352,8 +352,8 @@ app.get('/api/app-config', (req, res) => {
       geminiKey: GEMINI_API_KEY,
       modelUrl: "https://asia-south1-aiplatform.googleapis.com/v1/projects/guardian-495515/locations/asia-south1/publishers/google/models/gemini-3.5-flash:generateContent",
       promptTemplate: GEMINI_MCQ_PROMPT_TEMPLATE,
-      chunkSize: 15000,
-      maxChunks: 8,
+      chunkSize: 10000,
+      maxChunks: 10,
       generationRanges: [
         { max: 2000, minF: "9-14", expF: "11-16" },
         { max: 5000, minF: "18-23", expF: "22-27" },
