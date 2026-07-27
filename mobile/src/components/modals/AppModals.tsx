@@ -1919,10 +1919,11 @@ export function AppModals({ p }: { p: any }) {
                 scaleTo={0.97}
               >
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
-                  <Ionicons name="folder-outline" size={28} color={p.settingsDarkMode ? "#e2e8f0" : "#64748b"} />
+                  <Ionicons name="folder-open-outline" size={28} color="#10b981" />
                   <View style={{ flexDirection: "column", flex: 1 }}>
                     <Text style={{ fontSize: 17, fontWeight: "600",
-                      color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('create_menu.import_txt') || "Import existing quiz (.txt, .doc, .docx, .pdf)"}</Text>
+                      color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>Import existing quiz</Text>
+                    <Text style={{ fontSize: 13, color: p.settingsDarkMode ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.4)", marginTop: 2 }}>Use .docx to preserve images</Text>
                   </View>
                 </View>
               </AnimatedPressable>
