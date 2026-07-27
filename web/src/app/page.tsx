@@ -1,147 +1,126 @@
+"use client";
+
 import Link from "next/link";
+import { ArrowRight, Brain, Zap, Trophy, Download } from "lucide-react";
 
 export default function Home() {
   return (
-    <div style={{ background: "var(--background)", minHeight: "100vh", padding: "2rem 1rem", display: "flex", justifyContent: "center", alignItems: "center" }}>
-      <div style={{ width: "340px", background: "#10142a", borderRadius: "32px", padding: "16px 16px 18px", boxSizing: "border-box", fontFamily: "var(--font-inter, var(--font-sans))" }}>
+    <div className="min-h-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
+      
+      {/* Navigation */}
+      <nav className="fixed top-0 w-full z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800">
+        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-500 flex items-center justify-center">
+              <span className="text-white text-xl font-black">S</span>
+            </div>
+            <span className="text-2xl font-bold tracking-tight text-white">Scorr</span>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            <Link href="/login" className="text-sm font-semibold text-slate-300 hover:text-white transition-colors">
+              Log in
+            </Link>
+            <Link href="/login" className="px-5 py-2.5 bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-semibold rounded-xl transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)]">
+              Sign up
+            </Link>
+          </div>
+        </div>
+      </nav>
+
+      {/* Hero Section */}
+      <section className="relative pt-40 pb-20 px-6">
+        {/* Animated Background Orbs */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-[600px] bg-indigo-600/20 rounded-full blur-[120px] pointer-events-none" />
         
-        {/* Search & Profile */}
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
-          <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.05)", border: "0.5px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "11px 14px" }}>
-            <i className="ti ti-search" style={{ fontSize: "17px", color: "#777d99" }} aria-hidden="true"></i>
-            <span style={{ fontSize: "14px", color: "#777d99" }}>Search</span>
+        <div className="relative z-10 max-w-5xl mx-auto text-center">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-900 border border-slate-800 mb-8">
+            <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span className="text-xs font-semibold text-slate-300 uppercase tracking-widest">Now available on Web & Mobile</span>
           </div>
-          <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center", color: "#9298b3", flexShrink: 0 }}>
-            <i className="ti ti-user" style={{ fontSize: "18px" }} aria-hidden="true"></i>
+          
+          <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-white mb-8 leading-tight">
+            Master any subject with <br className="hidden md:block" />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-emerald-400">AI-powered quizzes</span>
+          </h1>
+          
+          <p className="text-lg md:text-xl text-slate-400 max-w-2xl mx-auto mb-12 leading-relaxed">
+            Generate flashcards and quizzes instantly from any topic or document. Challenge friends in real-time battles and study smarter, not harder.
+          </p>
+
+          <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
+            <Link href="/login" className="w-full sm:w-auto px-8 py-4 bg-indigo-500 hover:bg-indigo-400 text-white text-lg font-semibold rounded-2xl transition-all shadow-[0_0_20px_rgba(99,102,241,0.3)] hover:shadow-[0_0_30px_rgba(99,102,241,0.5)] flex items-center justify-center gap-2">
+              Start Learning for Free
+              <ArrowRight size={20} />
+            </Link>
+            
+            <a href="#" className="w-full sm:w-auto px-8 py-4 bg-slate-900 border border-slate-700 hover:border-slate-600 text-white text-lg font-semibold rounded-2xl transition-all flex items-center justify-center gap-3">
+              <svg viewBox="0 0 24 24" className="w-6 h-6 fill-current">
+                <path d="M3,20.5V3.5C3,2.91 3.34,2.39 3.84,2.15L13.69,12L3.84,21.85C3.34,21.6 3,21.09 3,20.5M16.81,15.12L6.05,21.34L14.54,12.85L16.81,15.12M20.16,10.81C20.5,11.08 20.75,11.5 20.75,12C20.75,12.5 20.53,12.9 20.18,13.18L17.89,14.5L15.39,12L17.89,9.5L20.16,10.81M6.05,2.66L16.81,8.88L14.54,11.15L6.05,2.66Z" />
+              </svg>
+              Get the Android App
+            </a>
           </div>
         </div>
+      </section>
 
-        {/* Filters */}
-        <div className="scrollbar-hide" style={{ display: "flex", gap: "8px", marginBottom: "16px", overflowX: "auto" }}>
-          <span style={{ background: "#8b8ff0", color: "#1a1640", fontSize: "13px", fontWeight: 500, padding: "8px 14px", borderRadius: "18px", display: "flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap" }}>
-            All <span style={{ background: "rgba(26,22,64,0.25)", padding: "1px 7px", borderRadius: "10px", fontSize: "11px" }}>5</span>
-          </span>
-          <span style={{ border: "0.5px solid rgba(255,255,255,0.14)", color: "#c4c7da", fontSize: "13px", padding: "8px 14px", borderRadius: "18px", display: "flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap" }}>
-            In progress <span style={{ background: "rgba(255,255,255,0.08)", padding: "1px 7px", borderRadius: "10px", fontSize: "11px" }}>4</span>
-          </span>
-          <span style={{ border: "0.5px solid rgba(255,255,255,0.14)", color: "#c4c7da", fontSize: "13px", padding: "8px 14px", borderRadius: "18px", display: "flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap" }}>
-            Not started <span style={{ background: "rgba(255,255,255,0.08)", padding: "1px 7px", borderRadius: "10px", fontSize: "11px" }}>1</span>
-          </span>
-        </div>
-
-        {/* Cards */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "14px" }}>
-          {/* Sample Card */}
-          <div style={{ background: "rgba(255,255,255,0.04)", borderLeft: "3px solid #5b6080", borderRadius: "0 14px 14px 0", padding: "14px 16px" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
-              <p style={{ margin: 0, fontSize: "15px", fontWeight: 500, color: "#fff" }}>General knowledge — sample quiz</p>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0, marginLeft: "8px" }}>
-                <span style={{ background: "rgba(139,143,240,0.18)", color: "#a5a8f5", fontSize: "10px", fontWeight: 500, padding: "3px 8px", borderRadius: "6px", letterSpacing: "0.03em" }}>SAMPLE</span>
-                <i className="ti ti-chevron-right" style={{ fontSize: "16px", color: "#5b6080" }} aria-hidden="true"></i>
+      {/* Features Section */}
+      <section className="py-24 px-6 bg-slate-900/50 border-y border-slate-800">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="p-8 bg-slate-900 border border-slate-800 rounded-3xl">
+              <div className="w-14 h-14 bg-indigo-500/20 text-indigo-400 rounded-2xl flex items-center justify-center mb-6">
+                <Brain size={28} />
               </div>
+              <h3 className="text-2xl font-bold text-white mb-4">AI Generation</h3>
+              <p className="text-slate-400 leading-relaxed">
+                Upload your lecture notes, PDFs, or just type a topic. Our AI generates comprehensive quizzes and flashcards in seconds.
+              </p>
             </div>
-            <div style={{ display: "flex", gap: "16px", marginBottom: "10px" }}>
-              <span style={{ fontSize: "12px", color: "#777d99", display: "flex", alignItems: "center", gap: "4px" }}><i className="ti ti-help-circle" style={{ fontSize: "14px" }} aria-hidden="true"></i>5 questions</span>
-              <span style={{ fontSize: "12px", color: "#777d99", display: "flex", alignItems: "center", gap: "4px" }}><i className="ti ti-refresh" style={{ fontSize: "14px" }} aria-hidden="true"></i>0 attempts</span>
-              <span style={{ fontSize: "12px", color: "#777d99", display: "flex", alignItems: "center", gap: "4px" }}><i className="ti ti-check" style={{ fontSize: "14px" }} aria-hidden="true"></i>0 correct</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "12px", color: "#5b6080", minWidth: "30px" }}>Not started</span>
-              <div style={{ flex: 1, height: "5px", background: "rgba(255,255,255,0.14)", borderRadius: "3px" }}></div>
-            </div>
-          </div>
 
-          {/* Progress Card 1 */}
-          <div style={{ background: "rgba(255,255,255,0.04)", borderLeft: "3px solid #2dd4a7", borderRadius: "0 14px 14px 0", padding: "14px 16px" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
-              <p style={{ margin: 0, fontSize: "15px", fontWeight: 500, color: "#fff" }}>2B - internal disease - digestive</p>
-              <i className="ti ti-chevron-right" style={{ fontSize: "16px", color: "#5b6080" }} aria-hidden="true"></i>
+            <div className="p-8 bg-slate-900 border border-slate-800 rounded-3xl">
+              <div className="w-14 h-14 bg-rose-500/20 text-rose-400 rounded-2xl flex items-center justify-center mb-6">
+                <Trophy size={28} />
+              </div>
+              <h3 className="text-2xl font-bold text-white mb-4">Multiplayer Battles</h3>
+              <p className="text-slate-400 leading-relaxed">
+                Challenge your classmates to real-time multiplayer battles. Prove who knows the material best and climb the leaderboards.
+              </p>
             </div>
-            <div style={{ display: "flex", gap: "16px", marginBottom: "10px" }}>
-              <span style={{ fontSize: "12px", color: "#777d99", display: "flex", alignItems: "center", gap: "4px" }}><i className="ti ti-help-circle" style={{ fontSize: "14px" }} aria-hidden="true"></i>182 questions</span>
-              <span style={{ fontSize: "12px", color: "#777d99", display: "flex", alignItems: "center", gap: "4px" }}><i className="ti ti-refresh" style={{ fontSize: "14px" }} aria-hidden="true"></i>11 attempts</span>
-              <span style={{ fontSize: "12px", color: "#777d99", display: "flex", alignItems: "center", gap: "4px" }}><i className="ti ti-check" style={{ fontSize: "14px" }} aria-hidden="true"></i>181 correct</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "12px", color: "#5fcaa5", minWidth: "30px", fontWeight: 500 }}>99%</span>
-              <div style={{ flex: 1, height: "5px", background: "rgba(255,255,255,0.1)", borderRadius: "3px" }}><div style={{ width: "99%", height: "100%", background: "#2dd4a7", borderRadius: "3px" }}></div></div>
-            </div>
-          </div>
 
-          {/* Progress Card 2 */}
-          <div style={{ background: "rgba(255,255,255,0.04)", borderLeft: "3px solid #f0a13c", borderRadius: "0 14px 14px 0", padding: "14px 16px" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
-              <p style={{ margin: 0, fontSize: "15px", fontWeight: 500, color: "#fff" }}>12A TXT</p>
-              <i className="ti ti-chevron-right" style={{ fontSize: "16px", color: "#5b6080" }} aria-hidden="true"></i>
-            </div>
-            <div style={{ display: "flex", gap: "16px", marginBottom: "10px" }}>
-              <span style={{ fontSize: "12px", color: "#777d99", display: "flex", alignItems: "center", gap: "4px" }}><i className="ti ti-help-circle" style={{ fontSize: "14px" }} aria-hidden="true"></i>450 questions</span>
-              <span style={{ fontSize: "12px", color: "#777d99", display: "flex", alignItems: "center", gap: "4px" }}><i className="ti ti-refresh" style={{ fontSize: "14px" }} aria-hidden="true"></i>31 attempts</span>
-              <span style={{ fontSize: "12px", color: "#777d99", display: "flex", alignItems: "center", gap: "4px" }}><i className="ti ti-check" style={{ fontSize: "14px" }} aria-hidden="true"></i>104 correct</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "12px", color: "#f0a13c", minWidth: "30px", fontWeight: 500 }}>23%</span>
-              <div style={{ flex: 1, height: "5px", background: "rgba(255,255,255,0.1)", borderRadius: "3px" }}><div style={{ width: "23%", height: "100%", background: "#f0a13c", borderRadius: "3px" }}></div></div>
-            </div>
-          </div>
-
-          {/* Progress Card 3 */}
-          <div style={{ background: "rgba(255,255,255,0.04)", borderLeft: "3px solid #f0a13c", borderRadius: "0 14px 14px 0", padding: "14px 16px" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
-              <p style={{ margin: 0, fontSize: "15px", fontWeight: 500, color: "#fff" }}>2B - path-physiology - digestive</p>
-              <i className="ti ti-chevron-right" style={{ fontSize: "16px", color: "#5b6080" }} aria-hidden="true"></i>
-            </div>
-            <div style={{ display: "flex", gap: "16px", marginBottom: "10px" }}>
-              <span style={{ fontSize: "12px", color: "#777d99", display: "flex", alignItems: "center", gap: "4px" }}><i className="ti ti-help-circle" style={{ fontSize: "14px" }} aria-hidden="true"></i>90 questions</span>
-              <span style={{ fontSize: "12px", color: "#777d99", display: "flex", alignItems: "center", gap: "4px" }}><i className="ti ti-refresh" style={{ fontSize: "14px" }} aria-hidden="true"></i>3 attempts</span>
-              <span style={{ fontSize: "12px", color: "#777d99", display: "flex", alignItems: "center", gap: "4px" }}><i className="ti ti-check" style={{ fontSize: "14px" }} aria-hidden="true"></i>7 correct</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "12px", color: "#f0a13c", minWidth: "30px", fontWeight: 500 }}>8%</span>
-              <div style={{ flex: 1, height: "5px", background: "rgba(255,255,255,0.1)", borderRadius: "3px" }}><div style={{ width: "8%", height: "100%", background: "#f0a13c", borderRadius: "3px" }}></div></div>
+            <div className="p-8 bg-slate-900 border border-slate-800 rounded-3xl">
+              <div className="w-14 h-14 bg-emerald-500/20 text-emerald-400 rounded-2xl flex items-center justify-center mb-6">
+                <Zap size={28} />
+              </div>
+              <h3 className="text-2xl font-bold text-white mb-4">Seamless Sync</h3>
+              <p className="text-slate-400 leading-relaxed">
+                Start studying on your laptop and finish on your phone. Your progress, history, and library sync instantly across all devices.
+              </p>
             </div>
           </div>
         </div>
+      </section>
 
-        {/* Fab & Bottom Item */}
-        <div style={{ position: "relative", paddingBottom: "8px" }}>
-          <div style={{ background: "rgba(255,255,255,0.04)", borderLeft: "3px solid #f0a13c", borderRadius: "0 14px 14px 0", padding: "14px 16px", paddingRight: "60px" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
-              <p style={{ margin: 0, fontSize: "15px", fontWeight: 500, color: "#fff" }}>pharma correct answer GIT (1)</p>
-              <i className="ti ti-chevron-right" style={{ fontSize: "16px", color: "#5b6080" }} aria-hidden="true"></i>
+      {/* Footer */}
+      <footer className="py-12 px-6 border-t border-slate-800 text-center">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center">
+              <span className="text-white font-black">S</span>
             </div>
-            <div style={{ display: "flex", gap: "16px", marginBottom: "10px" }}>
-              <span style={{ fontSize: "12px", color: "#777d99", display: "flex", alignItems: "center", gap: "4px" }}><i className="ti ti-help-circle" style={{ fontSize: "14px" }} aria-hidden="true"></i>91 questions</span>
-              <span style={{ fontSize: "12px", color: "#777d99", display: "flex", alignItems: "center", gap: "4px" }}><i className="ti ti-refresh" style={{ fontSize: "14px" }} aria-hidden="true"></i>2 attempts</span>
-              <span style={{ fontSize: "12px", color: "#777d99", display: "flex", alignItems: "center", gap: "4px" }}><i className="ti ti-check" style={{ fontSize: "14px" }} aria-hidden="true"></i>19 correct</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "12px", color: "#f0a13c", minWidth: "30px", fontWeight: 500 }}>21%</span>
-              <div style={{ flex: 1, height: "5px", background: "rgba(255,255,255,0.1)", borderRadius: "3px" }}><div style={{ width: "21%", height: "100%", background: "#f0a13c", borderRadius: "3px" }}></div></div>
-            </div>
+            <span className="font-bold text-white">Scorr App</span>
           </div>
-          <div style={{ position: "absolute", right: "8px", bottom: "18px", width: "48px", height: "48px", borderRadius: "50%", background: "#8b8ff0", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 14px rgba(139,143,240,0.4)" }}>
-            <i className="ti ti-plus" style={{ fontSize: "22px", color: "#1a1640" }} aria-hidden="true"></i>
+          
+          <div className="flex gap-6 text-sm font-medium text-slate-500">
+            <Link href="/privacy-policy" className="hover:text-white transition-colors">Privacy Policy</Link>
+            <Link href="/terms-of-service" className="hover:text-white transition-colors">Terms of Service</Link>
           </div>
+          
+          <p className="text-slate-600 text-sm">
+            © {new Date().getFullYear()} Scorr. All rights reserved.
+          </p>
         </div>
-
-        {/* Bottom Navigation */}
-        <div style={{ display: "flex", justifyContent: "space-around", alignItems: "center", paddingTop: "16px", marginTop: "18px", borderTop: "0.5px solid rgba(255,255,255,0.08)" }}>
-          <Link href="/" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", color: "#8b8ff0", textDecoration: "none" }}>
-            <i className="ti ti-home" style={{ fontSize: "19px" }} aria-hidden="true"></i><span style={{ fontSize: "10px" }}>Home</span>
-          </Link>
-          <Link href="/battle" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", color: "#777d99", textDecoration: "none" }}>
-            <i className="ti ti-swords" style={{ fontSize: "19px" }} aria-hidden="true"></i><span style={{ fontSize: "10px" }}>Battle</span>
-          </Link>
-          <Link href="/statistics" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", color: "#777d99", textDecoration: "none" }}>
-            <i className="ti ti-chart-bar" style={{ fontSize: "19px" }} aria-hidden="true"></i><span style={{ fontSize: "10px" }}>Statistics</span>
-          </Link>
-          <Link href="/profile" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", color: "#777d99", textDecoration: "none" }}>
-            <i className="ti ti-user" style={{ fontSize: "19px" }} aria-hidden="true"></i><span style={{ fontSize: "10px" }}>Profile</span>
-          </Link>
-        </div>
-
-      </div>
+      </footer>
     </div>
   );
 }

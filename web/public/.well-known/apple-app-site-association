@@ -1,0 +1,11 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "TEAM_ID_HERE.com.radium230sorganization.quizforge",
+        "paths": ["/share/quiz/*"]
+      }
+    ]
+  }
+}
