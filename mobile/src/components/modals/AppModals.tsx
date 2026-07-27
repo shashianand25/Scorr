@@ -1676,105 +1676,112 @@ export function AppModals({ p }: { p: any }) {
                 backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.12)" }} />
             </View>
 
-            {/* Block 1 (Main Actions) */}
-            <View style={{
-              backgroundColor: p.settingsDarkMode ? "#20253B" : "#ffffff",
-              borderRadius: 20,
-              paddingVertical: 12,
-              marginBottom: 16,
-            }}>
-              {/* Generate with AI */}
-              <AnimatedPressable
-                onPress={() => {
-                (p.setShowAddMenu || (() => {}))(false);
-                if (Platform.OS === "web") {
-                  const input = document.createElement("input");
-                  input.type = "file"; input.accept = ".txt,.qst,.pdf,.doc,.docx,.md";
-                  input.onchange = async (e: any) => {
-                    const file = e.target.files?.[0]; if (!file) return;
-                    const reader = new FileReader();
-                    reader.onload = (ev) => {
-                      const text = ev.target?.result as string;
-                      console.log("[Web-Extraction] Extracted raw text length:", text ? text.length : 0);
-                      (p.setShowAddMenu || (() => {}))(false);
-                      setTimeout(() => (p.handleGenerateWithAI || (() => {}))(text, file.name), 150);
-                    };
-                    reader.readAsText(file);
+            {/* AI Hero Card */}
+            <AnimatedPressable
+              onPress={() => {
+              (p.setShowAddMenu || (() => {}))(false);
+              if (Platform.OS === "web") {
+                const input = document.createElement("input");
+                input.type = "file"; input.accept = ".txt,.qst,.pdf,.doc,.docx,.md";
+                input.onchange = async (e: any) => {
+                  const file = e.target.files?.[0]; if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = (ev) => {
+                    const text = ev.target?.result as string;
+                    (p.setShowAddMenu || (() => {}))(false);
+                    setTimeout(() => (p.handleGenerateWithAI || (() => {}))(text, file.name), 150);
                   };
-                  input.click();
-                } else {
-                  setTimeout(async () => {
-                    try {
-                      const result = await DocumentPicker.getDocumentAsync({ type: "*/*", copyToCacheDirectory: true });
-                      if (!result.canceled && result.assets?.[0]) {
-                        const { uri: fileUri, name: fileName, size: fileSize = 0 } = result.assets[0];
-                         const ext = fileName.split(".").pop()?.toLowerCase();
-                        if (ext === "pdf" && !p.isConnected) { (p.setOfflineModalParams || (() => {}))({ title: "Can't Generate", message: "PDF conversion requires internet." }); return; }
-                        if (ext && !["txt", "qst", "md", "doc", "docx", "pdf", "ppt", "pptx"].includes(ext)) { Alert.alert("Unsupported File", `Supported: .txt, .doc, .docx, .pdf, .ppt, .pptx. Got .${ext}`); return; }
-                        (p.setAiGenPhase || (() => {}))("generating");
-                        setTimeout(async () => {
-                          try {
-                            let text = "";
-                            if (ext === "pdf") {
-                              const pr = await (p.parsePdfFromBackend || (() => {}))(fileUri, fileName, fileSize);
-                              if (pr.error) throw new Error(pr.error);
-                              text = pr.text;
-                            } else if (ext === "ppt" || ext === "pptx") {
-                              const pr = await (p.parsePptFromBackend || (() => {}))(fileUri, fileName);
-                              if (pr.error) throw new Error(pr.error);
-                              text = pr.text;
-                            } else if (ext === "docx" || ext === "doc") {
-                              const b64 = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.Base64 });
-                              const buff = Buffer.from(b64, "base64");
-                              const result = await mammoth.convertToHtml({ arrayBuffer: buff });
-                              let htmlStr = result.value;
-                              
-                              // Extract images
-                              const imgRegex = /<img[^>]+src="data:image\/([^;]+);base64,([^"]+)"[^>]*>/g;
-                              let match;
-                              let processedHtml = htmlStr;
-                              while ((match = imgRegex.exec(htmlStr)) !== null) {
-                                const extName = match[1];
-                                const base64Data = match[2];
-                                const localFileName = `img_${Date.now()}_${Math.floor(Math.random()*10000)}.${extName}`;
-                                const localUri = (FileSystem.documentDirectory || "") + localFileName;
-                                await FileSystem.writeAsStringAsync(localUri, base64Data, { encoding: FileSystem.EncodingType.Base64 });
-                                processedHtml = processedHtml.replace(match[0], `\n[Image: ${localUri}]\n`);
-                              }
-                              
-                              // Convert remaining HTML to plain text
-                              processedHtml = processedHtml.replace(/<\/p>/gi, '\n');
-                              processedHtml = processedHtml.replace(/<br\s*\/?>/gi, '\n');
-                              processedHtml = processedHtml.replace(/<[^>]+>/g, '');
-                              text = processedHtml;
-                            } else {
-                              text = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.UTF8 });
+                  reader.readAsText(file);
+                };
+                input.click();
+              } else {
+                setTimeout(async () => {
+                  try {
+                    const result = await DocumentPicker.getDocumentAsync({ type: "*/*", copyToCacheDirectory: true });
+                    if (!result.canceled && result.assets?.[0]) {
+                      const { uri: fileUri, name: fileName, size: fileSize = 0 } = result.assets[0];
+                      const ext = fileName.split(".").pop()?.toLowerCase();
+                      if (ext === "pdf" && !p.isConnected) { (p.setOfflineModalParams || (() => {}))({ title: "Can't Generate", message: "PDF conversion requires internet." }); return; }
+                      if (ext && !["txt", "qst", "md", "doc", "docx", "pdf", "ppt", "pptx"].includes(ext)) { Alert.alert("Unsupported File", `Supported: .txt, .doc, .docx, .pdf, .ppt, .pptx. Got .${ext}`); return; }
+                      (p.setAiGenPhase || (() => {}))("generating");
+                      setTimeout(async () => {
+                        try {
+                          let text = "";
+                          if (ext === "pdf") {
+                            const pr = await (p.parsePdfFromBackend || (() => {}))(fileUri, fileName, fileSize);
+                            if (pr.error) throw new Error(pr.error);
+                            text = pr.text;
+                          } else if (ext === "ppt" || ext === "pptx") {
+                            const pr = await (p.parsePptFromBackend || (() => {}))(fileUri, fileName);
+                            if (pr.error) throw new Error(pr.error);
+                            text = pr.text;
+                          } else if (ext === "docx" || ext === "doc") {
+                            const b64 = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.Base64 });
+                            const buff = Buffer.from(b64, "base64");
+                            const result = await mammoth.convertToHtml({ arrayBuffer: buff });
+                            let htmlStr = result.value;
+                            const imgRegex = /<img[^>]+src="data:image\/([^;]+);base64,([^"]+)"[^>]*>/g;
+                            let match;
+                            let processedHtml = htmlStr;
+                            while ((match = imgRegex.exec(htmlStr)) !== null) {
+                              const extName = match[1]; const base64Data = match[2];
+                              const localFileName = `img_${Date.now()}_${Math.floor(Math.random()*10000)}.${extName}`;
+                              const localUri = (FileSystem.documentDirectory || "") + localFileName;
+                              await FileSystem.writeAsStringAsync(localUri, base64Data, { encoding: FileSystem.EncodingType.Base64 });
+                              processedHtml = processedHtml.replace(match[0], `\n[Image: ${localUri}]\n`);
                             }
-                            console.log("[Mobile-Extraction] Extracted raw text length:", text ? text.length : 0);
-                            (p.setShowAddMenu || (() => {}))(false);
-                            setTimeout(() => (p.handleGenerateWithAI || (() => {}))(text, fileName), 150);
-                          } catch (err: any) {
-                            (p.setAiGenPhase || (() => {}))(null);
-                            Alert.alert("Error", typeof __DEV__ !== 'undefined' && __DEV__ ? err.message : getUserErrorMessage(err));
+                            processedHtml = processedHtml.replace(/<\/p>/gi, '\n').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '');
+                            text = processedHtml;
+                          } else {
+                            text = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.UTF8 });
                           }
-                        }, 50);
-                      }
-                    } catch (err: any) { Alert.alert("Error", typeof __DEV__ !== 'undefined' && __DEV__ ? err.message : getUserErrorMessage(err)); }
-                  }, 350);
-                }
-              }}
-                style={{ paddingVertical: 16, paddingHorizontal: 20 }}
-                scaleTo={0.97}
-              >
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
-                  <Ionicons name="albums-outline" size={28} color="#a855f7" />
-                  <View style={{ flexDirection: "column", flex: 1 }}>
-                    <Text style={{ fontSize: 17, fontWeight: "600",
-                      color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>Create flashcard and quiz</Text>
+                          (p.setShowAddMenu || (() => {}))(false);
+                          setTimeout(() => (p.handleGenerateWithAI || (() => {}))(text, fileName), 150);
+                        } catch (err: any) {
+                          (p.setAiGenPhase || (() => {}))(null);
+                          Alert.alert("Error", typeof __DEV__ !== 'undefined' && __DEV__ ? err.message : getUserErrorMessage(err));
+                        }
+                      }, 50);
+                    }
+                  } catch (err: any) { Alert.alert("Error", typeof __DEV__ !== 'undefined' && __DEV__ ? err.message : getUserErrorMessage(err)); }
+                }, 350);
+              }
+            }}
+              style={{ marginBottom: 12 }}
+              scaleTo={0.97}
+            >
+              <View style={{
+                borderRadius: 20, padding: 22,
+                backgroundColor: p.settingsDarkMode ? "#150f2e" : "#f5f3ff",
+                borderWidth: 1.5,
+                borderColor: p.settingsDarkMode ? "rgba(168,85,247,0.5)" : "rgba(139,92,246,0.35)",
+                overflow: "hidden",
+              }}>
+                <View style={{ position: "absolute", top: -40, right: -40, width: 160, height: 160, borderRadius: 80, backgroundColor: "rgba(139,92,246,0.1)" }} />
+                <View style={{ position: "absolute", bottom: -20, left: -20, width: 100, height: 100, borderRadius: 50, backgroundColor: "rgba(168,85,247,0.07)" }} />
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 14 }}>
+                  <View style={{ width: 54, height: 54, borderRadius: 17, backgroundColor: "rgba(139,92,246,0.2)", alignItems: "center", justifyContent: "center" }}>
+                    <Text style={{ fontSize: 28 }}>🤖</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 19, fontWeight: "700", color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>Generate Quiz & Flashcards</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginTop: 3 }}>
+                      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#a855f7" }} />
+                      <Text style={{ fontSize: 12, color: "#a855f7", fontWeight: "600", letterSpacing: 0.3 }}>Powered by AI</Text>
+                    </View>
                   </View>
                 </View>
-              </AnimatedPressable>
+                <Text style={{ fontSize: 13.5, color: p.settingsDarkMode ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.45)", lineHeight: 20 }}>
+                  Upload PDF, DOCX, PPTX or paste notes — your full study set is ready in seconds.
+                </Text>
+              </View>
+            </AnimatedPressable>
 
+            {/* Secondary options block */}
+            <View style={{
+              backgroundColor: p.settingsDarkMode ? "#20253B" : "#ffffff",
+              borderRadius: 20, paddingVertical: 4, marginBottom: 16,
+            }}>
               {/* Create quiz manually */}
               <AnimatedPressable
                 onPress={() => {
@@ -1783,18 +1790,14 @@ export function AppModals({ p }: { p: any }) {
                 (p.setCreationStep || (() => {}))("setup");
                 (p.setActiveTab || (() => {}))("add");
               }}
-                style={{ paddingVertical: 16, paddingHorizontal: 20 }}
+                style={{ paddingVertical: 14, paddingHorizontal: 20 }}
                 scaleTo={0.97}
               >
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
-                  <Ionicons name="create-outline" size={30} color="#3b82f6" />
-                  <View style={{ flexDirection: "column", flex: 1 }}>
-                    <Text style={{ fontSize: 17, fontWeight: "600",
-                      color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('create_menu.create_manual') || "Create quiz manually"}</Text>
-                  </View>
+                  <Ionicons name="create-outline" size={26} color="#3b82f6" />
+                  <Text style={{ fontSize: 16, fontWeight: "600", color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('create_menu.create_manual') || "Create Quiz Manually"}</Text>
                 </View>
               </AnimatedPressable>
-            </View>
 
             {/* Block 2 (Folder/Import) */}
             <View style={{

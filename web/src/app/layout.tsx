@@ -20,8 +20,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Recall — Battle Arena",
-  description: "Challenge friends to real-time quiz battles on Recall",
+  title: "Scorr — AI-Powered Quizzes & Flashcards",
+  description: "Turn your notes, PDFs, and slides into AI-generated quizzes and flashcards. Study smarter and ace your exams with Scorr.",
 };
 
 export default function RootLayout({
