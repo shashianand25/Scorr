@@ -425,11 +425,12 @@ export async function parsePptFromBackend(fileUri: string, fileName: string): Pr
     const data = JSON.parse(uploadResult.body);
     if (data.error) return { text: "", error: data.error };
     
-    if (!data.text || data.text.trim() === "") {
+    const textString = typeof data.text === 'string' ? data.text : String(data.text || "");
+    if (!textString || textString.trim() === "") {
       return { text: "", error: "Could not extract text from this file. It might be a document containing only images." };
     }
     
-    return { text: data.text };
+    return { text: textString };
   } catch (err: any) {
     let errMsg = err?.message || "Upload failed";
     if (errMsg.includes(BASE_URL) || errMsg.includes("scorrapp") || errMsg.includes("UnknownHostException") || errMsg.includes("Network request failed")) {

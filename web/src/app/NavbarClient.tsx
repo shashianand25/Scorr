@@ -32,19 +32,22 @@ export default function NavbarClient() {
 
         {/* Nav links */}
         <nav style={{ display: "flex", alignItems: "center", gap: 32 }}>
-          {navItems.map((item) => (
-            <a
-              key={item}
-              href={`#${item.toLowerCase().replace(/ /g, "-")}`}
-              style={{
-                color: hovered === item ? "#fff" : "#9ca3af",
-                textDecoration: "none", fontSize: 15, fontWeight: 500,
-                transition: "color 0.2s",
-              }}
-              onMouseEnter={() => setHovered(item)}
-              onMouseLeave={() => setHovered(null)}
-            >{item}</a>
-          ))}
+          {navItems.map((item) => {
+            const path = item === "Features" ? "/how-it-works" : `/${item.toLowerCase().replace(/ /g, "-")}`;
+            return (
+              <Link
+                key={item}
+                href={path}
+                style={{
+                  color: hovered === item ? "#fff" : "#9ca3af",
+                  textDecoration: "none", fontSize: 15, fontWeight: 500,
+                  transition: "color 0.2s",
+                }}
+                onMouseEnter={() => setHovered(item)}
+                onMouseLeave={() => setHovered(null)}
+              >{item}</Link>
+            );
+          })}
         </nav>
 
         {/* CTA buttons */}

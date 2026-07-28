@@ -295,7 +295,8 @@ app.post('/api/parse-ppt', upload.single('file'), async (req, res) => {
     }
 
     const ext = originalName.split('.').pop();
-    const text = await officeParser.parseOffice(req.file.buffer, { fileType: ext });
+    const parseResult = await officeParser.parseOffice(req.file.buffer, { fileType: ext });
+    const text = typeof parseResult === 'string' ? parseResult : (parseResult.toText ? parseResult.toText() : '');
     res.json({ text });
   } catch (err) {
     console.error('PPT Parse Error:', err);
