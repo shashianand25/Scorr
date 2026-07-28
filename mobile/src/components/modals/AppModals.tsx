@@ -370,7 +370,7 @@ export function AppModals({ p }: { p: any }) {
               Delete Quiz
             </Text>
             <Text style={[styles.dialogDescription, !p.settingsDarkMode && styles.lightTextSub, { textAlign: "center", marginBottom: 20, lineHeight: 18 }]}>
-              Are you sure you want to delete "{p.deletingQuizConfirm?.title}"? This action is permanent and cannot be undone.
+              Are you sure you want to delete this quiz?
             </Text>
 
             <View style={styles.dialogButtons}>
@@ -1756,10 +1756,10 @@ export function AppModals({ p }: { p: any }) {
                 overflow: "hidden",
               }}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                  <Ionicons name="color-wand-outline" size={24} color="#a855f7" />
+                  <Ionicons name="color-wand-outline" size={24} color="#B9A3FF" />
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontSize: 17, fontWeight: "700", color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>Generate Quiz & Flashcards</Text>
-                    <Text style={{ fontSize: 12, color: "#a855f7", fontWeight: "600", marginTop: 2 }}>Powered by AI</Text>
+                    <Text style={{ fontSize: 12, color: "#B9A3FF", fontWeight: "600", marginTop: 2 }}>Powered by AI</Text>
                   </View>
                 </View>
 

@@ -78,6 +78,7 @@ const deleteFlashcardDeck = async (..._args: any[]) => ({ error: null });
 // Get screen width/height for layout sizing
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const KeyboardWrapper = Platform.OS === "ios" ? KeyboardAvoidingView : View;
+export let globalBgGenStartTime: number | null = null;
 
 const COMBINED_PROMPT = (text: string) => `You are an expert tutor and you need to get me full marks.
 
@@ -98,6 +99,8 @@ Example:
 - Joule
 - Pascal
 - Watt
+
+(Note: You can use multiple '+' options if a question has multiple correct answers)
 
 If the provided text is just a list of questions, generate exactly that many flashcards and questions as given.
 
@@ -223,7 +226,7 @@ function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true }: 
                   textAlign: "center", 
                   lineHeight: 38,
                 }}>
-                  Generating your{"\n"}flashcards...
+                  Generating quiz{"\n"}and flashcards...
                 </Text>
               </View>
             }
@@ -262,21 +265,32 @@ function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true }: 
 }
 
 function BackgroundProgressCard({ isDark }: { isDark: boolean }) {
-  const progress = React.useRef(new Animated.Value(0)).current;
-  const [pct, setPct] = useState(0);
+  const [pct, setPct] = useState(() => {
+    if (!globalBgGenStartTime) return 0;
+    const elapsed = Date.now() - globalBgGenStartTime;
+    return Math.min(Math.floor((elapsed / 60000) * 100), 99);
+  });
+  const progress = React.useRef(new Animated.Value(pct / 100)).current;
 
   React.useEffect(() => {
+    if (!globalBgGenStartTime) {
+      globalBgGenStartTime = Date.now();
+    }
+    
+    const elapsed = Date.now() - globalBgGenStartTime;
+    const remaining = Math.max(0, 60000 - elapsed);
+    
     Animated.timing(progress, {
       toValue: 1,
-      duration: 60000,
-      easing: Easing.out(Easing.ease),
+      duration: remaining,
+      easing: Easing.out(Easing.linear),
       useNativeDriver: false
     }).start();
     
-    const start = Date.now();
     const interval = setInterval(() => {
-      const elapsed = Date.now() - start;
-      setPct(Math.min(Math.floor((elapsed / 60000) * 100), 99));
+      if (!globalBgGenStartTime) return;
+      const elap = Date.now() - globalBgGenStartTime;
+      setPct(Math.min(Math.floor((elap / 60000) * 100), 99));
     }, 500);
     return () => clearInterval(interval);
   }, []);
@@ -284,11 +298,11 @@ function BackgroundProgressCard({ isDark }: { isDark: boolean }) {
   const barWidth = progress.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] });
 
   return (
-    <View style={{ marginHorizontal: 20, marginTop: 10, marginBottom: 10, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12, backgroundColor: isDark ? "rgba(139, 92, 246, 0.15)" : "rgba(139, 92, 246, 0.1)", borderWidth: 1, borderColor: isDark ? "rgba(139, 92, 246, 0.3)" : "rgba(139, 92, 246, 0.2)", flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+    <View style={{ marginHorizontal: 20, marginTop: 10, marginBottom: 10, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12, backgroundColor: isDark ? "#20253B" : "#ffffff", borderWidth: 1, borderColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flex: 1 }}>
         <ActivityIndicator color="#8b5cf6" size="small" />
         <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 13, fontWeight: "600", color: isDark ? "#ffffff" : "#000000" }}>Generating flashcards...</Text>
+          <Text style={{ fontSize: 13, fontWeight: "600", color: isDark ? "#ffffff" : "#000000" }}>Generating quiz and flashcards...</Text>
           <View style={{ height: 4, width: '100%', backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)", borderRadius: 2, overflow: 'hidden', marginTop: 6 }}>
             <Animated.View style={{ width: barWidth, height: '100%', backgroundColor: "#8b5cf6", borderRadius: 2 }} />
           </View>
@@ -3396,6 +3410,7 @@ export default function HomeScreen() {
       if (isBackgroundGen.current) {
         setBackgroundQuizReady(newQuiz);
         isBackgroundGen.current = false;
+        globalBgGenStartTime = null;
         setIsGeneratingInBackground(false);
       } else {
         setAiGenPhase(null);
@@ -3416,6 +3431,7 @@ export default function HomeScreen() {
         setAiGenPhase(null);
       } else {
         isBackgroundGen.current = false;
+        globalBgGenStartTime = null;
         setIsGeneratingInBackground(false);
       }
       let errMsg = err.message || "Unknown error";
@@ -3820,16 +3836,20 @@ export default function HomeScreen() {
                           }, pressed && !effectiveShowResult && { opacity: 0.7, transform: [{ scale: 0.99 }] }]}
                         >
                           <View style={{
-                            width: 28, height: 28, borderRadius: 14, overflow: "hidden",
+                            width: 28, height: 28, borderRadius: qst.type === "multiple_choice" ? 6 : 14, overflow: "hidden",
                             backgroundColor: circleBg, borderWidth: 1, borderColor: circleBorder,
                             alignItems: "center", justifyContent: "center", marginRight: 14,
                           }}>
-                            <Text style={{ fontSize: 12, fontWeight: "800",
-                              color: (correctHighlight || wrongHighlight) ? "#fff" :
-                                (isSelected && !effectiveShowResult) ? (settingsDarkMode ? "#000000" : "#ffffff") :
-                                (settingsDarkMode ? "#cbd5e1" : "#475569") }}>
-                              {String.fromCharCode(65 + idx)}
-                            </Text>
+                            {qst.type === "multiple_choice" && (isSelected || correctHighlight || wrongHighlight) ? (
+                              <Ionicons name="checkmark" size={18} color={(correctHighlight || wrongHighlight) ? "#fff" : (isSelected && !effectiveShowResult) ? (settingsDarkMode ? "#000000" : "#ffffff") : (settingsDarkMode ? "#cbd5e1" : "#475569")} />
+                            ) : (
+                              <Text style={{ fontSize: 12, fontWeight: "800",
+                                color: (correctHighlight || wrongHighlight) ? "#fff" :
+                                  (isSelected && !effectiveShowResult) ? (settingsDarkMode ? "#000000" : "#ffffff") :
+                                  (settingsDarkMode ? "#cbd5e1" : "#475569") }}>
+                                {String.fromCharCode(65 + idx)}
+                              </Text>
+                            )}
                           </View>
                           <Text style={{ flex: 1, fontSize: 15, color: textColor, lineHeight: 22,
                             fontWeight: "500" }}>
@@ -5385,17 +5405,12 @@ export default function HomeScreen() {
         return (
           <View style={{ flex: 1, backgroundColor: bg }}>
 
-            <View style={{ paddingHorizontal: 20, paddingTop: 28, paddingBottom: 16 }}>
-              <Text style={{ fontSize: 28, fontWeight: "600", color: txt }}>My Library</Text>
-            </View>
-
-            <View style={{ height: 1, backgroundColor: "rgba(255,255,255,0.08)", marginHorizontal: 20, marginBottom: 20 }} />
-
+            {/* Removed My Library text and separator to push search upward */}
 
 
             <View style={{
               flexDirection: "row", alignItems: "center", gap: 10,
-              marginHorizontal: 20, marginBottom: 8,
+              marginHorizontal: 20, marginTop: 18, marginBottom: 8,
               borderRadius: 12, borderWidth: 1, borderColor: border,
               paddingHorizontal: 14, paddingVertical: 12,
             }}>
