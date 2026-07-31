@@ -107,7 +107,6 @@ Scorr/
 │   ├── assets/             # Images, fonts, icons
 │   └── app.json            # Expo configuration
 ├── web/                    # Landing page
-└── Scorr_Technical_Design_Document.md
 ```
 
 ## 🤝 Contributing

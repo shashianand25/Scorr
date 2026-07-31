@@ -7,3 +7,6 @@ gemini/gemini-chat/.env
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Docs
+Scorr_Technical_Design_Document.md
