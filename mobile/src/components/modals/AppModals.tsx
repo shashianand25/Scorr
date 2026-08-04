@@ -894,10 +894,10 @@ export function AppModals({ p }: { p: any }) {
                     <Text style={{ fontSize: 24 }}>📝</Text>
                     <View>
                       <Text style={{ fontSize: 16, fontWeight: "700", color: p.settingsDarkMode ? "#ffffff" : "#111827" }}>
-                        Report Card
+                        Review Answers
                       </Text>
                       <Text style={{ fontSize: 13, fontWeight: "500", color: p.settingsDarkMode ? "#94a3b8" : "#64748b", marginTop: 4 }}>
-                        Review your answers and explanations
+                        See your answers and explanations
                       </Text>
                     </View>
                   </View>

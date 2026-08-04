@@ -351,7 +351,7 @@ app.get('/api/app-config', (req, res) => {
   res.json({
     aiConfig: {
       geminiKey: GEMINI_API_KEY,
-      modelUrl: "https://asia-south1-aiplatform.googleapis.com/v1/projects/guardian-495515/locations/asia-south1/publishers/google/models/gemini-3.5-flash:generateContent",
+      modelUrl: "https://asia-south1-aiplatform.googleapis.com/v1/projects/project-8d47da29-7cf0-45f0-b55/locations/asia-south1/publishers/google/models/gemini-3.5-flash:generateContent",
       promptTemplate: GEMINI_MCQ_PROMPT_TEMPLATE,
       chunkSize: 10000,
       maxChunks: 10,
