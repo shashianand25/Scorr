@@ -8639,17 +8639,15 @@ export default function HomeScreen() {
                     <Pressable key={value} onPress={() => setBattleSelectionMode(value)}
                       style={({ pressed }) => [{
                         flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: "center",
-                        backgroundColor: isActive
-                          ? (isDark ? "rgba(99,102,241,0.2)" : "rgba(99,102,241,0.12)")
-                          : (isDark ? "#141930" : "rgba(0,0,0,0.03)"),
-                        borderWidth: 1.5,
+                        backgroundColor: "transparent",
+                        borderWidth: 2,
                         borderColor: isActive
-                          ? (isDark ? "rgba(99,102,241,0.6)" : "rgba(99,102,241,0.4)")
-                          : (isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)"),
+                          ? "#34d399"
+                          : (isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"),
                         opacity: pressed ? 0.75 : 1,
                       }]}
                     >
-                      <Text style={{ fontSize: 14, fontWeight: "700", color: isActive ? (isDark ? "#a5b4fc" : "#6366f1") : muted }}>
+                      <Text style={{ fontSize: 14, fontWeight: "700", color: isActive ? (isDark ? "#ffffff" : "#0d0f14") : muted }}>
                         {label}
                       </Text>
                     </Pressable>
@@ -8659,8 +8657,8 @@ export default function HomeScreen() {
 
               {/* Random count stepper */}
               {battleSelectionMode === "random" && (
-                <View style={{ backgroundColor: isDark ? "#141930" : "#ffffff",
-                  borderRadius: 14, padding: 18, marginBottom: 24, borderWidth: 1, borderColor: isDark ? "rgba(255,255,255,0.07)" : "#e5e7eb",
+                <View style={{ backgroundColor: "transparent",
+                  borderRadius: 14, padding: 18, marginBottom: 24, borderWidth: 2, borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)",
                   flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                   <Text style={{ fontSize: 15, fontWeight: "600", color: txt }}>Number of questions</Text>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
@@ -8689,8 +8687,8 @@ export default function HomeScreen() {
 
               {/* Range steppers */}
               {battleSelectionMode === "range" && (
-                <View style={{ backgroundColor: isDark ? "#141930" : "#ffffff",
-                  borderRadius: 14, padding: 18, marginBottom: 24, borderWidth: 1, borderColor: isDark ? "rgba(255,255,255,0.07)" : "#e5e7eb",
+                <View style={{ backgroundColor: "transparent",
+                  borderRadius: 14, padding: 18, marginBottom: 24, borderWidth: 2, borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)",
                   flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                   <Text style={{ fontSize: 15, fontWeight: "600", color: txt }}>Range</Text>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -8732,17 +8730,15 @@ export default function HomeScreen() {
                     <Pressable key={String(t)} onPress={() => setBattleTimePerQuestion(t)}
                       style={({ pressed }) => [{
                         paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10,
-                        backgroundColor: isActive
-                          ? (isDark ? "rgba(99,102,241,0.2)" : "rgba(99,102,241,0.12)")
-                          : (isDark ? "#141930" : "rgba(0,0,0,0.03)"),
-                        borderWidth: 1.5,
+                        backgroundColor: "transparent",
+                        borderWidth: 2,
                         borderColor: isActive
-                          ? (isDark ? "rgba(99,102,241,0.6)" : "rgba(99,102,241,0.4)")
-                          : (isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)"),
+                          ? "#34d399"
+                          : (isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"),
                         opacity: pressed ? 0.7 : 1,
                       }]}
                     >
-                      <Text style={{ fontSize: 13, fontWeight: "700", color: isActive ? (isDark ? "#a5b4fc" : "#6366f1") : muted }}>
+                      <Text style={{ fontSize: 13, fontWeight: "700", color: isActive ? (isDark ? "#ffffff" : "#0d0f14") : muted }}>
                         {label}
                       </Text>
                     </Pressable>
@@ -8752,8 +8748,8 @@ export default function HomeScreen() {
 
               {/* Gameplay toggles */}
               <Text style={{ fontSize: 11, fontWeight: "700", color: muted, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 10 }}>Gameplay</Text>
-              <View style={{ backgroundColor: isDark ? "#141930" : "#ffffff",
-                borderRadius: 16, borderWidth: 1, borderColor: isDark ? "rgba(255,255,255,0.07)" : "#e5e7eb", overflow: "hidden" }}>
+              <View style={{ backgroundColor: "transparent",
+                borderRadius: 16, borderWidth: 2, borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)", overflow: "hidden" }}>
                 {[
                   { label: "Shuffle questions", sub: "Randomize question order", value: battleShuffleQ, set: setBattleShuffleQ },
                   { label: "Shuffle answers", sub: "Randomize answer choices", value: battleShuffleA, set: setBattleShuffleA },
