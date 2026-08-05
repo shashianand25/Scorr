@@ -8781,56 +8781,8 @@ export default function HomeScreen() {
               paddingHorizontal: 20, paddingTop: 16, paddingBottom: Platform.OS === "ios" ? 36 : 20,
               gap: 10,
             }}>
-              {/* Join code row — shown when from insights, uses indigo palette */}
-              {battleOptionsSource === "insights" && (
-                <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
-                  <TextInput
-                    style={{
-                      flex: 1, height: 46,
-                      backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
-                      borderWidth: 1,
-                      borderColor: battleError
-                        ? (isDark ? "#f87171" : "#ef4444")
-                        : (isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)"),
-                      borderRadius: 12, paddingHorizontal: 14,
-                      fontSize: 14, fontWeight: "700", color: txt, letterSpacing: 3,
-                    }}
-                    placeholder="ROOM CODE"
-                    placeholderTextColor={isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.25)"}
-                    maxLength={5}
-                    value={joinCodeInput}
-                    onChangeText={(text) => { setJoinCodeInput(text); if (battleError) setBattleError(""); }}
-                    autoCapitalize="characters"
-                  />
-                  <Pressable
-                    onPress={async () => {
-                      if (!joinCodeInput || joinCodeInput.length < 5) return;
-                      setShowBattleOptions(false);
-                      setActiveTab("battle" as any);
-                      await handleJoinBattle();
-                    }}
-                    disabled={!joinCodeInput || joinCodeInput.length < 5 || battleCreating}
-                    style={({ pressed }) => [{
-                      height: 46, paddingHorizontal: 18, borderRadius: 12,
-                      backgroundColor: (!joinCodeInput || joinCodeInput.length < 5)
-                        ? (isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)")
-                        : (isDark ? "rgba(99,102,241,0.25)" : "rgba(99,102,241,0.15)"),
-                      borderWidth: 1,
-                      borderColor: (!joinCodeInput || joinCodeInput.length < 5)
-                        ? (isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)")
-                        : (isDark ? "rgba(99,102,241,0.5)" : "rgba(99,102,241,0.4)"),
-                      alignItems: "center", justifyContent: "center",
-                      opacity: pressed ? 0.7 : 1,
-                    }]}
-                  >
-                    {battleCreating
-                      ? <ActivityIndicator size="small" color={isDark ? "#a5b4fc" : "#6366f1"} />
-                      : <Text style={{ fontSize: 14, fontWeight: "700", color: (!joinCodeInput || joinCodeInput.length < 5) ? muted : (isDark ? "#a5b4fc" : "#6366f1") }}>Join</Text>
-                    }
-                  </Pressable>
-                </View>
-              )}
-              {battleError ? <Text style={{ fontSize: 12, color: "#f87171", marginTop: -4 }}>{battleError}</Text> : null}
+              {/* Join code row removed as per user request */}
+              {battleError ? <Text style={{ fontSize: 12, color: "#f87171", marginTop: -4, textAlign: "center" }}>{battleError}</Text> : null}
 
               {/* Create Room CTA */}
               <Pressable
