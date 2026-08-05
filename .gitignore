@@ -1,4 +1,4 @@
-gemini/gemini-chat/.env
+# ── Environment ───────────────────────────────────────────────────────────────
 .env
 .env.*
 !.env.example
@@ -8,5 +8,27 @@ gemini/gemini-chat/.env
 .env.test.local
 .env.production.local
 
-# Docs
-Scorr_Technical_Design_Document.md
+# ── Local-only folders (not part of the project) ─────────────────────────────
+_flashcard_archive/
+gemini/
+
+# ── Docs (internal, not for repo) ────────────────────────────────────────────
+docs/Scorr_Technical_Design_Document.md
+
+# ── OS noise ──────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Editor ────────────────────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+
+# ── Dependencies ──────────────────────────────────────────────────────────────
+node_modules/
+
+# ── Build outputs ─────────────────────────────────────────────────────────────
+dist/
+build/
+.expo/
+*.apk
+*.aab
