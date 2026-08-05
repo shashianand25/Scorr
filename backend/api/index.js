@@ -11,7 +11,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 const app = express();
 const resend = new Resend(process.env.RESEND_API_KEY);
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: `${process.env.JSON_BODY_LIMIT_MB || '10'}mb` }));
 
 // Initialize Postgres connection pool
 // Neon provides a postgres connection string like postgresql://user:password@host/dbname
@@ -343,18 +343,32 @@ app.get('/api/gemini-config', (req, res) => {
 // ── App Config ──────────────────────────────────────────────────────────────
 app.get('/api/app-config', (req, res) => {
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+  const GEMINI_MODEL_URL = process.env.GEMINI_MODEL_URL;
+
   if (!GEMINI_API_KEY) {
     console.error("[Backend] Missing GEMINI_API_KEY environment variable.");
     return res.status(500).json({ error: "Server is missing AI configuration.", devError: "Missing GEMINI_API_KEY" });
   }
+  if (!GEMINI_MODEL_URL) {
+    console.error("[Backend] Missing GEMINI_MODEL_URL environment variable.");
+    return res.status(500).json({ error: "Server is missing AI configuration.", devError: "Missing GEMINI_MODEL_URL" });
+  }
 
   res.json({
+    featureFlags: {
+      maintenanceMode: process.env.MAINTENANCE_MODE === 'true',
+      disableAI:       process.env.DISABLE_AI       === 'true',
+      disableBattles:  process.env.DISABLE_BATTLES  === 'true',
+    },
     aiConfig: {
       geminiKey: GEMINI_API_KEY,
-      modelUrl: "https://asia-south1-aiplatform.googleapis.com/v1/projects/project-8d47da29-7cf0-45f0-b55/locations/asia-south1/publishers/google/models/gemini-3.5-flash:generateContent",
+      modelUrl: GEMINI_MODEL_URL,
       promptTemplate: GEMINI_MCQ_PROMPT_TEMPLATE,
       chunkSize: 10000,
       maxChunks: 10,
+      maxOutputTokens: parseInt(process.env.GEMINI_MAX_OUTPUT_TOKENS || '65536', 10),
+      temperature: parseFloat(process.env.GEMINI_TEMPERATURE || '0.2'),
+      generationTimeoutMs: parseInt(process.env.AI_GENERATION_TIMEOUT_MS || '60000', 10),
       generationRanges: [
         { max: 2000, minF: "9-14", expF: "11-16" },
         { max: 5000, minF: "18-23", expF: "22-27" },
@@ -370,6 +384,7 @@ app.get('/api/app-config', (req, res) => {
       pptMaxMB: 4.5
     },
     appLinks: {
+      shareBaseUrl: "https://scorrapp.com/share/quiz/",
       playStoreUrl: "https://play.google.com/store/apps/details?id=com.radium230sorganization.quizforge",
       tutorialUrl: "https://youtu.be/jLiU-vW5EuA"
     }
@@ -379,9 +394,20 @@ app.get('/api/app-config', (req, res) => {
 
 // ── App Updates ────────────────────────────────────────────────────────────
 app.get('/api/version-config', (req, res) => {
+  if (!process.env.APP_MINIMUM_VERSION) {
+    console.error("[Backend] Missing APP_MINIMUM_VERSION env var — force-update will never trigger.");
+  }
+  if (!process.env.APP_LATEST_VERSION) {
+    console.error("[Backend] Missing APP_LATEST_VERSION env var.");
+  }
+  const scheduleStr = process.env.UPDATE_PROMPT_SCHEDULE_DAYS;
+  const updatePromptScheduleDays = scheduleStr
+    ? scheduleStr.split(',').map(Number).filter(n => !isNaN(n))
+    : [0, 7, 14, 30];
   res.json({
     latestVersion: process.env.APP_LATEST_VERSION || "1.0.0",
-    minimumVersion: process.env.APP_MINIMUM_VERSION || "1.0.0"
+    minimumVersion: process.env.APP_MINIMUM_VERSION || "1.0.0",
+    updatePromptScheduleDays
   });
 });
 

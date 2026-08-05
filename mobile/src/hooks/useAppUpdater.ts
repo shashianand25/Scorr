@@ -9,7 +9,7 @@ import { fetchVersionConfig } from '../lib/api';
 const DISMISSED_UPDATE_VERSION_KEY = '@app_update_dismissed_version';
 const DISMISSED_UPDATE_FIRST_TIMESTAMP_KEY = '@app_update_first_timestamp';
 const DISMISSED_UPDATE_PROMPT_COUNT_KEY = '@app_update_prompt_count';
-const PROMPT_SCHEDULE_DAYS = [0, 7, 14, 30]; // Days from first prompt
+const DEFAULT_PROMPT_SCHEDULE_DAYS = [0, 7, 14, 30]; // Fallback if backend doesn't provide schedule
 
 export function useAppUpdater() {
   const [forceUpdateRequired, setForceUpdateRequired] = useState(false);
@@ -24,11 +24,17 @@ export function useAppUpdater() {
       setIsChecking(true);
       const currentVersion = Constants.expoConfig?.version || '1.0.0';
 
-      // 1. Check backend for forced update
+      // 1. Check backend for forced update — also fetch the prompt schedule
       const { config, error } = await fetchVersionConfig();
       
+      // Hoist schedDays so the inAppUpdates callback below can access it
+      let schedDays: number[] = DEFAULT_PROMPT_SCHEDULE_DAYS;
+
       if (!error && config) {
-        const { minimumVersion } = config;
+        const { minimumVersion, updatePromptScheduleDays } = config as any;
+        if (Array.isArray(updatePromptScheduleDays) && updatePromptScheduleDays.length > 0) {
+          schedDays = updatePromptScheduleDays;
+        }
         
         if (compareVersions(currentVersion, minimumVersion) < 0) {
           // Current version is lower than minimum allowed version
@@ -60,11 +66,11 @@ export function useAppUpdater() {
               const promptCount = parseInt(promptCountStr, 10);
               
               // If they have exhausted the schedule, stop nagging them
-              if (promptCount >= PROMPT_SCHEDULE_DAYS.length) {
+              if (promptCount >= schedDays.length) {
                 return;
               }
 
-              const nextPromptDays = PROMPT_SCHEDULE_DAYS[promptCount];
+              const nextPromptDays = schedDays[promptCount];
               const now = new Date();
               const diffTime = Math.abs(now.getTime() - firstDate.getTime());
               const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));

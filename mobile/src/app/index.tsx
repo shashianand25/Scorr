@@ -80,32 +80,9 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const KeyboardWrapper = Platform.OS === "ios" ? KeyboardAvoidingView : View;
 export let globalBgGenStartTime: number | null = null;
 
-const COMBINED_PROMPT = (text: string) => `You are an expert tutor and you need to get me full marks.
-
-Generate TWO sections based on the text below.
-
-===FLASHCARDS===
-Generate at least {{MIN_FLASHCARDS}} flashcards covering all the given text.
-Flashcards are TERM → DEFINITION, NOT question → answer.
-Example:
-# Pharmacology
-= The science dealing with drugs
-
-===MCQS===
-Generate at least {{MIN_MCQS}} multiple choice questions covering all the given text.
-Example:
-? What is the SI unit of force?
-+ Newton
-- Joule
-- Pascal
-- Watt
-
-(Note: You can use multiple '+' options if a question has multiple correct answers)
-
-If the provided text is just a list of questions, generate exactly that many flashcards and questions as given.
-
-Text:
-${text}`;
+// NOTE: The prompt template is loaded exclusively from the backend via /api/app-config.
+// If the config fetch fails, AI generation will throw a clear error rather than
+// silently using a local prompt that diverges from the server format.
 
 const handleModalCloseRequest = (closeAction: () => void) => {
   if (Keyboard.isVisible()) {
@@ -122,7 +99,7 @@ const STEPS = [
   { icon: "shuffle-outline",       label: "Shuffling answers" },
 ] as const;
 
-function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true }: { onCancel?: () => void; documentCharCount?: number; isDark?: boolean }) {
+function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true, generationTimeoutMs = 60000 }: { onCancel?: () => void; documentCharCount?: number; isDark?: boolean; generationTimeoutMs?: number }) {
   const sway = React.useRef(new Animated.Value(0)).current;
   const blink = React.useRef(new Animated.Value(0.3)).current; // Start at 0.3
   const progress = React.useRef(new Animated.Value(0)).current;
@@ -145,18 +122,18 @@ function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true }: 
       ])
     ).start();
 
-    // Fake progress bar filling over exactly 60 seconds
+    // Fake progress bar filling over exactly generationTimeoutMs
     Animated.timing(progress, {
       toValue: 1,
-      duration: 60000,
+      duration: generationTimeoutMs,
       easing: Easing.out(Easing.ease),
       useNativeDriver: false 
     }).start();
 
-    // Show long wait text after 60s
+    // Show long wait text after generationTimeoutMs
     const timer = setTimeout(() => {
       setShowLongWait(true);
-    }, 60000);
+    }, generationTimeoutMs);
 
     return () => clearTimeout(timer);
   }, []);
@@ -264,11 +241,11 @@ function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true }: 
   );
 }
 
-function BackgroundProgressCard({ isDark }: { isDark: boolean }) {
+function BackgroundProgressCard({ isDark, generationTimeoutMs = 60000 }: { isDark: boolean; generationTimeoutMs?: number }) {
   const [pct, setPct] = useState(() => {
     if (!globalBgGenStartTime) return 0;
     const elapsed = Date.now() - globalBgGenStartTime;
-    return Math.min(Math.floor((elapsed / 60000) * 100), 99);
+    return Math.min(Math.floor((elapsed / generationTimeoutMs) * 100), 99);
   });
   const progress = React.useRef(new Animated.Value(pct / 100)).current;
 
@@ -278,7 +255,7 @@ function BackgroundProgressCard({ isDark }: { isDark: boolean }) {
     }
     
     const elapsed = Date.now() - globalBgGenStartTime;
-    const remaining = Math.max(0, 60000 - elapsed);
+    const remaining = Math.max(0, generationTimeoutMs - elapsed);
     
     Animated.timing(progress, {
       toValue: 1,
@@ -290,7 +267,7 @@ function BackgroundProgressCard({ isDark }: { isDark: boolean }) {
     const interval = setInterval(() => {
       if (!globalBgGenStartTime) return;
       const elap = Date.now() - globalBgGenStartTime;
-      setPct(Math.min(Math.floor((elap / 60000) * 100), 99));
+      setPct(Math.min(Math.floor((elap / generationTimeoutMs) * 100), 99));
     }, 500);
     return () => clearInterval(interval);
   }, []);
@@ -814,6 +791,18 @@ export default function HomeScreen() {
       }
     };
   }, []);
+
+  // ── Screen transition: fade-in whenever the active tab changes ──────────
+  const screenFadeAnim = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    screenFadeAnim.setValue(0);
+    Animated.timing(screenFadeAnim, {
+      toValue: 1,
+      duration: 200,
+      easing: Easing.out(Easing.ease),
+      useNativeDriver: true,
+    }).start();
+  }, [activeTab]);
 
   const [showAddMenu, setShowAddMenu] = useState<boolean>(false);
   const [showWrongReview, setShowWrongReview] = useState<boolean>(false);
@@ -3160,7 +3149,8 @@ export default function HomeScreen() {
         return;
       }
       
-      const shareUrl = `https://scorrapp.com/share/quiz/${quiz.id}`;
+      const shareBase = appConfig?.appLinks?.shareBaseUrl || "https://scorrapp.com/share/quiz/";
+      const shareUrl = `${shareBase}${quiz.id}`;
       const message = `Check out this quiz on Scorr: ${quiz.title}\n\nTap this link to open it in the app:\n${shareUrl}`;
       
       await Share.share({
@@ -3322,6 +3312,14 @@ export default function HomeScreen() {
   };
 
   const handleGenerateWithAI = async (text: string, fileName: string) => {
+    // ── Emergency kill-switch: disableAI flag ──────────────────────────
+    if (appConfig?.featureFlags?.disableAI) {
+      Alert.alert(
+        "AI Temporarily Unavailable",
+        "Quiz generation is currently disabled while we perform maintenance. Please try again shortly."
+      );
+      return;
+    }
     isBackgroundGen.current = false;
     setAiGenCharCount(text.length);
     setAiGenPhase("generating");
@@ -3339,10 +3337,10 @@ export default function HomeScreen() {
       const aiConfig = config.aiConfig;
       const GEMINI_URL = `${aiConfig.modelUrl}?key=${aiConfig.geminiKey}`;
       
-      const CHUNK_SIZE = aiConfig.chunkSize || 15000;
+      const CHUNK_SIZE = aiConfig.chunkSize || 10000;
       let chunks: string[] = [];
       for (let i = 0; i < text.length; i += CHUNK_SIZE) chunks.push(text.slice(i, i + CHUNK_SIZE));
-      if (chunks.length > (aiConfig.maxChunks || 8)) chunks = chunks.slice(0, aiConfig.maxChunks || 8);
+      if (chunks.length > (aiConfig.maxChunks || 10)) chunks = chunks.slice(0, aiConfig.maxChunks || 10);
       console.log(`[AI Generation] Document split into ${chunks.length} chunk(s) (Chunk size: ${CHUNK_SIZE} chars)`);
       const CONCURRENCY = chunks.length || 1;
       const results: string[] = [];
@@ -3352,17 +3350,12 @@ export default function HomeScreen() {
           batch.map(chunk => {
             const docSize = chunk.length;
             
-            const ranges = aiConfig.generationRanges || [
-              { max: 2000, minF: "9-14", expF: "11-16" },
-              { max: 5000, minF: "18-23", expF: "22-27" },
-              { max: 10000, minF: "22-27", expF: "22-32" },
-              { max: 15000, minF: "27-29", expF: "27-36" },
-              { max: 20000, minF: "36-41", expF: "36-49" },
-              { max: 25000, minF: "46-49", expF: "46-61" },
-              { max: Infinity, minF: "55-61", expF: "55-73" }
-            ];
+            if (!aiConfig.generationRanges || aiConfig.generationRanges.length === 0) {
+              throw new Error("AI configuration is incomplete (missing generationRanges). Please try again.");
+            }
+            const ranges = aiConfig.generationRanges;
             
-            const matchingRange = ranges.find(r => docSize < r.max) || ranges[ranges.length - 1];
+            const matchingRange = ranges.find((r: any) => docSize < r.max) || ranges[ranges.length - 1];
             const minFlashcards = matchingRange.minF;
             const expectedFlashcards = matchingRange.expF;
 
@@ -3379,18 +3372,22 @@ export default function HomeScreen() {
             const minMcqs = scaleRangeBy1_3(minFlashcards);
             const expectedMcqs = scaleRangeBy1_3(expectedFlashcards);
 
-            let combinedPrompt = aiConfig.promptTemplate 
-              ? aiConfig.promptTemplate.replace("[PASTE YOUR TEXT HERE]", chunk)
-              : COMBINED_PROMPT(chunk);
+            if (!aiConfig.promptTemplate) {
+              throw new Error("AI configuration is incomplete (missing promptTemplate). Please check your network and try again.");
+            }
+            let combinedPrompt = aiConfig.promptTemplate.replace("[PASTE YOUR TEXT HERE]", chunk);
             combinedPrompt = combinedPrompt.replace(/\{\{MIN_FLASHCARDS\}\}/g, minFlashcards);
             combinedPrompt = combinedPrompt.replace(/\{\{EXPECTED_FLASHCARDS\}\}/g, expectedFlashcards);
             combinedPrompt = combinedPrompt.replace(/\{\{MIN_MCQS\}\}/g, minMcqs);
             combinedPrompt = combinedPrompt.replace(/\{\{EXPECTED_MCQS\}\}/g, expectedMcqs);
 
+            const maxOutputTokens = aiConfig.maxOutputTokens || 65536;
+            const temperature = aiConfig.temperature ?? 0.2;
+
             const fetchGen = (prompt: string) => fetch(GEMINI_URL, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 65536, temperature: 0.2 } }),
+              body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens, temperature } }),
             }).then(async r => { if (!r.ok) throw new Error((await r.json())?.error?.message || r.statusText); return (await r.json())?.candidates?.[0]?.content?.parts?.[0]?.text || ""; });
 
             return fetchGen(combinedPrompt);
@@ -4488,6 +4485,16 @@ export default function HomeScreen() {
         qsList = qsList.map((q: any) => ({ ...q, answers: [...q.answers].sort(() => Math.random() - 0.5) }));
       }
       
+      // ── Emergency kill-switch: disableBattles flag ───────────────────
+      if (appConfig?.featureFlags?.disableBattles) {
+        Alert.alert(
+          "Battles Temporarily Unavailable",
+          "Battle Arena is currently disabled while we perform maintenance. Please try again shortly."
+        );
+        setBattleCreating(false);
+        return;
+      }
+
       const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Connection timeout. Please check your internet connection.")), 8000));
       const code = await Promise.race([
         createBattleRoom(q.id, q.title, qsList.length, qsList, firebaseUser?.uid || "guest", firebaseUser?.displayName || "Player", battleTimePerQuestion),
@@ -7716,7 +7723,7 @@ export default function HomeScreen() {
 
                 {/* ── Background Progress Card ── */}
                 {isGeneratingInBackground && !homeSearch && (
-                  <BackgroundProgressCard isDark={settingsDarkMode} />
+                  <BackgroundProgressCard isDark={settingsDarkMode} generationTimeoutMs={appConfig?.aiConfig?.generationTimeoutMs ?? 60000} />
                 )}
 
                 {/* ── New user: sample try-it-out card ── */}
@@ -7860,7 +7867,16 @@ export default function HomeScreen() {
                     <Text style={{ fontSize: 18, fontWeight: "700", color: txt, marginBottom: 14 }}>Multiplayer</Text>
                     
                     <Pressable
-                      onPress={() => setActiveTab("battle" as any)}
+                      onPress={() => {
+                        if (appConfig?.featureFlags?.disableBattles) {
+                          Alert.alert(
+                            "Battles Temporarily Unavailable",
+                            "Battle Arena is currently disabled while we perform maintenance. Please try again shortly."
+                          );
+                          return;
+                        }
+                        setActiveTab("battle" as any);
+                      }}
                       style={({ pressed }) => ({
                         backgroundColor: cardBg,
                         borderRadius: 20, padding: 20,
@@ -8299,7 +8315,9 @@ export default function HomeScreen() {
       ) : (
         <>
           <View style={styles.screenContainer}>
-            {renderContent()}
+            <Animated.View style={{ flex: 1, opacity: screenFadeAnim }}>
+              {renderContent()}
+            </Animated.View>
           </View>
 
           {/* Bottom Tab Bar — Quizlet-style (hidden during focused editing and study sessions to maximize screen real estate and prevent keyboard overlaps) */}
@@ -8509,7 +8527,7 @@ export default function HomeScreen() {
       }} />
 
       {/* ── AI Generation Screen ── */}
-      {aiGenPhase === "generating" && <AIGeneratingScreen isDark={settingsDarkMode} documentCharCount={aiGenCharCount} onCancel={() => { setIsGeneratingInBackground(true); isBackgroundGen.current = true; setAiGenPhase(null); }} />}
+      {aiGenPhase === "generating" && <AIGeneratingScreen isDark={settingsDarkMode} documentCharCount={aiGenCharCount} generationTimeoutMs={appConfig?.aiConfig?.generationTimeoutMs ?? 60000} onCancel={() => { setIsGeneratingInBackground(true); isBackgroundGen.current = true; setAiGenPhase(null); }} />}
 
       {/* ── Battle Modals ── */}
       {(() => {
@@ -8642,7 +8660,7 @@ export default function HomeScreen() {
                         backgroundColor: "transparent",
                         borderWidth: 2,
                         borderColor: isActive
-                          ? "#34d399"
+                          ? "#6366f1"
                           : (isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"),
                         opacity: pressed ? 0.75 : 1,
                       }]}
@@ -8733,7 +8751,7 @@ export default function HomeScreen() {
                         backgroundColor: "transparent",
                         borderWidth: 2,
                         borderColor: isActive
-                          ? "#34d399"
+                          ? "#6366f1"
                           : (isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"),
                         opacity: pressed ? 0.7 : 1,
                       }]}

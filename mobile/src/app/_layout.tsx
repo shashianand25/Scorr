@@ -1,15 +1,31 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router";
 import { useColorScheme, Platform } from "react-native";
 import { Stack } from "expo-router";
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useAppUpdater } from "../hooks/useAppUpdater";
 import ForceUpdateScreen from "../components/ForceUpdateScreen";
+import MaintenanceScreen from "../components/MaintenanceScreen";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { fetchAppConfig } from "../lib/api";
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const { forceUpdateRequired } = useAppUpdater();
+  const [maintenanceMode, setMaintenanceMode] = useState(false);
+
+  const checkFlags = useCallback(async () => {
+    try {
+      const { config } = await fetchAppConfig();
+      setMaintenanceMode(config?.featureFlags?.maintenanceMode === true);
+    } catch {
+      // If we can't reach the backend, don't block the app
+    }
+  }, []);
+
+  useEffect(() => {
+    checkFlags();
+  }, [checkFlags]);
 
   useEffect(() => {
     if (Platform.OS === "web") {
@@ -22,6 +38,10 @@ export default function RootLayout() {
 
   if (forceUpdateRequired) {
     return <ForceUpdateScreen />;
+  }
+
+  if (maintenanceMode) {
+    return <MaintenanceScreen onRetry={checkFlags} />;
   }
 
   return (

@@ -329,12 +329,20 @@ export async function fetchGeminiKey(): Promise<{ key: string | null; prompt: st
 }
 
 export interface AppConfig {
+  featureFlags: {
+    maintenanceMode: boolean;
+    disableAI: boolean;
+    disableBattles: boolean;
+  };
   aiConfig: {
     geminiKey: string;
     modelUrl: string;
     promptTemplate: string;
     chunkSize: number;
     maxChunks: number;
+    maxOutputTokens: number;
+    temperature: number;
+    generationTimeoutMs: number;
     generationRanges: Array<{ max: number; minF: string; expF: string }>;
   };
   fileLimits: {
@@ -342,6 +350,7 @@ export interface AppConfig {
     pptMaxMB: number;
   };
   appLinks: {
+    shareBaseUrl: string;
     playStoreUrl: string;
     tutorialUrl: string;
   };
@@ -370,7 +379,7 @@ export async function fetchVersionConfig(): Promise<{ config: VersionConfig | nu
 
 import * as FileSystem from "expo-file-system/legacy";
 
-export async function parsePdfFromBackend(fileUri: string, fileName: string, fileSize: number = 0, extractThresholdMB: number = 4.2): Promise<{ text: string; error?: string }> {
+export async function parsePdfFromBackend(fileUri: string, fileName: string, fileSize: number = 0, extractThresholdMB: number): Promise<{ text: string; error?: string }> {
   try {
     if (fileSize > 0 && fileSize < extractThresholdMB * 1024 * 1024) {
       try {
