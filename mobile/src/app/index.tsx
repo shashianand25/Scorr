@@ -427,6 +427,37 @@ export default function HomeScreen() {
               console.warn("[NeonSync] fetch failed:", quizzesRes.error);
             }
 
+            // Run pending deletions sync in background
+            AsyncStorage.getItem("quizforge_pending_deletions").then(async (val) => {
+              if (val) {
+                const pending = JSON.parse(val);
+                if (pending.length > 0) {
+                  const remaining = [];
+                  for (const pid of pending) {
+                    try {
+                      const res = await deleteMobileQuiz(user.uid, pid);
+                      if (res.error) {
+                        console.warn("[NeonSync] pending delete failed:", res.error);
+                        remaining.push(pid);
+                      }
+                    } catch (err) {
+                      remaining.push(pid);
+                    }
+                  }
+                  if (remaining.length !== pending.length) {
+                    AsyncStorage.setItem("quizforge_pending_deletions", JSON.stringify(remaining));
+                  }
+                }
+              }
+            }).catch(() => {});
+
+            // Auto-import safety: Filter out any IDs that are in the pending deletions list
+            const pendingVal = await AsyncStorage.getItem("quizforge_pending_deletions");
+            const pendingIds = pendingVal ? JSON.parse(pendingVal) : [];
+            if (!quizzesRes.error && quizzesRes.quizzes) {
+              quizzesRes.quizzes = quizzesRes.quizzes.filter((q: any) => !pendingIds.includes(q.id));
+            }
+
             if (!quizzesRes.error && quizzesRes.quizzes.length > 0) {
               const normalizedQuizzes = quizzesRes.quizzes.map((q) => {
                 // Find the local copy so we can preserve its questionsList
@@ -1965,9 +1996,28 @@ export default function HomeScreen() {
     if (quizToDelete && firebaseUser) {
       const neonId = quizToDelete.neonId ?? quizToDelete.id;
       if (!String(neonId).startsWith("local_")) {
-        deleteMobileQuiz(firebaseUser.uid, neonId).catch((err) =>
-          console.warn("[NeonSync] quiz delete failed:", err)
-        );
+        // 1. Add quiz ID to pending deletions & 2. Persist AsyncStorage
+        AsyncStorage.getItem("quizforge_pending_deletions").then(val => {
+          const pending = val ? JSON.parse(val) : [];
+          if (!pending.includes(neonId)) pending.push(neonId);
+          return AsyncStorage.setItem("quizforge_pending_deletions", JSON.stringify(pending));
+        }).then(() => {
+          // 4. Attempt backend DELETE
+          return deleteMobileQuiz(firebaseUser.uid, neonId);
+        }).then((res) => {
+          // 5. If successful (or already deleted) -> remove tombstone
+          if (!res.error) {
+            AsyncStorage.getItem("quizforge_pending_deletions").then(val => {
+              if (val) {
+                const pending = JSON.parse(val);
+                AsyncStorage.setItem("quizforge_pending_deletions", JSON.stringify(pending.filter((id: string) => id !== neonId)));
+              }
+            });
+          }
+          // 6. If offline/fails -> keep tombstone
+        }).catch((err) => {
+          console.warn("[NeonSync] quiz delete failed or offline:", err);
+        });
       }
     }
 
@@ -7684,7 +7734,7 @@ export default function HomeScreen() {
           }).sort((a, b) => {
             if (a.isNew !== b.isNew) return a.isNew ? 1 : -1;
             return (b.ts || 0) - (a.ts || 0);
-          }).slice(0, 5);
+          }).slice(0, 3);
 
           type RecentItem = { id: string; title: string; type: "quiz"|"flashcard"; sub: string; raw: any; ts: number; };
           const allRecents: RecentItem[] = [

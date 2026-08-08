@@ -223,7 +223,7 @@ app.get('/api/battle-history', async (req, res) => {
 app.get('/api/share/quiz/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const result = await pool.query(`SELECT id, title, category, question_count, source_text FROM mobile_quizzes WHERE id = $1`, [id]);
+    const result = await pool.query(`SELECT id, title, category, question_count, source_text FROM mobile_quizzes WHERE id = $1 AND deleted_at IS NULL`, [id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Quiz not found' });
     const r = result.rows[0];
     res.json({ quiz: { ...r, questionCount: r.question_count, sourceText: r.source_text } });
@@ -235,7 +235,7 @@ app.get('/api/share/quiz/:id', async (req, res) => {
 app.get('/api/mobile-quizzes', async (req, res) => {
   const { userId } = req.query;
   try {
-    const result = await pool.query(`SELECT * FROM mobile_quizzes WHERE user_id = $1`, [userId]);
+    const result = await pool.query(`SELECT * FROM mobile_quizzes WHERE user_id = $1 AND deleted_at IS NULL`, [userId]);
     const quizzes = result.rows.map(r => ({
       ...r,
       questionCount: r.question_count,
@@ -298,7 +298,7 @@ app.put('/api/mobile-quizzes', async (req, res) => {
 app.delete('/api/mobile-quizzes', async (req, res) => {
   const { userId, quizId } = req.query;
   try {
-    await pool.query(`DELETE FROM mobile_quizzes WHERE id = $1 AND user_id = $2`, [quizId, userId]);
+    await pool.query(`UPDATE mobile_quizzes SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND user_id = $2`, [quizId, userId]);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
