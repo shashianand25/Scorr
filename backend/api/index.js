@@ -25,6 +25,55 @@ const pool = new Pool({
 // Helper for generating simple UUIDs if not provided by client
 const generateId = () => Math.random().toString(36).substring(2) + Date.now().toString(36);
 
+// Ensure ai_usage table exists (runs once on cold start)
+pool.query(`
+  CREATE TABLE IF NOT EXISTS ai_usage (
+    user_id TEXT NOT NULL,
+    date    TEXT NOT NULL,
+    count   INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id, date)
+  )
+`).catch(err => console.error('[Backend] Failed to ensure ai_usage table:', err));
+
+// ── AI Usage / Rate Limiting ──────────────────────────────────────────────
+// Called by the mobile app before every AI generation.
+// Increments the user's daily count and returns whether generation is allowed.
+app.post('/api/ai/use', async (req, res) => {
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ error: 'userId required' });
+
+  const limit = parseInt(process.env.AI_DAILY_LIMIT || '10', 10);
+  const today = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
+
+  try {
+    // Read current usage first
+    const check = await pool.query(
+      `SELECT count FROM ai_usage WHERE user_id = $1 AND date = $2`,
+      [userId, today]
+    );
+    const used = check.rows[0]?.count ?? 0;
+
+    if (used >= limit) {
+      return res.json({ allowed: false, used, limit });
+    }
+
+    // Within limit — increment
+    const result = await pool.query(
+      `INSERT INTO ai_usage (user_id, date, count)
+       VALUES ($1, $2, 1)
+       ON CONFLICT (user_id, date) DO UPDATE SET count = ai_usage.count + 1
+       RETURNING count`,
+      [userId, today]
+    );
+    const newCount = result.rows[0].count;
+    return res.json({ allowed: true, used: newCount, limit });
+  } catch (err) {
+    console.error('[Backend] ai/use error:', err);
+    // Fail open — don't block generation if the DB is down
+    return res.json({ allowed: true, used: 0, limit });
+  }
+});
+
 // ── Users ────────────────────────────────────────────────────────────────
 app.post('/api/sync-user', async (req, res) => {
   const { uid, email, displayName, photoURL } = req.body;
@@ -177,7 +226,7 @@ app.get('/api/share/quiz/:id', async (req, res) => {
     const result = await pool.query(`SELECT id, title, category, question_count, source_text FROM mobile_quizzes WHERE id = $1`, [id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Quiz not found' });
     const r = result.rows[0];
-    res.json({ quiz: { ...r, questionCount: r.question_count } });
+    res.json({ quiz: { ...r, questionCount: r.question_count, sourceText: r.source_text } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -377,7 +426,8 @@ app.get('/api/app-config', (req, res) => {
         { max: 20000, minF: "36-41", expF: "36-49" },
         { max: 25000, minF: "46-49", expF: "46-61" },
         { max: 9999999, minF: "55-61", expF: "55-73" }
-      ]
+      ],
+      maxDailyGenerations: parseInt(process.env.AI_DAILY_LIMIT || '10', 10),
     },
     fileLimits: {
       pdfExtractThresholdMB: 4.2,

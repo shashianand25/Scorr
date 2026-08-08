@@ -244,10 +244,21 @@ export interface NeonMobileQuiz {
 export async function fetchSharedQuiz(
   quizId: string
 ): Promise<{ quiz: NeonMobileQuiz | null; error: string | null }> {
-  const { data, error } = await apiFetch<{ quiz: NeonMobileQuiz }>(
+  const { data, error } = await apiFetch<{ quiz: any }>(
     `/api/share/quiz/${encodeURIComponent(quizId)}`
   );
-  return { quiz: data?.quiz ?? null, error };
+  if (data?.quiz) {
+    const q = data.quiz;
+    return {
+      quiz: {
+        ...q,
+        questionCount: q.questionCount ?? q.question_count,
+        sourceText: q.sourceText ?? q.source_text ?? "",
+      },
+      error: null,
+    };
+  }
+  return { quiz: null, error };
 }
 
 /**
@@ -343,6 +354,8 @@ export interface AppConfig {
     maxOutputTokens: number;
     temperature: number;
     generationTimeoutMs: number;
+    concurrencyLimit?: number;
+    maxDailyGenerations?: number;
     generationRanges: Array<{ max: number; minF: string; expF: string }>;
   };
   fileLimits: {
@@ -448,3 +461,26 @@ export async function parsePptFromBackend(fileUri: string, fileName: string): Pr
     return { text: "", error: errMsg };
   }
 }
+
+// ── AI Generation Rate Limiting ────────────────────────────────────────────
+/**
+ * Checks the user's daily AI generation quota and increments if within limit.
+ * Returns { allowed, used, limit }.
+ * Fails open — if the server is unreachable, allows generation.
+ */
+export async function checkAiDailyLimit(userId: string): Promise<{ allowed: boolean; used: number; limit: number }> {
+  try {
+    const res = await fetch(`${BASE_URL}/api/ai/use`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return { allowed: true, used: 0, limit: 0 };
+    return await res.json();
+  } catch {
+    // Fail open — don't block generation when the check can't reach the server
+    return { allowed: true, used: 0, limit: 0 };
+  }
+}
+

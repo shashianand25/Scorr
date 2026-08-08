@@ -40,7 +40,7 @@ import MaskedView from '@react-native-masked-view/masked-view';
 import { Buffer } from "buffer";
 import * as mammoth from "mammoth/mammoth.browser.js";
 import { signInWithGoogle, signInWithEmail, signUpWithEmail, signOutUser, onAuth, deleteAccount, resetPassword, type User } from "../lib/firebase";
-import { syncUserToNeon, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz, deleteUserFromNeon, sendFeedback, saveBattleHistory, fetchBattleHistory, parsePdfFromBackend, parsePptFromBackend, fetchGeminiKey, fetchAppConfig, fetchSharedQuiz, type AppConfig } from "../lib/api";
+import { syncUserToNeon, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz, deleteUserFromNeon, sendFeedback, saveBattleHistory, fetchBattleHistory, parsePdfFromBackend, parsePptFromBackend, fetchGeminiKey, fetchAppConfig, fetchSharedQuiz, checkAiDailyLimit, type AppConfig } from "../lib/api";
 import { getUserErrorMessage } from "../utils/errors";
 import { createBattleRoom, joinBattleRoom, updateBattleScore, finishBattle, markPlayerFinished, listenToBattleRoom, getBattleRoom, type BattleRoom } from "../lib/multiplayer";
 import NetInfo from "@react-native-community/netinfo";
@@ -806,6 +806,7 @@ export default function HomeScreen() {
 
   const [showAddMenu, setShowAddMenu] = useState<boolean>(false);
   const [showWrongReview, setShowWrongReview] = useState<boolean>(false);
+  const [snapshotReviewData, setSnapshotReviewData] = useState<any[]>([]);
   const [viewingReportCardData, setViewingReportCardData] = useState<{ attempt: any, quiz: any } | null>(null);
 
   const reportCardQs = useMemo(() => {
@@ -894,6 +895,14 @@ export default function HomeScreen() {
       }
     };
     
+    // Check if the deep-link screen stored a pending quiz ID (cold-start via App Link)
+    AsyncStorage.getItem("pending_shared_quiz_id").then((id) => {
+      if (id) {
+        AsyncStorage.removeItem("pending_shared_quiz_id");
+        setPendingSharedQuizId(id);
+      }
+    });
+
     Linking.getInitialURL().then(handleUrl);
     const subscription = Linking.addEventListener('url', ({ url }) => handleUrl(url));
     return () => {
@@ -929,7 +938,7 @@ export default function HomeScreen() {
             throw new Error(saveErr || "Failed to save the shared course.");
           }
           
-          setQuizzes((prev) => [savedQuiz, ...prev]);
+          setQuizzes((prev) => [{ ...savedQuiz, sourceText: quiz.sourceText }, ...prev]);
           setActiveTab("library");
           setLibraryTab("courses");
           setCustomToast({
@@ -980,7 +989,7 @@ export default function HomeScreen() {
   const [rangeStart, setRangeStart] = useState<number>(1);
   const [rangeEnd, setRangeEnd] = useState<number>(5);
   const [shuffleQuestions, setShuffleQuestionsRaw] = useState<boolean>(false);
-  const [shuffleAnswers, setShuffleAnswersRaw] = useState<boolean>(false);
+  const [shuffleAnswers, setShuffleAnswersRaw] = useState<boolean>(true);
   const [showAnswerOnSubmit, setShowAnswerOnSubmitRaw] = useState<boolean>(true);
   const [quizTimeLimit, setQuizTimeLimit] = useState<number | null>(null);
   const [quizPerQuestionTimer, setQuizPerQuestionTimer] = useState<number | null>(null);
@@ -1847,7 +1856,7 @@ export default function HomeScreen() {
       questions: filteredQuestions,
       selectionMode: mode,
       shuffleQuestions: false,
-      shuffleAnswers: false,
+      shuffleAnswers: shuffleAnswers,
       showAnswerOnSubmit: true,
       timePerQuestion: null,
       currentIndex: 0,
@@ -3312,28 +3321,52 @@ export default function HomeScreen() {
   };
 
   const handleGenerateWithAI = async (text: string, fileName: string) => {
-    // ── Emergency kill-switch: disableAI flag ──────────────────────────
-    if (appConfig?.featureFlags?.disableAI) {
+    isBackgroundGen.current = false;
+
+    // ── Require sign-in ────────────────────────────────────────────────────
+    if (!firebaseUser) {
       Alert.alert(
-        "AI Temporarily Unavailable",
-        "Quiz generation is currently disabled while we perform maintenance. Please try again shortly."
+        "Sign In Required",
+        "Please sign in to generate quizzes with AI."
       );
       return;
     }
-    isBackgroundGen.current = false;
+
     setAiGenCharCount(text.length);
     setAiGenPhase("generating");
     try {
-      let config = appConfig;
-      if (!config) {
-        const { config: fetchedConfig, error } = await fetchAppConfig();
-        if (error || !fetchedConfig) {
-          throw new Error(error || "Could not fetch App configuration from server.");
-        }
-        config = fetchedConfig;
-        setAppConfig(config);
+      // Always fetch fresh config so feature flags reflect the live backend value,
+      // not a potentially stale cached copy from app open.
+      const { config: fetchedConfig, error } = await fetchAppConfig();
+      if (error || !fetchedConfig) {
+        throw new Error(error || "Could not fetch App configuration from server.");
       }
-      
+      const config = fetchedConfig;
+      setAppConfig(config);
+
+      // ── Emergency kill-switch: disableAI flag ──────────────────────────
+      if (config.featureFlags?.disableAI) {
+        setAiGenPhase(null);
+        Alert.alert(
+          "AI Temporarily Unavailable",
+          "Quiz generation is currently disabled while we perform maintenance. Please try again shortly."
+        );
+        return;
+      }
+
+      // ── Daily generation limit ──────────────────────────────────────────
+      if (config.aiConfig?.maxDailyGenerations) {
+        const { allowed, limit } = await checkAiDailyLimit(firebaseUser.uid);
+        if (!allowed) {
+          setAiGenPhase(null);
+          Alert.alert(
+            "Daily Limit Reached",
+            `You've used all ${limit} AI generations for today. Your limit resets at midnight.`
+          );
+          return;
+        }
+      }
+
       const aiConfig = config.aiConfig;
       const GEMINI_URL = `${aiConfig.modelUrl}?key=${aiConfig.geminiKey}`;
       
@@ -3342,7 +3375,8 @@ export default function HomeScreen() {
       for (let i = 0; i < text.length; i += CHUNK_SIZE) chunks.push(text.slice(i, i + CHUNK_SIZE));
       if (chunks.length > (aiConfig.maxChunks || 10)) chunks = chunks.slice(0, aiConfig.maxChunks || 10);
       console.log(`[AI Generation] Document split into ${chunks.length} chunk(s) (Chunk size: ${CHUNK_SIZE} chars)`);
-      const CONCURRENCY = chunks.length || 1;
+      // Cap parallel requests to avoid hitting Gemini rate limits when maxChunks is large
+      const CONCURRENCY = Math.min(chunks.length, aiConfig.concurrencyLimit || 3);
       const results: string[] = [];
       for (let i = 0; i < chunks.length; i += CONCURRENCY) {
         const batch = chunks.slice(i, i + CONCURRENCY);
@@ -4140,8 +4174,21 @@ export default function HomeScreen() {
     let wrongCount = 0;
     let skippedCount = 0;
     const wrongQsForQuiz: any[] = [];
-    const wrongQuestionIds = wrongQsForQuiz.map((wq: any) => wq.id);
-    const wrongQuestionObjects = questions.filter((q: any) => wrongQuestionIds.includes(q.id));
+
+    // Compute real scores from recorded answers
+    questions.forEach((q: any) => {
+      const selected: string[] = (activeSession.answers as Record<string, string[]>)?.[q.id] || [];
+      const correctIds: string[] = q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.id);
+      if (selected.length === 0) {
+        skippedCount++;
+      } else {
+        const isAllCorrect =
+          selected.every((id: string) => correctIds.includes(id)) &&
+          selected.length === correctIds.length;
+        if (isAllCorrect) correctCount++;
+        else { wrongCount++; wrongQsForQuiz.push(q); }
+      }
+    });
 
     const handleReattemptWrong = () => {
       if (wrongQuestionObjects.length === 0) return;
@@ -4202,29 +4249,11 @@ export default function HomeScreen() {
       setShowWrongReview(false);
     };
 
+    const wrongQuestionIds = wrongQsForQuiz.map((wq: any) => wq.id);
+    const wrongQuestionObjects = questions.filter((q: any) => wrongQuestionIds.includes(q.id));
+
     const scorePct = totalQs > 0 ? Math.round((correctCount / totalQs) * 100) : 0;
     const xpGained = correctCount * 20;
-
-    let dayStreak = 0;
-    if (battleHistory.length > 0) {
-      const sortedHistory = [...battleHistory].sort((a, b) => b.date - a.date);
-      const uniqueDays = new Set(sortedHistory.map(h => new Date(h.date).toDateString()));
-      
-      const today = new Date();
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
-      
-      const todayStr = today.toDateString();
-      const yesterdayStr = yesterday.toDateString();
-      
-      if (uniqueDays.has(todayStr) || uniqueDays.has(yesterdayStr)) {
-        let checkDate = uniqueDays.has(todayStr) ? today : yesterday;
-        while (uniqueDays.has(checkDate.toDateString())) {
-          dayStreak++;
-          checkDate.setDate(checkDate.getDate() - 1);
-        }
-      }
-    }
 
     return (
       <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#0b1021" : "#f8fafc" }}>
@@ -4286,17 +4315,36 @@ export default function HomeScreen() {
             <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>{totalQs} Answered</Text>
           </View>
 
-          {/* Streak Box */}
-          <View style={{ backgroundColor: settingsDarkMode ? "#172033" : "#ffffff", borderRadius: 16, padding: 20, flexDirection: "row", alignItems: "center", gap: 16, marginBottom: 16, borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
-            <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: "rgba(245, 158, 11, 0.2)", alignItems: "center", justifyContent: "center" }}>
-              <Ionicons name="flame" size={24} color="#f59e0b" />
-            </View>
-            <Text style={{ fontSize: 16, fontWeight: "600", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Streak: {dayStreak} day{dayStreak !== 1 ? 's' : ''}</Text>
-          </View>
+
 
           {/* Report Card Button */}
           <Pressable 
-            onPress={() => setShowWrongReview(true)}
+            onPress={() => {
+              if (!activeSession) return;
+              // Snapshot the review data right now from the live session
+              // so the modal never shows stale or empty content
+              const qs = activeSession.questions || [];
+              const ans = activeSession.answers || {};
+              const snapshot = qs.map((q: any) => {
+                const selected: string[] = ans[q.id] || [];
+                const correctIds: string[] = q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.id);
+                let status = "skipped";
+                if (selected.length > 0) {
+                  const isAllCorrect = selected.every((id: string) => correctIds.includes(id)) && selected.length === correctIds.length;
+                  status = isAllCorrect ? "correct" : "wrong";
+                }
+                return {
+                  id: q.id,
+                  prompt: q.prompt,
+                  explanation: q.explanation,
+                  status,
+                  selectedTexts: q.answers.filter((a: any) => selected.includes(a.id)).map((a: any) => a.text),
+                  correctTexts: q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.text),
+                };
+              });
+              setSnapshotReviewData(snapshot);
+              setShowWrongReview(true);
+            }}
             style={({pressed}) => ({ backgroundColor: settingsDarkMode ? "#172033" : "#ffffff", borderRadius: 16, padding: 20, flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16, borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", opacity: pressed ? 0.8 : 1 })}
           >
             <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
@@ -4393,7 +4441,10 @@ export default function HomeScreen() {
       
       const updatedCard = Scheduler.schedule(currentCard, rating);
       if (rating === "again") {
-        newQueue.push(cardId);
+        // Don't show the card immediately — push it back at least 5 cards
+        // so the user gets a break before seeing it again in the same session.
+        const insertAt = Math.min(5, newQueue.length);
+        newQueue.splice(insertAt, 0, cardId);
       }
       
       const updatedDeck = {
@@ -7726,8 +7777,8 @@ export default function HomeScreen() {
                   <BackgroundProgressCard isDark={settingsDarkMode} generationTimeoutMs={appConfig?.aiConfig?.generationTimeoutMs ?? 60000} />
                 )}
 
-                {/* ── New user: sample try-it-out card ── */}
-                {!hasContent && !homeSearch && !sampleDismissed && sampleQuiz && (
+                {/* ── New user or Signed Out: sample try-it-out card ── */}
+                {((!firebaseUser) || (!hasContent && !sampleDismissed)) && !homeSearch && sampleQuiz && (
                   <View style={{ marginTop: 24, marginBottom: 8 }}>
                     <View style={{ paddingHorizontal: 20, marginBottom: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                       <Text style={{ fontSize: 18, fontWeight: "700", color: txt }}>Try your first quiz 👋</Text>
@@ -7765,7 +7816,7 @@ export default function HomeScreen() {
                 )}
 
                 {/* ── Jump Back In ── */}
-                {jumpItems.length > 0 && !homeSearch && (
+                {!!firebaseUser && jumpItems.length > 0 && !homeSearch && (
                   <View style={{ marginTop: 20, marginBottom: 8 }}>
                     <View style={{ paddingHorizontal: 20, marginBottom: 14 }}>
                       <Text style={{ fontSize: 18, fontWeight: "700", color: txt, marginBottom: 2 }}>
@@ -8401,21 +8452,27 @@ export default function HomeScreen() {
     </SafeAreaView>
 
       {/* ── Report Card Modal ── */}
-      <Modal visible={showWrongReview || !!viewingReportCardData} animationType="slide" transparent={false} onRequestClose={() => { setShowWrongReview(false); setViewingReportCardData(null); }}>
+      <Modal visible={showWrongReview || !!viewingReportCardData} animationType="slide" transparent={false} onRequestClose={() => { setShowWrongReview(false); setViewingReportCardData(null); setSnapshotReviewData([]); }}>
         <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#0b1021" : "#f8fafc" }}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 24, paddingTop: 60, paddingBottom: 20, borderBottomWidth: 1, borderBottomColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
             <Text style={{ fontSize: 20, fontWeight: "600", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Review Answers</Text>
-            <Pressable onPress={() => { setShowWrongReview(false); setViewingReportCardData(null); }} style={{ padding: 8 }}>
+            <Pressable onPress={() => { setShowWrongReview(false); setViewingReportCardData(null); setSnapshotReviewData([]); }} style={{ padding: 8 }}>
               <Ionicons name="close" size={28} color={settingsDarkMode ? "#ffffff" : "#111827"} />
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 20, paddingBottom: 100 }}>
-            {reportCardQs.length === 0 && (
-              <Text style={{ textAlign: "center", color: settingsDarkMode ? "#9ca3af" : "#6b7280", marginTop: 40 }}>
-                No answer data available for this attempt.
-              </Text>
-            )}
-            {reportCardQs.map((q: any, idx: number) => (
+            {(() => {
+              // Live session review uses the snapshot captured at press time.
+              // History report card uses reportCardQs from useMemo.
+              const displayQs = viewingReportCardData ? reportCardQs : snapshotReviewData;
+              return (
+                <>
+                  {displayQs.length === 0 && (
+                    <Text style={{ textAlign: "center", color: settingsDarkMode ? "#9ca3af" : "#6b7280", marginTop: 40 }}>
+                      No answer data available for this attempt.
+                    </Text>
+                  )}
+                  {displayQs.map((q: any, idx: number) => (
               <View key={q.id} style={{ backgroundColor: settingsDarkMode ? "#161b2e" : "#ffffff", borderRadius: 16, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
                 <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827", marginBottom: 16, lineHeight: 24 }}>
                   {idx + 1}. {q.prompt}
@@ -8474,7 +8531,10 @@ export default function HomeScreen() {
                   </View>
                 )}
               </View>
-            ))}
+                  ))}
+                </>
+              );
+            })()}
           </ScrollView>
         </View>
       </Modal>

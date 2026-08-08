@@ -68,6 +68,14 @@ export function AppModals({ p }: { p: any }) {
     if (p.selectedQuiz) {
       setQuizSetupStep("presets");
       setQuizPreset("marathon");
+      // Force sync the index.tsx state to match the default marathon preset
+      (p.setSelectionMode || (()=>{}))("all");
+      (p.setQuizTimeLimit || (()=>{}))(null);
+      (p.setQuizPerQuestionTimer || (()=>{}))(null);
+      (p.setTimeLimitText || (()=>{}))("");
+      (p.setShuffleQuestions || (()=>{}))(false);
+      (p.setShuffleAnswers || (()=>{}))(false);
+      (p.setShowAnswerOnSubmit || (()=>{}))(true);
     }
   }, [p.selectedQuiz]);
 
@@ -1679,6 +1687,14 @@ export function AppModals({ p }: { p: any }) {
             {/* AI Hero Card */}
             <AnimatedPressable
               onPress={() => {
+              if (p.appConfig?.featureFlags?.disableAI) {
+                Alert.alert(
+                  "AI Temporarily Unavailable",
+                  "Quiz generation is currently disabled while we perform maintenance. Please try again shortly."
+                );
+                (p.setShowAddMenu || (() => {}))(false);
+                return;
+              }
               (p.setShowAddMenu || (() => {}))(false);
               if (Platform.OS === "web") {
                 const input = document.createElement("input");
