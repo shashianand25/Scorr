@@ -270,15 +270,25 @@ export function AppModals({ p }: { p: any }) {
                 <Pressable
                   onPress={() => {
                     if ((p.renameTitle || "").trim() && p.renamingQuiz) {
-                      (p.setQuizzes || (() => {}))((p.quizzes || []).map((q: any) => q.id === p.renamingQuiz.id ? { ...q, title: (p.renameTitle || "").trim() } : q));
+                      const newTitle = (p.renameTitle || "").trim();
+                      (p.setQuizzes || (() => {}))((p.quizzes || []).map((q: any) => q.id === p.renamingQuiz.id ? { ...q, title: newTitle } : q));
                       // Sync rename to Neon if logged in
                       const neonId = p.renamingQuiz.neonId ?? p.renamingQuiz.id;
                       if (p.firebaseUser && neonId && !String(neonId).startsWith("local_")) {
                         (p.updateMobileQuiz || (() => {}))({
                           userId: p.firebaseUser?.uid,
                           quizId: neonId,
-                          title: (p.renameTitle || "").trim()
+                          title: newTitle
                         }).catch((err: any) => console.warn("[NeonSync] quiz rename failed:", err));
+                      }
+                      if (p.setViewingInsightsQuiz) {
+                        p.setViewingInsightsQuiz((prev: any) => prev && (prev.id === p.renamingQuiz.id || prev.id === neonId) ? { ...prev, title: newTitle } : prev);
+                      }
+                      if (p.setActiveSession) {
+                        p.setActiveSession((prev: any) => prev && (prev.quizId === p.renamingQuiz.id || prev.quizId === neonId) ? { ...prev, quizTitle: newTitle } : prev);
+                      }
+                      if (p.setSelectedQuiz) {
+                        p.setSelectedQuiz((prev: any) => prev && (prev.id === p.renamingQuiz.id || prev.id === neonId) ? { ...prev, title: newTitle } : prev);
                       }
                       (p.setRenamingQuiz || (() => {}))(null);
                       (p.setRenameTitle || (() => {}))("");
