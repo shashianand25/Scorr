@@ -3560,21 +3560,35 @@ export default function HomeScreen() {
       // ── Helper: wait for connection to resume (max 30s) ─────────────────
       const waitForConnection = (): Promise<void> => {
         return new Promise((resolve, reject) => {
+          let resolved = false;
+          // Use `let` so the callback can reference it even if NetInfo fires synchronously
+          let unsubscribe: (() => void) | null = null;
+
+          const cleanup = () => {
+            if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+          };
+
           const deadline = setTimeout(() => {
-            unsubscribe();
-            reject(new Error("Connection lost during generation. Please check your internet and try again."));
+            cleanup();
+            if (!resolved) {
+              resolved = true;
+              reject(new Error("Connection lost during generation. Please check your internet and try again."));
+            }
           }, 30000);
-          const unsubscribe = NetInfo.addEventListener(state => {
+
+          unsubscribe = NetInfo.addEventListener(state => {
             const connected = state.isConnected && state.isInternetReachable !== false;
-            if (connected) {
+            if (connected && !resolved) {
+              resolved = true;
               clearTimeout(deadline);
-              unsubscribe();
+              cleanup();
               // Small delay to let connection stabilise
               setTimeout(resolve, 800);
             }
           });
         });
       };
+
 
       // ── Resilient fetchChunk: auto-pause and retry once on network drop ─
       const fetchChunkWithRetry = async (chunk: string, signal?: AbortSignal, isRetry = false): Promise<string> => {
