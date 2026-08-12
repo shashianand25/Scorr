@@ -866,12 +866,17 @@ export default function HomeScreen() {
   }, []);
 
   // ── Screen transition: fade-in whenever the active tab changes ──────────
+  const isFirstRender = useRef(true);
   const screenFadeAnim = useRef(new Animated.Value(1)).current;
   useEffect(() => {
-    screenFadeAnim.setValue(0);
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    screenFadeAnim.setValue(0.3);
     Animated.timing(screenFadeAnim, {
       toValue: 1,
-      duration: 200,
+      duration: 180,
       easing: Easing.out(Easing.ease),
       useNativeDriver: true,
     }).start();
