@@ -67,10 +67,10 @@
         "@sentry/react-native/expo",
         {
           "organization": "radium230s-organization",
-          "project": "scorr"
+          "project": "scorr",
+          "autoUploadSourceMaps": false
         }
-      ],
-      "@sentry/react-native"
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
