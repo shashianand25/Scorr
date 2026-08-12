@@ -40,6 +40,7 @@ import MaskedView from '@react-native-masked-view/masked-view';
 import { Buffer } from "buffer";
 import * as mammoth from "mammoth/mammoth.browser.js";
 import { signInWithGoogle, signInWithEmail, signUpWithEmail, signOutUser, onAuth, deleteAccount, resetPassword, type User } from "../lib/firebase";
+import * as Sentry from "@sentry/react-native";
 import { syncUserToNeon, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz, deleteUserFromNeon, sendFeedback, saveBattleHistory, fetchBattleHistory, parsePdfFromBackend, parsePptFromBackend, fetchGeminiKey, fetchAppConfig, fetchSharedQuiz, checkAiDailyLimit, type AppConfig } from "../lib/api";
 import { getUserErrorMessage } from "../utils/errors";
 import { createBattleRoom, joinBattleRoom, updateBattleScore, finishBattle, markPlayerFinished, listenToBattleRoom, getBattleRoom, type BattleRoom } from "../lib/multiplayer";
@@ -99,10 +100,11 @@ const STEPS = [
   { icon: "shuffle-outline",       label: "Shuffling answers" },
 ] as const;
 
-function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true, generationTimeoutMs = 60000 }: { onCancel?: () => void; documentCharCount?: number; isDark?: boolean; generationTimeoutMs?: number }) {
+function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true, generationTimeoutMs = 60000, connectionLost = false }: { onCancel?: () => void; documentCharCount?: number; isDark?: boolean; generationTimeoutMs?: number; connectionLost?: boolean }) {
   const sway = React.useRef(new Animated.Value(0)).current;
   const blink = React.useRef(new Animated.Value(0.3)).current; // Start at 0.3
   const progress = React.useRef(new Animated.Value(0)).current;
+  const progressPausedAt = React.useRef<number | null>(null);
   const [showLongWait, setShowLongWait] = React.useState(false);
 
   React.useEffect(() => {
@@ -114,7 +116,7 @@ function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true, ge
       ])
     ).start();
 
-    // Slower blink as requested ("blinking too fast")
+    // Slower blink
     Animated.loop(
       Animated.sequence([
         Animated.timing(blink, { toValue: 1, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
@@ -138,10 +140,31 @@ function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true, ge
     return () => clearTimeout(timer);
   }, []);
 
+  // Pause/resume progress bar when connectionLost changes
+  React.useEffect(() => {
+    if (connectionLost) {
+      // Capture current value and stop animation
+      (progress as any).stopAnimation((val: number) => {
+        progressPausedAt.current = val;
+      });
+    } else if (progressPausedAt.current !== null) {
+      // Resume from where we paused
+      const remaining = Math.max(0, (1 - progressPausedAt.current) * generationTimeoutMs);
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: remaining,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: false,
+      }).start();
+      progressPausedAt.current = null;
+    }
+  }, [connectionLost]);
+
   const swayRotate = sway.interpolate({ inputRange: [-1, 0], outputRange: ["-6deg", "0deg"] });
   const swayTranslateY = sway.interpolate({ inputRange: [-1, 0], outputRange: [-5, 0] });
   
   const barWidth = progress.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] });
+  const barColor = connectionLost ? "#F59E0B" : (isDark ? "#5D45A5" : "#6366f1");
 
   return (
     <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
@@ -192,45 +215,62 @@ function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true, ge
           </Animated.View>
         </View>
 
-        {/* Blinking Text with Gradient */}
-        <Animated.View style={{ marginBottom: 20, opacity: blink }}>
-          <MaskedView
-            maskElement={
-              <View style={{ backgroundColor: 'transparent', justifyContent: 'center', alignItems: 'center' }}>
-                <Text style={{
-                  fontSize: 30, 
-                  fontWeight: "800",
-                  textAlign: "center", 
-                  lineHeight: 38,
-                }}>
-                  Generating quiz{"\n"}and flashcards...
-                </Text>
-              </View>
-            }
-            style={{ width: SCREEN_WIDTH, height: 80 }}
-          >
-            <LinearGradient
-              colors={['#5FC9FF', '#C384FF']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={{ flex: 1 }}
-            />
-          </MaskedView>
-        </Animated.View>
+        {/* Connection Lost Banner */}
+        {connectionLost ? (
+          <View style={{ marginBottom: 20, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 24, backgroundColor: "rgba(245,158,11,0.18)", borderWidth: 1, borderColor: "rgba(245,158,11,0.4)", flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Ionicons name="wifi-outline" size={18} color="#F59E0B" />
+            <Text style={{ color: "#F59E0B", fontWeight: "700", fontSize: 14 }}>Connection lost — waiting to reconnect…</Text>
+          </View>
+        ) : (
+          /* Blinking Text with Gradient */
+          <Animated.View style={{ marginBottom: 20, opacity: blink }}>
+            <MaskedView
+              maskElement={
+                <View style={{ backgroundColor: 'transparent', justifyContent: 'center', alignItems: 'center' }}>
+                  <Text style={{
+                    fontSize: 30, 
+                    fontWeight: "800",
+                    textAlign: "center", 
+                    lineHeight: 38,
+                  }}>
+                    Generating quiz{"\n"}and flashcards...
+                  </Text>
+                </View>
+              }
+              style={{ width: SCREEN_WIDTH, height: 80 }}
+            >
+              <LinearGradient
+                colors={['#5FC9FF', '#C384FF']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={{ flex: 1 }}
+              />
+            </MaskedView>
+          </Animated.View>
+        )}
 
         {/* Subtitle */}
-        <Text style={{
-          fontSize: 16, color: isDark ? "#7B88A0" : "#64748b", textAlign: "center", fontWeight: "500", lineHeight: 24, paddingHorizontal: 20, marginBottom: 50
-        }}>
-          The conversion may take a while depending on{"\n"}the size of your upload
-        </Text>
+        {!connectionLost && (
+          <Text style={{
+            fontSize: 16, color: isDark ? "#7B88A0" : "#64748b", textAlign: "center", fontWeight: "500", lineHeight: 24, paddingHorizontal: 20, marginBottom: 50
+          }}>
+            The conversion may take a while depending on{"\n"}the size of your upload
+          </Text>
+        )}
+        {connectionLost && (
+          <Text style={{
+            fontSize: 14, color: isDark ? "#7B88A0" : "#64748b", textAlign: "center", fontWeight: "500", lineHeight: 22, paddingHorizontal: 32, marginBottom: 50, marginTop: 12
+          }}>
+            Your progress is saved. Generation will resume automatically once you're back online.
+          </Text>
+        )}
 
         {/* Progress Bar Track */}
         <View style={{ width: 220, height: 4, borderRadius: 2, backgroundColor: isDark ? "#201D38" : "#e2e8f0", overflow: 'hidden' }}>
-          <Animated.View style={{ width: barWidth, height: '100%', backgroundColor: isDark ? "#5D45A5" : "#6366f1", borderRadius: 2 }} />
+          <Animated.View style={{ width: barWidth, height: '100%', backgroundColor: barColor, borderRadius: 2 }} />
         </View>
 
-        {showLongWait && (
+        {!connectionLost && showLongWait && (
           <Text style={{ marginTop: 12, color: isDark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.7)", fontSize: 14, fontWeight: "500" }}>
             Still generating questions...
           </Text>
@@ -400,8 +440,11 @@ export default function HomeScreen() {
       setFirebaseUser(user);
       if (user) {
         AsyncStorage.setItem("cachedFirebaseUser", JSON.stringify({ uid: user.uid, email: user.email, displayName: user.displayName, photoURL: user.photoURL }));
+        // Tag user in Sentry so crashes show which account was affected
+        Sentry.setUser({ id: user.uid, email: user.email || undefined, username: user.displayName || undefined });
       } else {
         AsyncStorage.removeItem("cachedFirebaseUser");
+        Sentry.setUser(null); // Clear user context on sign-out
       }
 
       if (user) {
@@ -3153,6 +3196,7 @@ export default function HomeScreen() {
   const [creationStep, setCreationStep] = useState<"setup" | "drafting">("setup");
   const [creationMode, setCreationMode] = useState<"pick" | "quiz">("pick");
   const [aiGenPhase, setAiGenPhase] = useState<null | "select" | "generating">(null);
+  const [aiGenConnectionLost, setAiGenConnectionLost] = useState(false);
   const [aiGenCharCount, setAiGenCharCount] = useState(0);
   const [pendingAiFile, setPendingAiFile] = useState<{ text: string; fileName: string } | null>(null);
 
@@ -3475,7 +3519,51 @@ export default function HomeScreen() {
 
     setAiGenCharCount(text.length);
     setAiGenPhase("generating");
+    setAiGenConnectionLost(false);
     try {
+      // ── Helper: wait for connection to resume (max 30s) ─────────────────
+      const waitForConnection = (): Promise<void> => {
+        return new Promise((resolve, reject) => {
+          const deadline = setTimeout(() => {
+            unsubscribe();
+            reject(new Error("Connection lost during generation. Please check your internet and try again."));
+          }, 30000);
+          const unsubscribe = NetInfo.addEventListener(state => {
+            const connected = state.isConnected && state.isInternetReachable !== false;
+            if (connected) {
+              clearTimeout(deadline);
+              unsubscribe();
+              // Small delay to let connection stabilise
+              setTimeout(resolve, 800);
+            }
+          });
+        });
+      };
+
+      // ── Resilient fetchChunk: auto-pause and retry once on network drop ─
+      const fetchChunkWithRetry = async (chunk: string, signal?: AbortSignal): Promise<string> => {
+        try {
+          return await fetchChunk(chunk, signal);
+        } catch (err: any) {
+          const isNetworkErr = (
+            err?.name === "AbortError" ||
+            err?.message?.toLowerCase().includes("network") ||
+            err?.message?.toLowerCase().includes("failed to fetch") ||
+            err?.message?.toLowerCase().includes("timeout") ||
+            err?.message?.toLowerCase().includes("econnrefused") ||
+            err?.message?.toLowerCase().includes("unknownhost")
+          );
+          if (!isNetworkErr) throw err;
+          // Show paused state in UI
+          setAiGenConnectionLost(true);
+          console.log("[AI Generation] Network dropped — waiting for reconnect…");
+          await waitForConnection();
+          setAiGenConnectionLost(false);
+          console.log("[AI Generation] Reconnected — resuming chunk…");
+          // Retry the chunk once after reconnection
+          return await fetchChunk(chunk);
+        }
+      };
       // Always fetch fresh config so feature flags reflect the live backend value,
       // not a potentially stale cached copy from app open.
       const { config: fetchedConfig, error } = await fetchAppConfig();
@@ -3591,7 +3679,7 @@ export default function HomeScreen() {
               const signal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout
                 ? AbortSignal.timeout(remainingMs)
                 : undefined;
-              return fetchChunk(chunk, signal);
+              return fetchChunkWithRetry(chunk, signal);
             })
           );
           results.push(...batchResults);
@@ -8876,7 +8964,7 @@ export default function HomeScreen() {
       }} />
 
       {/* ── AI Generation Screen ── */}
-      {aiGenPhase === "generating" && <AIGeneratingScreen isDark={settingsDarkMode} documentCharCount={aiGenCharCount} generationTimeoutMs={appConfig?.aiConfig?.generationTimeoutMs ?? 60000} onCancel={() => { setIsGeneratingInBackground(true); isBackgroundGen.current = true; setAiGenPhase(null); }} />}
+      {aiGenPhase === "generating" && <AIGeneratingScreen isDark={settingsDarkMode} documentCharCount={aiGenCharCount} generationTimeoutMs={appConfig?.aiConfig?.generationTimeoutMs ?? 60000} connectionLost={aiGenConnectionLost} onCancel={() => { setIsGeneratingInBackground(true); isBackgroundGen.current = true; setAiGenPhase(null); setAiGenConnectionLost(false); }} />}
 
       {/* ── Battle Modals ── */}
       {(() => {
