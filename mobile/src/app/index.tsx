@@ -41,6 +41,7 @@ import { Buffer } from "buffer";
 import * as mammoth from "mammoth/mammoth.browser.js";
 import { signInWithGoogle, signInWithEmail, signUpWithEmail, signOutUser, onAuth, deleteAccount, resetPassword, type User } from "../lib/firebase";
 import * as Sentry from "@sentry/react-native";
+import { identifyUser, clearUser, trackQuizStarted, trackQuizCompleted, trackAiGenerationStarted, trackAiGenerationSucceeded, trackAiGenerationFailed, trackQuizCreated, trackBattleStarted, trackBattleCompleted, trackShareLinkTapped } from "../lib/analytics";
 import { syncUserToNeon, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz, deleteUserFromNeon, sendFeedback, saveBattleHistory, fetchBattleHistory, parsePdfFromBackend, parsePptFromBackend, fetchGeminiKey, fetchAppConfig, fetchSharedQuiz, checkAiDailyLimit, type AppConfig } from "../lib/api";
 import { getUserErrorMessage } from "../utils/errors";
 import { createBattleRoom, joinBattleRoom, updateBattleScore, finishBattle, markPlayerFinished, listenToBattleRoom, getBattleRoom, type BattleRoom } from "../lib/multiplayer";
@@ -440,11 +441,13 @@ export default function HomeScreen() {
       setFirebaseUser(user);
       if (user) {
         AsyncStorage.setItem("cachedFirebaseUser", JSON.stringify({ uid: user.uid, email: user.email, displayName: user.displayName, photoURL: user.photoURL }));
-        // Tag user in Sentry so crashes show which account was affected
+        // Tag user in Sentry and PostHog (UID only, no PII)
         Sentry.setUser({ id: user.uid, email: user.email || undefined, username: user.displayName || undefined });
+        identifyUser(user.uid);
       } else {
         AsyncStorage.removeItem("cachedFirebaseUser");
-        Sentry.setUser(null); // Clear user context on sign-out
+        Sentry.setUser(null);
+        clearUser();
       }
 
       if (user) {
@@ -1768,6 +1771,13 @@ export default function HomeScreen() {
     setSelectedQuiz(null);
     setShowWrongReview(false);
     setActiveSession(session);
+    trackQuizStarted({
+      mode: selectionMode,
+      questionCount: session.questions.length,
+      shuffleAnswers: !!shuffleAnswers,
+      showAnswerOnSubmit: !!showAnswerOnSubmit,
+      hasTimeLimit: !!(quizTimeLimit || quizPerQuestionTimer),
+    });
   };
 
   const saveAndExitQuizSession = (exitSession: boolean = true, sessionToSave: any = activeSessionRef.current || activeSession) => {
@@ -1849,6 +1859,20 @@ export default function HomeScreen() {
 
     const attemptedCount = correctCount + wrongCount;
     const scorePct = attemptedCount > 0 ? Math.round((correctCount / attemptedCount) * 100) : 0;
+    const durationSeconds = sessionToSave.startedAt
+      ? Math.round((Date.now() - sessionToSave.startedAt) / 1000)
+      : 0;
+    if (!sessionToSave.isBattle) {
+      trackQuizCompleted({
+        questionCount: questions.length,
+        correctCount,
+        wrongCount,
+        skippedCount,
+        mode: sessionToSave.selectionMode || "all",
+        durationSeconds,
+        scorePct,
+      });
+    }
     const targetAttemptId = sessionToSave.targetAttemptId;
     const retryOfAttemptNum = sessionToSave.retryOfAttemptNum;
     // Always create a new attempt entry — never modify the original score
@@ -3520,6 +3544,7 @@ export default function HomeScreen() {
     setAiGenCharCount(text.length);
     setAiGenPhase("generating");
     setAiGenConnectionLost(false);
+    const _aiGenStartMs = Date.now();
     try {
       // ── Helper: wait for connection to resume (max 30s) ─────────────────
       const waitForConnection = (): Promise<void> => {
@@ -3754,8 +3779,8 @@ export default function HomeScreen() {
             const bgResults: string[] = [];
             for (let i = 0; i < remainingChunks.length; i += CONCURRENCY) {
               const batch = remainingChunks.slice(i, i + CONCURRENCY);
-              // No timeout signal — these have already waited 70s, let them finish
-              const batchResults = await Promise.all(batch.map(chunk => fetchChunk(chunk)));
+              // Use fetchChunkWithRetry so network-drop pause/resume works in background too
+              const batchResults = await Promise.all(batch.map(chunk => fetchChunkWithRetry(chunk)));
               bgResults.push(...batchResults);
             }
             const bgParsed = parseQstText(bgResults.join("\n"));
@@ -3786,8 +3811,8 @@ export default function HomeScreen() {
               console.log(`[AI Background] Appended ${extraQuestions.length} extra question(s) to quiz ${localId}`);
             }
           } catch (bgErr) {
-            // Silent failure — user already has a working quiz, no need to alarm them
-            console.warn("[AI Background] Background chunk generation failed silently:", bgErr);
+            // Silent failure — user already has a working quiz
+            console.error("[AI Background] Background chunk generation failed:", bgErr);
           }
         })();
       } else {
