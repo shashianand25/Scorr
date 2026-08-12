@@ -62,15 +62,7 @@
       "expo-audio",
       "@react-native-google-signin/google-signin",
       "expo-localization",
-      "expo-asset",
-      [
-        "@sentry/react-native/expo",
-        {
-          "organization": "radium230s-organization",
-          "project": "scorr",
-          "autoUploadSourceMaps": false
-        }
-      ]
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,
