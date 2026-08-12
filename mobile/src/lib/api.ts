@@ -19,10 +19,11 @@ const BASE_URL = "https://api.scorrapp.com";
 // ── Helpers ────────────────────────────────────────────────────────────
 async function apiFetch<T>(
   path: string,
-  options?: RequestInit
+  options?: RequestInit & { timeoutMs?: number }
 ): Promise<{ data: T | null; error: string | null }> {
+  const timeout = options?.timeoutMs ?? 6000; // 6-second timeout for fast failure on dead networks
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 60000); // 60-second timeout to allow for Gemini generation
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
 
   let responseClone: Response | null = null;
   try {
@@ -192,6 +193,8 @@ export interface BattleHistoryEvent {
   won: boolean;
   my_time?: number;
   opponent_time?: number;
+  questions?: any[];
+  answers?: Record<string, string[]>;
   created_at: string;
 }
 
@@ -205,6 +208,8 @@ export async function saveBattleHistory(params: {
   won: boolean;
   myTime?: number;
   opponentTime?: number;
+  questions?: any[];
+  answers?: Record<string, string[]>;
 }): Promise<{ eventId: string | null; error: string | null }> {
   const { data, error } = await apiFetch<{ eventId: string }>(
     "/api/battle-history",
@@ -415,7 +420,7 @@ export async function parsePdfFromBackend(fileUri: string, fileName: string, fil
 
     const text = await extractText(fileUri);
     if (!text || text.trim() === "") {
-      return { text: "", error: "Could not extract text from this PDF. It might be a scanned document containing only images." };
+      return { text: "", error: "Couldn't open this PDF. It may be corrupted, unsupported, or contain scanned/image-only pages." };
     }
     return { text };
   } catch (err: any) {
@@ -438,6 +443,9 @@ export async function parsePptFromBackend(fileUri: string, fileName: string): Pr
         const parsed = JSON.parse(uploadResult.body);
         if (parsed.error) msg = parsed.error;
       } catch (e) {}
+      if (uploadResult.status === 413 || msg.includes("413") || msg.toLowerCase().includes("payload_too_large") || msg.toLowerCase().includes("request entity too large")) {
+        return { text: "", error: "PPT upload limit is 4.5 MB. Try uploading as a PDF for larger files." };
+      }
       if (msg.includes("OfficeParser currently supports")) {
         return { text: "", error: "Unsupported file format. Please upload a modern Office file (.docx, .pptx) or PDF." };
       }

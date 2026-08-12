@@ -231,8 +231,8 @@ function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true, ge
         </View>
 
         {showLongWait && (
-          <Text style={{ marginTop: 12, color: isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.4)", fontSize: 13, fontStyle: 'italic' }}>
-            Taking longer than usual...
+          <Text style={{ marginTop: 12, color: isDark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.7)", fontSize: 14, fontWeight: "500" }}>
+            Still generating questions...
           </Text>
         )}
 
@@ -590,19 +590,21 @@ export default function HomeScreen() {
                 
                 // Add server history (map DB snake_case back to camelCase)
                 battleHistoryRes.history.forEach((h: any) => {
-                  if (!mergedMap.has(h.room_code)) {
-                    mergedMap.set(h.room_code, {
-                      date: new Date(h.created_at).getTime(),
-                      roomCode: h.room_code,
-                      quizTitle: h.quiz_title,
-                      myScore: h.my_score,
-                      opponentScore: h.opponent_score,
-                      opponentName: h.opponent_name,
-                      won: h.won,
-                      myTime: h.my_time,
-                      opponentTime: h.opponent_time
-                    });
-                  }
+                  const key = h.room_code || `${new Date(h.created_at).getTime()}_${h.quiz_title}`;
+                  const existing = mergedMap.get(key);
+                  mergedMap.set(key, {
+                    date: new Date(h.created_at).getTime(),
+                    roomCode: h.room_code,
+                    quizTitle: h.quiz_title,
+                    myScore: h.my_score,
+                    opponentScore: h.opponent_score,
+                    opponentName: h.opponent_name,
+                    won: h.won,
+                    myTime: h.my_time,
+                    opponentTime: h.opponent_time,
+                    questions: (h.questions && h.questions.length > 0) ? h.questions : existing?.questions,
+                    answers: (h.answers && Object.keys(h.answers).length > 0) ? h.answers : existing?.answers
+                  });
                 });
                 
                 const mergedArray = Array.from(mergedMap.values())
@@ -693,7 +695,7 @@ export default function HomeScreen() {
     });
     // Load battle history and pending battles
     AsyncStorage.multiGet(["battle_history", "pending_battles"]).then(async ([[_key1, histVal], [_key2, pendVal]]) => {
-      let loadedHistory = [];
+      let loadedHistory: any[] = [];
       if (histVal) {
         try { 
           loadedHistory = JSON.parse(histVal); 
@@ -703,7 +705,7 @@ export default function HomeScreen() {
 
       if (pendVal) {
         try {
-          let pending = JSON.parse(pendVal) as {code: string, isHost: boolean}[];
+          let pending = JSON.parse(pendVal) as {code: string, isHost: boolean, questions?: any[], answers?: Record<string, string[]>}[];
           let updatedPending = [...pending];
           let historyUpdated = false;
 
@@ -726,8 +728,21 @@ export default function HomeScreen() {
                 effectiveWin = myTime < oppTime;
               }
 
-              const entry = { date: Date.now(), quizTitle: room.quizTitle || "", myScore, opponentScore: oppScore, opponentName: oppName, won: effectiveWin, myTime: myTime !== Infinity ? myTime : undefined, opponentTime: oppTime !== Infinity ? oppTime : undefined };
-              loadedHistory = [...loadedHistory, entry].slice(-50);
+              const entry = {
+                date: Date.now(),
+                roomCode: pb.code,
+                quizTitle: room.quizTitle || "",
+                myScore,
+                opponentScore: oppScore,
+                opponentName: oppName,
+                won: effectiveWin,
+                myTime: myTime !== Infinity ? myTime : undefined,
+                opponentTime: oppTime !== Infinity ? oppTime : undefined,
+                questions: pb.questions || [],
+                answers: pb.answers || {}
+              };
+              const filtered = loadedHistory.filter((p: any) => p.roomCode !== pb.code);
+              loadedHistory = [...filtered, entry].slice(-50);
               historyUpdated = true;
               updatedPending = updatedPending.filter(p => p.code !== pb.code);
               
@@ -747,8 +762,23 @@ export default function HomeScreen() {
                     effectiveWin = myTime < oppTime;
                   }
                   
+                  const entry = {
+                    date: Date.now(),
+                    roomCode: pb.code,
+                    quizTitle: data.quizTitle || "",
+                    myScore,
+                    opponentScore: oppScore,
+                    opponentName: oppName,
+                    won: effectiveWin,
+                    myTime: myTime !== Infinity ? myTime : undefined,
+                    opponentTime: oppTime !== Infinity ? oppTime : undefined,
+                    questions: pb.questions || [],
+                    answers: pb.answers || {}
+                  };
+
                   setBattleHistory(prev => {
-                    const next = [...prev, { date: Date.now(), quizTitle: data.quizTitle || "", myScore, opponentScore: oppScore, opponentName: oppName, won: effectiveWin, myTime: myTime !== Infinity ? myTime : undefined, opponentTime: oppTime !== Infinity ? oppTime : undefined }].slice(-50);
+                    const filtered = prev.filter((p: any) => p.roomCode !== pb.code);
+                    const next = [...filtered, entry].slice(-50);
                     AsyncStorage.setItem("battle_history", JSON.stringify(next));
                     return next;
                   });
@@ -806,7 +836,19 @@ export default function HomeScreen() {
   const [battleRangeStart, setBattleRangeStart] = useState<number>(1);
   const [battleRangeEnd, setBattleRangeEnd] = useState<number>(5);
   const [showBattleHistory, setShowBattleHistory] = useState(false);
-  const [battleHistory, setBattleHistory] = useState<Array<{date: number, quizTitle: string, myScore: number, opponentScore: number, opponentName: string, won: boolean, myTime?: number, opponentTime?: number}>>([]);
+  const [battleHistory, setBattleHistory] = useState<Array<{
+    date: number;
+    quizTitle: string;
+    myScore: number;
+    opponentScore: number;
+    opponentName: string;
+    won: boolean;
+    myTime?: number;
+    opponentTime?: number;
+    roomCode?: string;
+    questions?: any[];
+    answers?: Record<string, string[]>;
+  }>>([]);
   const [battleConnError, setBattleConnError] = useState("");
   const [battleCreating, setBattleCreating] = useState(false);
   const [battleTimePerQuestion, setBattleTimePerQuestion] = useState<number | null>(null); // null = no limit
@@ -1007,8 +1049,19 @@ export default function HomeScreen() {
   const [customToast, setCustomToast] = useState<{ message: string, icon: any, color: string } | null>(null);
 
   useEffect(() => {
+    NetInfo.configure({
+      reachabilityUrl: 'https://clients3.google.com/generate_204',
+      reachabilityTest: async (response) => response.status === 204 || response.status === 200,
+      reachabilityLongTimeout: 8 * 1000,
+      reachabilityShortTimeout: 2 * 1000,
+      reachabilityRequestTimeout: 2500,
+      shouldFetchWiFiSSID: false,
+    });
+
     const unsubscribe = NetInfo.addEventListener(state => {
-      setIsConnected(state.isConnected ?? true);
+      // isConnected is true for local wifi without WAN; isInternetReachable === false means no actual internet
+      const reachable = state.isConnected === true && state.isInternetReachable !== false;
+      setIsConnected(reachable);
     });
     return () => unsubscribe();
   }, []);
@@ -1603,11 +1656,13 @@ export default function HomeScreen() {
   const handleStartQuiz = () => {
     if (!selectedQuiz) return;
     
-    if (savedSessions[selectedQuiz.id]) {
-      setActiveSession(savedSessions[selectedQuiz.id]);
-      setSelectedQuiz(null);
-      return;
-    }
+    // Clear any previously paused session for this quiz so the newly configured preset and feedback settings apply
+    setSavedSessions(prev => {
+      if (!prev[selectedQuiz.id]) return prev;
+      const next = { ...prev };
+      delete next[selectedQuiz.id];
+      return next;
+    });
 
     let qsList = selectedQuiz.questionsList;
     if (!qsList || qsList.length === 0) {
@@ -2751,7 +2806,18 @@ export default function HomeScreen() {
   };
 
   /** Persist a battle result into local history and clear it from pending queue */
-  const saveBattleResult = (roomCode: string, myScore: number, opponentScore: number, opponentName: string, quizTitle: string, effectiveWin: boolean, myTime?: number, opponentTime?: number) => {
+  const saveBattleResult = (
+    roomCode: string,
+    myScore: number,
+    opponentScore: number,
+    opponentName: string,
+    quizTitle: string,
+    effectiveWin: boolean,
+    myTime?: number,
+    opponentTime?: number,
+    questions?: any[],
+    answers?: Record<string, string[]>
+  ) => {
     const entry = {
       date: Date.now(),
       roomCode,
@@ -2761,10 +2827,13 @@ export default function HomeScreen() {
       opponentName,
       won: effectiveWin,
       myTime,
-      opponentTime
+      opponentTime,
+      questions: questions || [],
+      answers: answers || {}
     };
     setBattleHistory(prev => {
-      const next = [...prev, entry].slice(-50);
+      const filtered = roomCode ? prev.filter((p: any) => p.roomCode !== roomCode) : prev;
+      const next = [...filtered, entry].slice(-50);
       AsyncStorage.setItem("battle_history", JSON.stringify(next));
       return next;
     });
@@ -2779,7 +2848,9 @@ export default function HomeScreen() {
         opponentName,
         won: effectiveWin,
         myTime,
-        opponentTime
+        opponentTime,
+        questions,
+        answers
       }).catch(console.error);
     }
 
@@ -2829,7 +2900,12 @@ export default function HomeScreen() {
             let pending = [];
             try { if (val) pending = JSON.parse(val); } catch {}
             if (!pending.find((p: any) => p.code === roomCode)) {
-              pending.push({ code: roomCode, isHost: host });
+              pending.push({
+                code: roomCode,
+                isHost: host,
+                questions: currentSession.questions || [],
+                answers: currentSession.answers || {}
+              });
               AsyncStorage.setItem("pending_battles", JSON.stringify(pending));
             }
           });
@@ -2881,7 +2957,7 @@ export default function HomeScreen() {
         questions: parsed.questions.length,
         category: parsed.category || "General",
         time: "Just now",
-        questionsList: parsed.questions,
+        questionsList: parsed.questions.map((q: any) => ({ ...q, answers: [...q.answers].sort(() => Math.random() - 0.5) })),
         attempts: [],
         wrongQuestions: [],
         uniqueCorrectIds: [],
@@ -3382,6 +3458,16 @@ export default function HomeScreen() {
       return;
     }
 
+    // ── Fast internet check ────────────────────────────────────────────────
+    if (!isConnected) {
+      setAiGenPhase(null);
+      Alert.alert(
+        "No Internet Connection",
+        "AI quiz generation requires an active internet connection. Please check your network and try again."
+      );
+      return;
+    }
+
     setAiGenCharCount(text.length);
     setAiGenPhase("generating");
     try {
@@ -3419,75 +3505,130 @@ export default function HomeScreen() {
 
       const aiConfig = config.aiConfig;
       const GEMINI_URL = `${aiConfig.modelUrl}?key=${aiConfig.geminiKey}`;
-      
+
+      // ── Build prompt for a single chunk ────────────────────────────────
+      const buildPromptForChunk = (chunk: string): string => {
+        const docSize = chunk.length;
+        if (!aiConfig.generationRanges || aiConfig.generationRanges.length === 0) {
+          throw new Error("AI configuration is incomplete (missing generationRanges). Please try again.");
+        }
+        const ranges = aiConfig.generationRanges;
+        const matchingRange = ranges.find((r: any) => docSize < r.max) || ranges[ranges.length - 1];
+        const minFlashcards = matchingRange.minF;
+        const expectedFlashcards = matchingRange.expF;
+        const scaleRangeBy1_3 = (rangeStr: string): string => {
+          const parts = rangeStr.split("-").map(Number);
+          if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+            return `${Math.round(parts[0] * 1.3)}-${Math.round(parts[1] * 1.3)}`;
+          }
+          return rangeStr;
+        };
+        const minMcqs = scaleRangeBy1_3(minFlashcards);
+        const expectedMcqs = scaleRangeBy1_3(expectedFlashcards);
+        if (!aiConfig.promptTemplate) {
+          throw new Error("AI configuration is incomplete (missing promptTemplate). Please check your network and try again.");
+        }
+        let prompt = aiConfig.promptTemplate.replace("[PASTE YOUR TEXT HERE]", chunk);
+        prompt = prompt.replace(/\{\{MIN_FLASHCARDS\}\}/g, minFlashcards);
+        prompt = prompt.replace(/\{\{EXPECTED_FLASHCARDS\}\}/g, expectedFlashcards);
+        prompt = prompt.replace(/\{\{MIN_MCQS\}\}/g, minMcqs);
+        prompt = prompt.replace(/\{\{EXPECTED_MCQS\}\}/g, expectedMcqs);
+        return prompt;
+      };
+
+      // ── Fetch one chunk from Gemini (with optional signal) ─────────────
+      const fetchChunk = (chunk: string, signal?: AbortSignal): Promise<string> => {
+        const prompt = buildPromptForChunk(chunk);
+        const maxOutputTokens = aiConfig.maxOutputTokens || 65536;
+        const temperature = aiConfig.temperature ?? 0.2;
+        const fallbackCtrl = new AbortController();
+        const fallbackTimer = setTimeout(() => fallbackCtrl.abort(), 25000);
+        return fetch(GEMINI_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens, temperature } }),
+          signal: signal || fallbackCtrl.signal,
+        }).then(async r => {
+          clearTimeout(fallbackTimer);
+          if (!r.ok) throw new Error((await r.json())?.error?.message || r.statusText);
+          return (await r.json())?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        }).catch(err => {
+          clearTimeout(fallbackTimer);
+          throw err;
+        });
+      };
+
       const CHUNK_SIZE = aiConfig.chunkSize || 10000;
       let chunks: string[] = [];
       for (let i = 0; i < text.length; i += CHUNK_SIZE) chunks.push(text.slice(i, i + CHUNK_SIZE));
       if (chunks.length > (aiConfig.maxChunks || 10)) chunks = chunks.slice(0, aiConfig.maxChunks || 10);
       console.log(`[AI Generation] Document split into ${chunks.length} chunk(s) (Chunk size: ${CHUNK_SIZE} chars)`);
-      // Cap parallel requests to avoid hitting Gemini rate limits when maxChunks is large
+
       const CONCURRENCY = Math.min(chunks.length, aiConfig.concurrencyLimit || 3);
+      const genStartTime = Date.now();
+      const HARD_TIMEOUT_MS = 70000;
+      let timedOutEarly = false;
+      let nextChunkIndex = 0;
       const results: string[] = [];
+
+      // ── Phase 1: Process chunks until 70s hard cutoff ──────────────────
       for (let i = 0; i < chunks.length; i += CONCURRENCY) {
+        if (Date.now() - genStartTime >= HARD_TIMEOUT_MS) {
+          timedOutEarly = true;
+          nextChunkIndex = i;
+          break;
+        }
         const batch = chunks.slice(i, i + CONCURRENCY);
-        const batchResults = await Promise.all(
-          batch.map(chunk => {
-            const docSize = chunk.length;
-            
-            if (!aiConfig.generationRanges || aiConfig.generationRanges.length === 0) {
-              throw new Error("AI configuration is incomplete (missing generationRanges). Please try again.");
-            }
-            const ranges = aiConfig.generationRanges;
-            
-            const matchingRange = ranges.find((r: any) => docSize < r.max) || ranges[ranges.length - 1];
-            const minFlashcards = matchingRange.minF;
-            const expectedFlashcards = matchingRange.expF;
-
-            const scaleRangeBy1_3 = (rangeStr: string): string => {
-              const parts = rangeStr.split("-").map(Number);
-              if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-                const low = Math.round(parts[0] * 1.3);
-                const high = Math.round(parts[1] * 1.3);
-                return `${low}-${high}`;
-              }
-              return rangeStr;
-            };
-
-            const minMcqs = scaleRangeBy1_3(minFlashcards);
-            const expectedMcqs = scaleRangeBy1_3(expectedFlashcards);
-
-            if (!aiConfig.promptTemplate) {
-              throw new Error("AI configuration is incomplete (missing promptTemplate). Please check your network and try again.");
-            }
-            let combinedPrompt = aiConfig.promptTemplate.replace("[PASTE YOUR TEXT HERE]", chunk);
-            combinedPrompt = combinedPrompt.replace(/\{\{MIN_FLASHCARDS\}\}/g, minFlashcards);
-            combinedPrompt = combinedPrompt.replace(/\{\{EXPECTED_FLASHCARDS\}\}/g, expectedFlashcards);
-            combinedPrompt = combinedPrompt.replace(/\{\{MIN_MCQS\}\}/g, minMcqs);
-            combinedPrompt = combinedPrompt.replace(/\{\{EXPECTED_MCQS\}\}/g, expectedMcqs);
-
-            const maxOutputTokens = aiConfig.maxOutputTokens || 65536;
-            const temperature = aiConfig.temperature ?? 0.2;
-
-            const fetchGen = (prompt: string) => fetch(GEMINI_URL, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens, temperature } }),
-            }).then(async r => { if (!r.ok) throw new Error((await r.json())?.error?.message || r.statusText); return (await r.json())?.candidates?.[0]?.content?.parts?.[0]?.text || ""; });
-
-            return fetchGen(combinedPrompt);
-          })
-        );
-        results.push(...batchResults);
+        try {
+          const remainingMs = Math.max(8000, HARD_TIMEOUT_MS - (Date.now() - genStartTime));
+          const batchResults = await Promise.all(
+            batch.map(chunk => {
+              const signal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout
+                ? AbortSignal.timeout(remainingMs)
+                : undefined;
+              return fetchChunk(chunk, signal);
+            })
+          );
+          results.push(...batchResults);
+          nextChunkIndex = i + CONCURRENCY;
+        } catch (batchErr) {
+          if (results.length > 0) {
+            timedOutEarly = true;
+            nextChunkIndex = i;
+            break;
+          } else {
+            throw batchErr;
+          }
+        }
       }
+
       const raw = results.join("\n");
       const parsed = parseQstText(raw);
+
       if (!parsed || (parsed.questions.length === 0 && (!parsed.flashcards || parsed.flashcards.length === 0))) {
-        throw new Error("AI didn't return any valid questions or flashcards.");
+        throw new Error("We couldn't generate enough questions. Please try again.");
       }
+      if (timedOutEarly && parsed.questions.length < 5) {
+        throw new Error("We couldn't generate enough questions. Please try again.");
+      }
+
       const localId = `ai_${Date.now()}_${Math.random().toString(36).slice(2)}`;
       const title = (parsed.title || fileName).replace(/\.[^.]+$/, "");
-      const newQuiz: any = { id: localId, title, questions: parsed.questions.length, category: "AI Generated", time: "Just now", flashcards: parsed.flashcards || [], questionsList: parsed.questions.map((q: any) => ({ ...q, answers: [...q.answers].sort(() => Math.random() - 0.5) })), attempts: [], wrongQuestions: [], uniqueCorrectIds: [] };
+      const newQuiz: any = {
+        id: localId,
+        title,
+        questions: parsed.questions.length,
+        category: "AI Generated",
+        time: "Just now",
+        flashcards: parsed.flashcards || [],
+        questionsList: parsed.questions.map((q: any) => ({ ...q, answers: [...q.answers].sort(() => Math.random() - 0.5) })),
+        attempts: [],
+        wrongQuestions: [],
+        uniqueCorrectIds: [],
+      };
       setQuizzes((prev: any[]) => [...prev, newQuiz]);
+
+      // ── Dismiss generation screen & navigate ───────────────────────────
       if (isBackgroundGen.current) {
         setBackgroundQuizReady(newQuiz);
         isBackgroundGen.current = false;
@@ -3501,12 +3642,71 @@ export default function HomeScreen() {
           setViewingInsightsQuizFromTab("home");
         }, 300);
       }
-      if (firebaseUser && neonUserReadyRef.current) {
-        const sourceText = `@title: ${title}\n@category: AI Generated\n\n` + raw;
-        createMobileQuiz({ userId: firebaseUser.uid, title, category: "AI Generated", questionCount: parsed.questions.length, sourceText }).then(({ quiz: saved, error }) => {
-          if (saved && !error) setQuizzes((prev: any[]) => prev.map((q) => q.id === localId ? { ...q, neonId: saved.id } : q));
+
+      // ── Phase 2: Kick off remaining chunks in background ───────────────
+      const remainingChunks = timedOutEarly ? chunks.slice(nextChunkIndex) : [];
+      if (remainingChunks.length > 0) {
+        // Show toast: quiz is ready, more coming
+        setCustomToast({
+          message: `Created ${parsed.questions.length} questions. More are on the way…`,
+          icon: "time-outline",
+          color: "#6366f1",
         });
+        setTimeout(() => setCustomToast(null), 5000);
+
+        // Detached background Promise — no await, never blocks UI
+        (async () => {
+          try {
+            console.log(`[AI Background] Continuing ${remainingChunks.length} remaining chunk(s)…`);
+            const bgResults: string[] = [];
+            for (let i = 0; i < remainingChunks.length; i += CONCURRENCY) {
+              const batch = remainingChunks.slice(i, i + CONCURRENCY);
+              // No timeout signal — these have already waited 70s, let them finish
+              const batchResults = await Promise.all(batch.map(chunk => fetchChunk(chunk)));
+              bgResults.push(...batchResults);
+            }
+            const bgParsed = parseQstText(bgResults.join("\n"));
+            const extraQuestions = bgParsed?.questions || [];
+            if (extraQuestions.length > 0) {
+              setQuizzes(prev => prev.map(q => {
+                if (q.id !== localId) return q;
+                const merged = [
+                  ...q.questionsList,
+                  ...extraQuestions.map((eq: any) => ({ ...eq, answers: [...eq.answers].sort(() => Math.random() - 0.5) })),
+                ];
+                return { ...q, questionsList: merged, questions: merged.length };
+              }));
+              // Sync updated quiz to Neon if logged in
+              if (firebaseUser && neonUserReadyRef.current) {
+                const allRaw = results.concat(bgResults).join("\n");
+                const sourceText = `@title: ${title}\n@category: AI Generated\n\n` + allRaw;
+                createMobileQuiz({ userId: firebaseUser.uid, title, category: "AI Generated", questionCount: parsed.questions.length + extraQuestions.length, sourceText }).then(({ quiz: saved, error }) => {
+                  if (saved && !error) setQuizzes(prev => prev.map(q => q.id === localId ? { ...q, neonId: saved.id } : q));
+                });
+              }
+              setCustomToast({
+                message: `✨ ${extraQuestions.length} more question${extraQuestions.length !== 1 ? "s" : ""} added to your quiz!`,
+                icon: "add-circle",
+                color: "#10b981",
+              });
+              setTimeout(() => setCustomToast(null), 4500);
+              console.log(`[AI Background] Appended ${extraQuestions.length} extra question(s) to quiz ${localId}`);
+            }
+          } catch (bgErr) {
+            // Silent failure — user already has a working quiz, no need to alarm them
+            console.warn("[AI Background] Background chunk generation failed silently:", bgErr);
+          }
+        })();
+      } else {
+        // All chunks completed within 70s — standard Neon sync
+        if (firebaseUser && neonUserReadyRef.current) {
+          const sourceText = `@title: ${title}\n@category: AI Generated\n\n` + raw;
+          createMobileQuiz({ userId: firebaseUser.uid, title, category: "AI Generated", questionCount: parsed.questions.length, sourceText }).then(({ quiz: saved, error }) => {
+            if (saved && !error) setQuizzes((prev: any[]) => prev.map((q) => q.id === localId ? { ...q, neonId: saved.id } : q));
+          });
+        }
       }
+
     } catch (err: any) {
       if (!isBackgroundGen.current) {
         setAiGenPhase(null);
@@ -3516,13 +3716,16 @@ export default function HomeScreen() {
         setIsGeneratingInBackground(false);
       }
       let errMsg = err.message || "Unknown error";
-      if (errMsg.includes("generativelanguage.googleapis.com") || errMsg.includes("UnknownHostException") || errMsg.includes("Network request failed") || errMsg.toLowerCase().includes("failed to fetch") || errMsg.includes("Failed to connect to server")) {
-         errMsg = "Failed to connect to server. Please check your internet connection.";
+      if (errMsg.includes("couldn't generate enough questions")) {
+        errMsg = "We couldn't generate enough questions. Please try again.";
+      } else if (errMsg.includes("generativelanguage.googleapis.com") || errMsg.includes("UnknownHostException") || errMsg.includes("Network request failed") || errMsg.toLowerCase().includes("failed to fetch") || errMsg.includes("Failed to connect to server")) {
+        errMsg = "Failed to connect to server. Please check your internet connection.";
       }
       if (Platform.OS === "web") alert("AI generation failed: " + errMsg);
       else Alert.alert("Generation Failed", typeof __DEV__ !== 'undefined' && __DEV__ ? errMsg : getUserErrorMessage(errMsg));
     }
   };
+
 
   const updateDraftPrompt = (text: string) => {
     const next = [...draftQuestions];
@@ -4032,7 +4235,9 @@ export default function HomeScreen() {
               else if (myScore === oppScore) {
                 effectiveWin = myTime < oppTime;
               }
-              saveBattleResult(code, myScore, oppScore, oppName, data.quizTitle || "", effectiveWin, myTime !== Infinity ? myTime : undefined, oppTime !== Infinity ? oppTime : undefined);
+              const qList = activeSessionRef.current?.questions || activeSession?.questions || [];
+              const aMap = activeSessionRef.current?.answers || activeSession?.answers || {};
+              saveBattleResult(code, myScore, oppScore, oppName, data.quizTitle || "", effectiveWin, myTime !== Infinity ? myTime : undefined, oppTime !== Infinity ? oppTime : undefined, qList, aMap);
               setBattlePopup({ myScore, opponentScore: oppScore, opponentName: oppName, won: effectiveWin, myTime, opponentTime: oppTime });
               if (effectiveWin) triggerConfettiBurst();
               unsubscribe();
@@ -4204,7 +4409,9 @@ export default function HomeScreen() {
               onPress={() => {
                 const myTimeMs = activeSession.isHost ? (battleRoomState?.hostTime ?? Infinity) : (battleRoomState?.guestTime ?? Infinity);
                 const oppTimeMs = activeSession.isHost ? (battleRoomState?.guestTime ?? Infinity) : (battleRoomState?.hostTime ?? Infinity);
-                saveBattleResult(activeSession.battleRoomCode, myScore, opponentScore, opponentName, activeSession.quizTitle || "", effectiveWin, myTimeMs !== Infinity ? myTimeMs : undefined, oppTimeMs !== Infinity ? oppTimeMs : undefined);
+                const qList = activeSession.questions || [];
+                const aMap = activeSession.answers || {};
+                saveBattleResult(activeSession.battleRoomCode, myScore, opponentScore, opponentName, activeSession.quizTitle || "", effectiveWin, myTimeMs !== Infinity ? myTimeMs : undefined, oppTimeMs !== Infinity ? oppTimeMs : undefined, qList, aMap);
                 exitBattle();
               }}
               style={({ pressed }) => [{
@@ -8505,7 +8712,16 @@ export default function HomeScreen() {
       <Modal visible={showWrongReview || !!viewingReportCardData} animationType="slide" transparent={false} onRequestClose={() => { setShowWrongReview(false); setViewingReportCardData(null); setSnapshotReviewData([]); }}>
         <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#0b1021" : "#f8fafc" }}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 24, paddingTop: 60, paddingBottom: 20, borderBottomWidth: 1, borderBottomColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
-            <Text style={{ fontSize: 20, fontWeight: "600", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Review Answers</Text>
+            <View style={{ flex: 1, marginRight: 12 }}>
+              <Text style={{ fontSize: 20, fontWeight: "600", color: settingsDarkMode ? "#ffffff" : "#111827" }} numberOfLines={1}>
+                {viewingReportCardData?.quiz?.title ? viewingReportCardData.quiz.title : "Review Answers"}
+              </Text>
+              {viewingReportCardData?.attempt?.score != null && (
+                <Text style={{ fontSize: 13, color: settingsDarkMode ? "#94a3b8" : "#64748b", marginTop: 2 }}>
+                  Score: {viewingReportCardData.attempt.score} pts
+                </Text>
+              )}
+            </View>
             <Pressable onPress={() => { setShowWrongReview(false); setViewingReportCardData(null); setSnapshotReviewData([]); }} style={{ padding: 8 }}>
               <Ionicons name="close" size={28} color={settingsDarkMode ? "#ffffff" : "#111827"} />
             </Pressable>
@@ -8969,20 +9185,62 @@ export default function HomeScreen() {
                 renderItem={({ item }) => {
                   const d = new Date(item.date);
                   const dateStr = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                  const matchingQuiz = (quizzes || []).find((q: any) => q.title && item.quizTitle && q.title.trim().toLowerCase() === item.quizTitle.trim().toLowerCase()) || (item.quizTitle?.toLowerCase().includes("sample") ? sampleQuiz : null);
+                  const questionsList = (item.questions && item.questions.length > 0) ? item.questions : (matchingQuiz?.questionsList || []);
+                  const hasQuestions = questionsList && questionsList.length > 0;
+
                   return (
-                    <View style={{
-                      backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "#ffffff",
-                      borderRadius: 16, padding: 16,
-                      borderWidth: 1, borderColor: item.won ? (isDark ? "rgba(34,197,94,0.2)" : "rgba(34,197,94,0.15)") : cardBorder,
-                      flexDirection: "row", alignItems: "center", gap: 14,
-                    }}>
+                    <Pressable
+                      onPress={() => {
+                        try {
+                          if (hasQuestions) {
+                            const attempt = {
+                              score: item.myScore,
+                              correct: questionsList.filter((q: any) => {
+                                const selected = (item.answers || {})[q.id] || [];
+                                const correctIds = (q.answers || []).filter((a: any) => a.isCorrect).map((a: any) => a.id);
+                                return selected.length > 0 && selected.every((id: string) => correctIds.includes(id)) && selected.length === correctIds.length;
+                              }).length,
+                              date: item.date,
+                              answers: item.answers || {},
+                              questionIds: questionsList.map((q: any) => q.id),
+                            };
+                            const quiz = {
+                              id: `battle_${item.roomCode || item.date}`,
+                              title: `${item.quizTitle} (vs ${item.opponentName})`,
+                              questionsList: questionsList,
+                            };
+                            setViewingReportCardData({ attempt, quiz });
+                          } else {
+                            Alert.alert(
+                              "Report Card",
+                              "Detailed answer breakdowns aren't available for battles completed before this update."
+                            );
+                          }
+                        } catch (err: any) {
+                          console.error("Failed to open battle report card:", err);
+                          Alert.alert("Error", typeof __DEV__ !== 'undefined' && __DEV__ ? err.message : "Couldn't load report card for this battle. Please try again.");
+                        }
+                      }}
+                      style={({ pressed }) => [{
+                        backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "#ffffff",
+                        borderRadius: 16, padding: 16,
+                        borderWidth: 1, borderColor: item.won ? (isDark ? "rgba(34,197,94,0.2)" : "rgba(34,197,94,0.15)") : cardBorder,
+                        flexDirection: "row", alignItems: "center", gap: 14,
+                      }, pressed && { opacity: 0.8, transform: [{ scale: 0.99 }] }]}
+                    >
                       <Text style={{ fontSize: 28 }}>{item.won ? "🏆" : "💀"}</Text>
                       <View style={{ flex: 1 }}>
                         <Text style={{ fontSize: 14, fontWeight: "700", color: txt, marginBottom: 2 }} numberOfLines={1}>{item.quizTitle}</Text>
                         <Text style={{ fontSize: 12, color: muted }}>vs {item.opponentName} · {dateStr}</Text>
+                        {hasQuestions && (
+                          <Text style={{ fontSize: 11, color: isDark ? "#818cf8" : "#6366f1", fontWeight: "600", marginTop: 3 }}>
+                            Tap to review answers →
+                          </Text>
+                        )}
                       </View>
                       <View style={{ alignItems: "flex-end", gap: 4 }}>
-                <View style={{ backgroundColor: item.won ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.12)",
+                        <View style={{ backgroundColor: item.won ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.12)",
                           borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 }}>
                           <Text style={{ fontSize: 11, fontWeight: "800", color: item.won ? "#22c55e" : "#ef4444" }}>
                             {item.won ? "WIN" : "LOSS"}
@@ -8995,7 +9253,10 @@ export default function HomeScreen() {
                           </Text>
                         )}
                       </View>
-                    </View>
+                      {hasQuestions && (
+                        <Ionicons name="chevron-forward" size={16} color={muted} style={{ marginLeft: 2 }} />
+                      )}
+                    </Pressable>
                   );
                 }}
               />
