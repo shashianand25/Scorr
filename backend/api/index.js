@@ -10,7 +10,32 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 const app = express();
 const resend = new Resend(process.env.RESEND_API_KEY);
-app.use(cors());
+const allowedOrigins = [
+  'https://scorrapp.com',
+  'https://www.scorrapp.com',
+  'https://api.scorrapp.com',
+  /^https:\/\/[a-zA-Z0-9-]+\.vercel\.app$/,
+  /^http:\/\/localhost(:\d+)?$/,
+  /^http:\/\/127\.0\.0\.1(:\d+)?$/,
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like native mobile apps, curl, server-to-server)
+    if (!origin) return callback(null, true);
+
+    const isAllowed = allowedOrigins.some(pattern =>
+      typeof pattern === 'string' ? pattern === origin : pattern.test(origin)
+    );
+
+    if (isAllowed) {
+      return callback(null, true);
+    }
+
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+}));
 app.use(express.json({ limit: `${process.env.JSON_BODY_LIMIT_MB || '10'}mb` }));
 
 // Initialize Postgres connection pool
@@ -189,14 +214,27 @@ app.get('/api/quiz-history', async (req, res) => {
 
 // ── Battle History ───────────────────────────────────────────────────────
 app.post('/api/battle-history', async (req, res) => {
-  const { userId, roomCode, quizTitle, myScore, opponentScore, opponentName, won, myTime, opponentTime } = req.body;
+  const { userId, roomCode, quizTitle, myScore, opponentScore, opponentName, won, myTime, opponentTime, questions, answers } = req.body;
   const eventId = generateId();
   
   try {
     await pool.query(
-      `INSERT INTO battle_history (id, user_id, room_code, quiz_title, my_score, opponent_score, opponent_name, won, my_time, opponent_time) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-      [eventId, userId, roomCode, quizTitle, myScore, opponentScore, opponentName, won, myTime || null, opponentTime || null]
+      `INSERT INTO battle_history (id, user_id, room_code, quiz_title, my_score, opponent_score, opponent_name, won, my_time, opponent_time, questions, answers) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+      [
+        eventId,
+        userId,
+        roomCode,
+        quizTitle,
+        myScore,
+        opponentScore,
+        opponentName,
+        won,
+        myTime || null,
+        opponentTime || null,
+        JSON.stringify(questions || []),
+        JSON.stringify(answers || {})
+      ]
     );
     res.json({ eventId });
   } catch (err) {
@@ -212,7 +250,12 @@ app.get('/api/battle-history', async (req, res) => {
       `SELECT * FROM battle_history WHERE user_id = $1 ORDER BY created_at ASC LIMIT $2`,
       [userId, parseInt(limit)]
     );
-    res.json({ history: result.rows });
+    const history = result.rows.map(r => ({
+      ...r,
+      questions: typeof r.questions === 'string' ? JSON.parse(r.questions) : (r.questions || []),
+      answers: typeof r.answers === 'string' ? JSON.parse(r.answers) : (r.answers || {})
+    }));
+    res.json({ history });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
