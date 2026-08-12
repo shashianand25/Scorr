@@ -3577,19 +3577,22 @@ export default function HomeScreen() {
       };
 
       // ── Resilient fetchChunk: auto-pause and retry once on network drop ─
-      const fetchChunkWithRetry = async (chunk: string, signal?: AbortSignal): Promise<string> => {
+      const fetchChunkWithRetry = async (chunk: string, signal?: AbortSignal, isRetry = false): Promise<string> => {
         try {
           return await fetchChunk(chunk, signal);
         } catch (err: any) {
+          // Don't retry if this was already a retry attempt, or if it was an intentional cancel (user pressed back)
+          if (isRetry) throw err;
+          const msg = err?.message?.toLowerCase() ?? "";
           const isNetworkErr = (
-            err?.name === "AbortError" ||
-            err?.message?.toLowerCase().includes("network") ||
-            err?.message?.toLowerCase().includes("failed to fetch") ||
-            err?.message?.toLowerCase().includes("timeout") ||
-            err?.message?.toLowerCase().includes("econnrefused") ||
-            err?.message?.toLowerCase().includes("unknownhost") ||
-            err?.message?.toLowerCase().includes("cancel") ||
-            err?.message?.toLowerCase().includes("fetch failed")
+            msg.includes("network") ||
+            msg.includes("failed to fetch") ||
+            msg.includes("fetch failed") ||
+            msg.includes("econnrefused") ||
+            msg.includes("unknownhost") ||
+            msg.includes("cancel") ||
+            // AbortError from our fallbackTimer (25s) — treat as network drop, not user cancel
+            (err?.name === "AbortError" && !signal?.aborted)
           );
           if (!isNetworkErr) throw err;
           // Show paused state in UI
@@ -3598,10 +3601,14 @@ export default function HomeScreen() {
           await waitForConnection();
           setAiGenConnectionLost(false);
           console.log("[AI Generation] Reconnected — resuming chunk…");
-          // Retry the chunk once after reconnection
-          return await fetchChunk(chunk);
+          // Retry once with a generous 60s timeout — isRetry=true prevents further loops
+          const retrySignal = typeof AbortSignal !== "undefined" && AbortSignal.timeout
+            ? AbortSignal.timeout(60000)
+            : undefined;
+          return await fetchChunkWithRetry(chunk, retrySignal, true);
         }
       };
+
       // Always fetch fresh config so feature flags reflect the live backend value,
       // not a potentially stale cached copy from app open.
       const { config: fetchedConfig, error } = await fetchAppConfig();
