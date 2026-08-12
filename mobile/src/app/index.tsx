@@ -2909,6 +2909,12 @@ export default function HomeScreen() {
       AsyncStorage.setItem("battle_history", JSON.stringify(next));
       return next;
     });
+    trackBattleCompleted({
+      won: effectiveWin,
+      myScore,
+      opponentScore,
+      questionCount: (questions || []).length,
+    });
 
     if (firebaseUser) {
       saveBattleHistory({
@@ -3366,6 +3372,10 @@ export default function HomeScreen() {
         url: shareUrl,
         title: `Share ${quiz.title}`,
       });
+      trackShareLinkTapped({
+        questionCount: quiz.questions || quiz.questionCount || 0,
+        isAiGenerated: quiz.category === "AI Generated",
+      });
       
     } catch (err: any) {
       console.warn("Share error:", err);
@@ -3484,6 +3494,7 @@ export default function HomeScreen() {
     setCreationStep("setup");
     
     setShowQuizCreatedModal({ title: newQuiz.title, count: newQuiz.questions });
+    trackQuizCreated({ source: "manual", questionCount: newQuiz.questions });
     setActiveTab("home");
 
     console.log("[NeonSync-Manual] Saving manually created quiz:", newQuiz.title);
@@ -3576,7 +3587,9 @@ export default function HomeScreen() {
             err?.message?.toLowerCase().includes("failed to fetch") ||
             err?.message?.toLowerCase().includes("timeout") ||
             err?.message?.toLowerCase().includes("econnrefused") ||
-            err?.message?.toLowerCase().includes("unknownhost")
+            err?.message?.toLowerCase().includes("unknownhost") ||
+            err?.message?.toLowerCase().includes("cancel") ||
+            err?.message?.toLowerCase().includes("fetch failed")
           );
           if (!isNetworkErr) throw err;
           // Show paused state in UI
@@ -3681,6 +3694,7 @@ export default function HomeScreen() {
       for (let i = 0; i < text.length; i += CHUNK_SIZE) chunks.push(text.slice(i, i + CHUNK_SIZE));
       if (chunks.length > (aiConfig.maxChunks || 10)) chunks = chunks.slice(0, aiConfig.maxChunks || 10);
       console.log(`[AI Generation] Document split into ${chunks.length} chunk(s) (Chunk size: ${CHUNK_SIZE} chars)`);
+      trackAiGenerationStarted({ charCount: text.length, chunkCount: chunks.length });
 
       const CONCURRENCY = Math.min(chunks.length, aiConfig.concurrencyLimit || 3);
       const genStartTime = Date.now();
@@ -3745,6 +3759,13 @@ export default function HomeScreen() {
         uniqueCorrectIds: [],
       };
       setQuizzes((prev: any[]) => [...prev, newQuiz]);
+      trackAiGenerationSucceeded({
+        questionCount: parsed.questions.length,
+        chunkCount: chunks.length,
+        durationMs: Date.now() - _aiGenStartMs,
+        hadBackgroundPhase: timedOutEarly,
+      });
+      trackQuizCreated({ source: "ai", questionCount: parsed.questions.length, flashcardCount: (parsed.flashcards || []).length });
 
       // ── Dismiss generation screen & navigate ───────────────────────────
       if (isBackgroundGen.current) {
@@ -3834,6 +3855,14 @@ export default function HomeScreen() {
         setIsGeneratingInBackground(false);
       }
       let errMsg = err.message || "Unknown error";
+      // Classify for analytics — no raw message (could contain user content)
+      const _analyticsErrType: "network" | "limit_reached" | "no_questions" | "disabled" | "unknown" =
+        errMsg.includes("Daily Limit") ? "limit_reached" :
+        errMsg.includes("couldn't generate") ? "no_questions" :
+        errMsg.includes("Temporarily Unavailable") ? "disabled" :
+        (errMsg.includes("generativelanguage") || errMsg.toLowerCase().includes("network") || errMsg.toLowerCase().includes("timeout") || errMsg.toLowerCase().includes("fetch")) ? "network" :
+        "unknown";
+      trackAiGenerationFailed({ errorType: _analyticsErrType, chunkCount: 0 });
       if (errMsg.includes("couldn't generate enough questions")) {
         errMsg = "We couldn't generate enough questions. Please try again.";
       } else if (errMsg.includes("generativelanguage.googleapis.com") || errMsg.includes("UnknownHostException") || errMsg.includes("Network request failed") || errMsg.toLowerCase().includes("failed to fetch") || errMsg.includes("Failed to connect to server") || errMsg.toLowerCase().includes("network error") || errMsg.toLowerCase().includes("timeout")) {
@@ -5050,6 +5079,11 @@ export default function HomeScreen() {
        attemptSaved: false,
        showAnswerOnSubmit: true,
        // no quizTimeLimit — battle uses per-question timer
+    });
+    trackBattleStarted({
+      questionCount: qsList.length,
+      hasTimePerQuestion: tpq != null,
+      isHost: isHostFlag,
     });
   };
 
