@@ -42,7 +42,7 @@ import * as mammoth from "mammoth/mammoth.browser.js";
 import { signInWithGoogle, signInWithEmail, signUpWithEmail, signOutUser, onAuth, deleteAccount, resetPassword, type User } from "../lib/firebase";
 import * as Sentry from "@sentry/react-native";
 import { identifyUser, clearUser, trackQuizStarted, trackQuizCompleted, trackAiGenerationStarted, trackAiGenerationSucceeded, trackAiGenerationFailed, trackQuizCreated, trackBattleStarted, trackBattleCompleted, trackShareLinkTapped } from "../lib/analytics";
-import { syncUserToNeon, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz, deleteUserFromNeon, sendFeedback, saveBattleHistory, fetchBattleHistory, parsePdfFromBackend, parsePptFromBackend, fetchGeminiKey, fetchAppConfig, fetchSharedQuiz, checkAiDailyLimit, type AppConfig } from "../lib/api";
+import { syncUserToNeon, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz, deleteUserFromNeon, sendFeedback, saveBattleHistory, fetchBattleHistory, parsePdfFromBackend, parsePptFromBackend, fetchGeminiKey, fetchAppConfig, fetchSharedQuiz, checkAiDailyLimit, sendOtpEmail, verifyOtpCode, type AppConfig } from "../lib/api";
 import { getUserErrorMessage } from "../utils/errors";
 import { createBattleRoom, joinBattleRoom, updateBattleScore, finishBattle, markPlayerFinished, listenToBattleRoom, getBattleRoom, type BattleRoom } from "../lib/multiplayer";
 import NetInfo from "@react-native-community/netinfo";
@@ -279,6 +279,60 @@ function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true, ge
 
       </View>
     </View>
+  );
+}
+
+function FullscreenBattleCountdown({ count, isDark = true }: { count: number; isDark?: boolean }) {
+  const scaleAnim = React.useRef(new Animated.Value(2.4)).current;
+  const opacityAnim = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    scaleAnim.setValue(2.4);
+    opacityAnim.setValue(0);
+
+    Animated.parallel([
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 6,
+        tension: 140,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 1,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [count]);
+
+  return (
+    <Modal visible={true} transparent={false} animationType="none" statusBarTranslucent>
+      <View style={{
+        flex: 1,
+        backgroundColor: isDark ? "#090d16" : "#080c17",
+        alignItems: "center",
+        justifyContent: "center",
+      }}>
+        <Animated.View style={{
+          transform: [{ scale: scaleAnim }],
+          opacity: opacityAnim,
+          alignItems: "center",
+          justifyContent: "center",
+        }}>
+          <Text style={{
+            fontSize: 200,
+            fontWeight: "900",
+            color: "#ffffff",
+            fontVariant: ["tabular-nums"],
+            textShadowColor: "rgba(99, 102, 241, 0.95)",
+            textShadowOffset: { width: 0, height: 0 },
+            textShadowRadius: 50,
+          }}>
+            {count}
+          </Text>
+        </Animated.View>
+      </View>
+    </Modal>
   );
 }
 
@@ -1063,6 +1117,7 @@ export default function HomeScreen() {
           }
           
           setQuizzes((prev) => [{ ...savedQuiz, sourceText: quiz.sourceText }, ...prev]);
+          trackQuizCreated({ source: "shared_link", questionCount: quiz.questionCount || 0 });
           setActiveTab("library");
           setLibraryTab("courses");
           setCustomToast({
@@ -3041,6 +3096,7 @@ export default function HomeScreen() {
         uniqueCorrectIds: [],
       };
       setQuizzes([...quizzes, newQuiz]);
+      trackQuizCreated({ source: "import", questionCount: newQuiz.questions });
       setActiveTab("insights");
       setViewingInsightsQuiz(newQuiz);
       setViewingInsightsQuizFromTab("home");
@@ -3714,10 +3770,10 @@ export default function HomeScreen() {
       let chunks: string[] = [];
       for (let i = 0; i < text.length; i += CHUNK_SIZE) chunks.push(text.slice(i, i + CHUNK_SIZE));
       if (chunks.length > (aiConfig.maxChunks || 10)) chunks = chunks.slice(0, aiConfig.maxChunks || 10);
-      console.log(`[AI Generation] Document split into ${chunks.length} chunk(s) (Chunk size: ${CHUNK_SIZE} chars)`);
+      const CONCURRENCY = Math.min(chunks.length, aiConfig.concurrencyLimit || 10);
+      console.log(`[AI Generation] Document split into ${chunks.length} chunk(s) (Chunk size: ${CHUNK_SIZE} chars | Concurrency: sending ${CONCURRENCY} chunk(s) in parallel at once)`);
       trackAiGenerationStarted({ charCount: text.length, chunkCount: chunks.length });
 
-      const CONCURRENCY = Math.min(chunks.length, aiConfig.concurrencyLimit || 3);
       const genStartTime = Date.now();
       const HARD_TIMEOUT_MS = 70000;
       let timedOutEarly = false;
@@ -3732,6 +3788,7 @@ export default function HomeScreen() {
           break;
         }
         const batch = chunks.slice(i, i + CONCURRENCY);
+        console.log(`[AI Generation] Sending batch of ${batch.length} chunk(s) in parallel at once (chunks ${i + 1}–${i + batch.length} of ${chunks.length}, concurrency limit: ${CONCURRENCY})`);
         try {
           const remainingMs = Math.max(8000, HARD_TIMEOUT_MS - (Date.now() - genStartTime));
           const batchResults = await Promise.all(
@@ -3788,6 +3845,24 @@ export default function HomeScreen() {
       });
       trackQuizCreated({ source: "ai", questionCount: parsed.questions.length, flashcardCount: (parsed.flashcards || []).length });
 
+      // ── Initial Neon sync for Phase 1 questions ───────────────────────────
+      let initialNeonId: string | null = null;
+      const initialSourceText = questionsToSourceText(title, "AI Generated", newQuiz.questionsList, newQuiz.flashcards);
+      if (firebaseUser && neonUserReadyRef.current) {
+        createMobileQuiz({
+          userId: firebaseUser.uid,
+          title,
+          category: "AI Generated",
+          questionCount: newQuiz.questions,
+          sourceText: initialSourceText,
+        }).then(({ quiz: saved, error }) => {
+          if (saved && !error) {
+            initialNeonId = saved.id;
+            setQuizzes((prev: any[]) => prev.map((q) => q.id === localId ? { ...q, neonId: saved.id } : q));
+          }
+        });
+      }
+
       // ── Dismiss generation screen & navigate ───────────────────────────
       if (isBackgroundGen.current) {
         setBackgroundQuizReady(newQuiz);
@@ -3817,10 +3892,11 @@ export default function HomeScreen() {
         // Detached background Promise — no await, never blocks UI
         (async () => {
           try {
-            console.log(`[AI Background] Continuing ${remainingChunks.length} remaining chunk(s)…`);
+            console.log(`[AI Background] Continuing ${remainingChunks.length} remaining chunk(s) (sending in parallel batches of up to ${CONCURRENCY})…`);
             const bgResults: string[] = [];
             for (let i = 0; i < remainingChunks.length; i += CONCURRENCY) {
               const batch = remainingChunks.slice(i, i + CONCURRENCY);
+              console.log(`[AI Background] Sending background batch of ${batch.length} chunk(s) in parallel at once`);
               // Use fetchChunkWithRetry so network-drop pause/resume works in background too
               const batchResults = await Promise.all(batch.map(chunk => fetchChunkWithRetry(chunk)));
               bgResults.push(...batchResults);
@@ -3828,22 +3904,60 @@ export default function HomeScreen() {
             const bgParsed = parseQstText(bgResults.join("\n"));
             const extraQuestions = bgParsed?.questions || [];
             if (extraQuestions.length > 0) {
+              let updatedQuestionsList: any[] = [];
+              let totalQuestionCount = 0;
+
               setQuizzes(prev => prev.map(q => {
-                if (q.id !== localId) return q;
+                if (q.id !== localId && q.neonId !== initialNeonId) return q;
                 const merged = [
                   ...q.questionsList,
                   ...extraQuestions.map((eq: any) => ({ ...eq, answers: [...eq.answers].sort(() => Math.random() - 0.5) })),
                 ];
+                updatedQuestionsList = merged;
+                totalQuestionCount = merged.length;
                 return { ...q, questionsList: merged, questions: merged.length };
               }));
-              // Sync updated quiz to Neon if logged in
+
+              // Also update currently viewed screens so the user sees the new questions instantly
+              setViewingInsightsQuiz((prev: any) => {
+                if (!prev || (prev.id !== localId && prev.id !== initialNeonId && prev.neonId !== initialNeonId)) return prev;
+                return { ...prev, questionsList: updatedQuestionsList, questions: totalQuestionCount };
+              });
+
+              setSelectedQuiz((prev: any) => {
+                if (!prev || (prev.id !== localId && prev.id !== initialNeonId && prev.neonId !== initialNeonId)) return prev;
+                return { ...prev, questionsList: updatedQuestionsList, questions: totalQuestionCount };
+              });
+
+              setActiveSession((prev: any) => {
+                if (!prev || (prev.quizId !== localId && prev.quizId !== initialNeonId)) return prev;
+                return { ...prev, questions: updatedQuestionsList };
+              });
+
+              // Sync updated quiz to Neon using clean questionsToSourceText format
               if (firebaseUser && neonUserReadyRef.current) {
-                const allRaw = results.concat(bgResults).join("\n");
-                const sourceText = `@title: ${title}\n@category: AI Generated\n\n` + allRaw;
-                createMobileQuiz({ userId: firebaseUser.uid, title, category: "AI Generated", questionCount: parsed.questions.length + extraQuestions.length, sourceText }).then(({ quiz: saved, error }) => {
-                  if (saved && !error) setQuizzes(prev => prev.map(q => q.id === localId ? { ...q, neonId: saved.id } : q));
-                });
+                const cleanSourceText = questionsToSourceText(title, "AI Generated", updatedQuestionsList, newQuiz.flashcards);
+                const targetNeonId = initialNeonId;
+                if (targetNeonId) {
+                  updateMobileQuiz({
+                    userId: firebaseUser.uid,
+                    quizId: targetNeonId,
+                    questionCount: totalQuestionCount,
+                    sourceText: cleanSourceText,
+                  }).catch(err => console.warn("[NeonSync-BGUpdate] failed:", err));
+                } else {
+                  createMobileQuiz({
+                    userId: firebaseUser.uid,
+                    title,
+                    category: "AI Generated",
+                    questionCount: totalQuestionCount,
+                    sourceText: cleanSourceText
+                  }).then(({ quiz: saved, error }) => {
+                    if (saved && !error) setQuizzes(prev => prev.map(q => q.id === localId ? { ...q, neonId: saved.id } : q));
+                  });
+                }
               }
+
               setCustomToast({
                 message: `✨ ${extraQuestions.length} more question${extraQuestions.length !== 1 ? "s" : ""} added to your quiz!`,
                 icon: "add-circle",
@@ -3857,14 +3971,6 @@ export default function HomeScreen() {
             console.error("[AI Background] Background chunk generation failed:", bgErr);
           }
         })();
-      } else {
-        // All chunks completed within 70s — standard Neon sync
-        if (firebaseUser && neonUserReadyRef.current) {
-          const sourceText = `@title: ${title}\n@category: AI Generated\n\n` + raw;
-          createMobileQuiz({ userId: firebaseUser.uid, title, category: "AI Generated", questionCount: parsed.questions.length, sourceText }).then(({ quiz: saved, error }) => {
-            if (saved && !error) setQuizzes((prev: any[]) => prev.map((q) => q.id === localId ? { ...q, neonId: saved.id } : q));
-          });
-        }
       }
 
     } catch (err: any) {
@@ -8502,7 +8608,23 @@ export default function HomeScreen() {
   // ── Auth view: "landing" | "email" ──────────────────────────────
   const [authView, setAuthView] = useState<"landing" | "email">("landing");
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signup");
+  const [signupStep, setSignupStep] = useState<"details" | "otp">("details");
+  const [otpCode, setOtpCode] = useState("");
+  const [otpResendCountdown, setOtpResendCountdown] = useState(0);
+  const [otpDevCode, setOtpDevCode] = useState<string | null>(null);
   const authViewAnim = useRef(new Animated.Value(0)).current; // 0=landing, 1=email
+
+  useEffect(() => {
+    if (otpResendCountdown <= 0) return;
+    const timer = setInterval(() => {
+      setOtpResendCountdown(prev => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [otpResendCountdown]);
+
+  const isValidEmail = (email: string) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  };
 
   const switchAuthView = (view: "landing" | "email") => {
     const toValue = view === "email" ? 1 : 0;
@@ -8512,34 +8634,114 @@ export default function HomeScreen() {
       easing: Easing.out(Easing.ease),
       useNativeDriver: true,
     }).start(() => setAuthView(view));
-    setAuthView(view); // update state immediately so content renders
+    setAuthView(view);
   };
 
   const openAuthScreen = () => {
     setAuthView("landing");
     authViewAnim.setValue(0);
     setAuthError(null);
+    setSignupStep("details");
+    setOtpCode("");
     setShowAuthScreen(true);
   };
 
-  const handleAuthSubmit = async () => {
+  const handleSendSignupOtp = async () => {
     setAuthError(null);
+    const name = authName.trim();
+    const email = authEmail.trim();
+    const password = authPassword;
+
+    if (!name) {
+      setAuthError("Please enter your full name.");
+      return;
+    }
+    if (!email || !isValidEmail(email)) {
+      setAuthError("Please enter a valid email address (e.g. name@domain.com).");
+      return;
+    }
+    if (!password || password.length < 6) {
+      setAuthError("Password must be at least 6 characters long.");
+      return;
+    }
+
     setAuthLoading(true);
-    if (authMode === "signup") {
-      const { error } = await signUpWithEmail(authEmail.trim(), authPassword, authName.trim());
+    const { ok, error, devCode } = await sendOtpEmail(email);
+    setAuthLoading(false);
+
+    if (!ok) {
+      setAuthError(error || "Failed to send verification code. Please check your email.");
+      return;
+    }
+
+    if (devCode) setOtpDevCode(devCode);
+    setSignupStep("otp");
+    setOtpCode("");
+    setOtpResendCountdown(30);
+  };
+
+  const handleVerifyAndSignup = async () => {
+    setAuthError(null);
+    const email = authEmail.trim();
+    const code = otpCode.trim();
+
+    if (!code || code.length < 6) {
+      setAuthError("Please enter the full 6-digit passcode sent to your email.");
+      return;
+    }
+
+    setAuthLoading(true);
+    const { valid, error: otpError } = await verifyOtpCode(email, code);
+    if (!valid) {
       setAuthLoading(false);
-      if (error) { setAuthError(error); return; }
-    } else {
-      const { error } = await signInWithEmail(authEmail.trim(), authPassword);
-      setAuthLoading(false);
-      if (error) { setAuthError(error); return; }
+      setAuthError(otpError || "Incorrect passcode. Please check your email and try again.");
+      return;
+    }
+
+    // Passcode verified! Complete Firebase Signup
+    const { error: signUpErr } = await signUpWithEmail(email, authPassword, authName.trim());
+    setAuthLoading(false);
+    if (signUpErr) {
+      setAuthError(signUpErr);
+      return;
+    }
+
+    setShowAuthScreen(false);
+    setSignupStep("details");
+    setOtpCode("");
+    setCustomToast({
+      message: "Account created successfully! Welcome to Scorrapp.",
+      icon: "checkmark-circle",
+      color: "#10b981",
+    });
+    setTimeout(() => setCustomToast(null), 4000);
+  };
+
+  const handleSigninSubmit = async () => {
+    setAuthError(null);
+    const email = authEmail.trim();
+    if (!email || !isValidEmail(email)) {
+      setAuthError("Please enter a valid email address.");
+      return;
+    }
+    if (!authPassword) {
+      setAuthError("Please enter your password.");
+      return;
+    }
+
+    setAuthLoading(true);
+    const { error } = await signInWithEmail(email, authPassword);
+    setAuthLoading(false);
+    if (error) {
+      setAuthError(error);
+      return;
     }
     setShowAuthScreen(false);
   };
 
   const handleResetPassword = async () => {
-    if (!authEmail.trim()) {
-      setAuthError("Please enter your email address to reset password.");
+    if (!authEmail.trim() || !isValidEmail(authEmail)) {
+      setAuthError("Please enter a valid email address to reset password.");
       return;
     }
     setAuthError(null);
@@ -8560,112 +8762,181 @@ export default function HomeScreen() {
       const fadeIn = authViewAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
       return (
         <Animated.View style={[styles.authRoot, { opacity: fadeIn, transform: [{ translateX: slideX }] }]}>
-          <View style={styles.authBlobTL} />
-          <View style={styles.authBlobBR} />
-
           {/* Back */}
-          <Pressable onPress={() => { switchAuthView("landing"); setAuthError(null); }} style={styles.authBackBtn}>
+          <Pressable onPress={() => { setAuthError(null); if (signupStep === "otp") setSignupStep("details"); else switchAuthView("landing"); }} style={styles.authBackBtn}>
             <Ionicons name="arrow-back" size={20} color="#ffffff" />
-            <Text style={styles.authBackText}>Back</Text>
+            <Text style={styles.authBackText}>{signupStep === "otp" ? "Change Details" : "Back"}</Text>
           </Pressable>
 
           <View style={styles.authEmailBody}>
             <Text style={styles.authBigTitle}>
-              {authMode === "signup" ? "Create account" : "Welcome back"}
+              {authMode === "signup" ? (signupStep === "otp" ? "Verify your email" : "Create account") : "Welcome back"}
             </Text>
             <Text style={styles.authBigSub}>
               {authMode === "signup"
-                ? "Start mastering any subject today"
+                ? (signupStep === "otp" ? `We sent a 6-digit passcode to ${authEmail}` : "Start mastering any subject today")
                 : "Sign in to access your quizzes"}
             </Text>
 
-            {/* Mode toggle */}
-            <View style={styles.authPillToggle}>
-              <Pressable
-                onPress={() => { setAuthMode("signup"); setAuthError(null); }}
-                style={[styles.authPillBtn, authMode === "signup" && styles.authPillBtnOn]}
-              >
-                <Text style={[styles.authPillText, authMode === "signup" && styles.authPillTextOn]}>Sign Up</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => { setAuthMode("signin"); setAuthError(null); }}
-                style={[styles.authPillBtn, authMode === "signin" && styles.authPillBtnOn]}
-              >
-                <Text style={[styles.authPillText, authMode === "signin" && styles.authPillTextOn]}>Sign In</Text>
-              </Pressable>
-            </View>
-
-            {/* Name (signup only) */}
-            {authMode === "signup" && (
-              <View style={styles.authField}>
-                <Ionicons name="person-outline" size={16} color="#8888aa" style={{ marginRight: 10 }} />
-                <TextInput
-                  style={styles.authFieldInput}
-                  placeholder="Full name"
-                  placeholderTextColor="#666688"
-                  value={authName}
-                  onChangeText={setAuthName}
-                  autoCapitalize="words"
-                />
+            {/* Mode toggle (signup details or signin) */}
+            {signupStep === "details" && (
+              <View style={styles.authPillToggle}>
+                <Pressable
+                  onPress={() => { setAuthMode("signup"); setAuthError(null); }}
+                  style={[styles.authPillBtn, authMode === "signup" && styles.authPillBtnOn]}
+                >
+                  <Text style={[styles.authPillText, authMode === "signup" && styles.authPillTextOn]}>Sign Up</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => { setAuthMode("signin"); setAuthError(null); }}
+                  style={[styles.authPillBtn, authMode === "signin" && styles.authPillBtnOn]}
+                >
+                  <Text style={[styles.authPillText, authMode === "signin" && styles.authPillTextOn]}>Sign In</Text>
+                </Pressable>
               </View>
             )}
 
-            <View style={styles.authField}>
-              <Ionicons name="mail-outline" size={16} color="#8888aa" style={{ marginRight: 10 }} />
-              <TextInput
-                style={styles.authFieldInput}
-                placeholder="Email address"
-                placeholderTextColor="#666688"
-                value={authEmail}
-                onChangeText={setAuthEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-              />
-            </View>
+            {/* Step 1: Signup Details / Signin Form */}
+            {signupStep === "details" ? (
+              <>
+                {/* Name (signup only) */}
+                {authMode === "signup" && (
+                  <View style={styles.authField}>
+                    <Ionicons name="person-outline" size={16} color="#8888aa" style={{ marginRight: 10 }} />
+                    <TextInput
+                      style={styles.authFieldInput}
+                      placeholder="Full name"
+                      placeholderTextColor="#666688"
+                      value={authName}
+                      onChangeText={setAuthName}
+                      autoCapitalize="words"
+                    />
+                  </View>
+                )}
 
-            <View style={styles.authField}>
-              <Ionicons name="lock-closed-outline" size={16} color="#8888aa" style={{ marginRight: 10 }} />
-              <TextInput
-                style={[styles.authFieldInput, { flex: 1 }]}
-                placeholder="Password"
-                placeholderTextColor="#666688"
-                value={authPassword}
-                onChangeText={setAuthPassword}
-                secureTextEntry={!showAuthPassword}
-              />
-              <Pressable onPress={() => setShowAuthPassword(!showAuthPassword)}>
-                <Ionicons name={showAuthPassword ? "eye-off-outline" : "eye-outline"} size={16} color="#8888aa" />
-              </Pressable>
-            </View>
+                <View style={styles.authField}>
+                  <Ionicons name="mail-outline" size={16} color="#8888aa" style={{ marginRight: 10 }} />
+                  <TextInput
+                    style={styles.authFieldInput}
+                    placeholder="Email address"
+                    placeholderTextColor="#666688"
+                    value={authEmail}
+                    onChangeText={(val) => { setAuthEmail(val); setAuthError(null); }}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                  />
+                </View>
 
-            {authMode === "signin" && (
-              <Pressable onPress={handleResetPassword} style={{ alignSelf: "flex-end", marginTop: -4, marginBottom: 12, marginRight: 4 }}>
-                <Text style={{ color: "#6366f1", fontSize: 13, fontWeight: "600" }}>Forgot Password?</Text>
-              </Pressable>
+                <View style={styles.authField}>
+                  <Ionicons name="lock-closed-outline" size={16} color="#8888aa" style={{ marginRight: 10 }} />
+                  <TextInput
+                    style={[styles.authFieldInput, { flex: 1 }]}
+                    placeholder="Password (min. 6 characters)"
+                    placeholderTextColor="#666688"
+                    value={authPassword}
+                    onChangeText={setAuthPassword}
+                    secureTextEntry={!showAuthPassword}
+                  />
+                  <Pressable onPress={() => setShowAuthPassword(!showAuthPassword)}>
+                    <Ionicons name={showAuthPassword ? "eye-off-outline" : "eye-outline"} size={16} color="#8888aa" />
+                  </Pressable>
+                </View>
+
+                {authMode === "signin" && (
+                  <Pressable onPress={handleResetPassword} style={{ alignSelf: "flex-end", marginTop: -4, marginBottom: 12, marginRight: 4 }}>
+                    <Text style={{ color: "#6366f1", fontSize: 13, fontWeight: "600" }}>Forgot Password?</Text>
+                  </Pressable>
+                )}
+
+                {/* Fixed-height Error Container — Prevents layout shift of the button */}
+                <View style={{ minHeight: 44, justifyContent: "center", marginVertical: 4 }}>
+                  {authError ? (
+                    <View style={styles.authErrBox}>
+                      <Ionicons name="alert-circle-outline" size={15} color="#f87171" />
+                      <Text style={styles.authErrTxt} numberOfLines={2}>{authError}</Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                <Pressable
+                  disabled={authLoading || !authEmail || !authPassword}
+                  onPress={authMode === "signup" ? handleSendSignupOtp : handleSigninSubmit}
+                  style={({ pressed }) => [
+                    styles.authBigGreenBtn,
+                    (!authEmail || !authPassword) && { opacity: 0.45 },
+                    pressed && styles.pressedScale,
+                  ]}
+                >
+                  <Text style={styles.authBigGreenBtnText}>
+                    {authLoading ? "Sending passcode…" : authMode === "signup" ? "Send Passcode →" : "Sign In"}
+                  </Text>
+                </Pressable>
+              </>
+            ) : (
+              /* Step 2: OTP Passcode Input */
+              <>
+                <View style={{ marginVertical: 14, alignItems: "center" }}>
+                  <Text style={{ fontSize: 13, color: "#94a3b8", marginBottom: 16, textAlign: "center" }}>
+                    Enter 6-digit passcode sent to{"\n"}
+                    <Text style={{ color: "#818cf8", fontWeight: "700" }}>{authEmail}</Text>
+                  </Text>
+
+                  {/* Passcode Field */}
+                  <View style={[styles.authField, { width: "100%", height: 56, justifyContent: "center", backgroundColor: "rgba(99,102,241,0.08)", borderColor: "rgba(99,102,241,0.3)" }]}>
+                    <Ionicons name="key-outline" size={20} color="#818cf8" style={{ marginRight: 12 }} />
+                    <TextInput
+                      style={[styles.authFieldInput, { fontSize: 22, fontWeight: "800", letterSpacing: 8, color: "#ffffff" }]}
+                      placeholder="000000"
+                      placeholderTextColor="rgba(255,255,255,0.2)"
+                      value={otpCode}
+                      onChangeText={(val) => { setOtpCode(val.replace(/[^0-9]/g, '')); setAuthError(null); }}
+                      keyboardType="number-pad"
+                      maxLength={6}
+                      autoFocus
+                    />
+                  </View>
+                </View>
+
+                {/* Fixed-height Error Container */}
+                <View style={{ minHeight: 44, justifyContent: "center", marginVertical: 4 }}>
+                  {authError ? (
+                    <View style={styles.authErrBox}>
+                      <Ionicons name="alert-circle-outline" size={15} color="#f87171" />
+                      <Text style={styles.authErrTxt} numberOfLines={2}>{authError}</Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                <Pressable
+                  disabled={authLoading || otpCode.length < 6}
+                  onPress={handleVerifyAndSignup}
+                  style={({ pressed }) => [
+                    styles.authBigGreenBtn,
+                    otpCode.length < 6 && { opacity: 0.45 },
+                    pressed && styles.pressedScale,
+                  ]}
+                >
+                  <Text style={styles.authBigGreenBtnText}>
+                    {authLoading ? "Verifying…" : "Verify & Complete Signup"}
+                  </Text>
+                </Pressable>
+
+                {/* Resend Passcode Row */}
+                <View style={{ flexDirection: "row", justifyContent: "center", alignItems: "center", marginTop: 10 }}>
+                  <Text style={{ fontSize: 13, color: "#8888aa" }}>Didn't receive passcode? </Text>
+                  <Pressable
+                    disabled={otpResendCountdown > 0 || authLoading}
+                    onPress={handleSendSignupOtp}
+                  >
+                    <Text style={{ fontSize: 13, fontWeight: "700", color: otpResendCountdown > 0 ? "#64748b" : "#818cf8" }}>
+                      {otpResendCountdown > 0 ? `Resend (${otpResendCountdown}s)` : "Resend Code"}
+                    </Text>
+                  </Pressable>
+                </View>
+              </>
             )}
 
-            {authError ? (
-              <View style={styles.authErrBox}>
-                <Ionicons name="alert-circle-outline" size={15} color="#f87171" />
-                <Text style={styles.authErrTxt}>{authError}</Text>
-              </View>
-            ) : null}
-
-            <Pressable
-              disabled={authLoading || !authEmail || !authPassword}
-              onPress={handleAuthSubmit}
-              style={({ pressed }) => [
-                styles.authBigGreenBtn,
-                (!authEmail || !authPassword) && { opacity: 0.45 },
-                pressed && styles.pressedScale,
-              ]}
-            >
-              <Text style={styles.authBigGreenBtnText}>
-                {authLoading ? "Please wait…" : authMode === "signup" ? "Create Account" : "Sign In"}
-              </Text>
-            </Pressable>
-
-            <Pressable onPress={() => setShowAuthScreen(false)} style={styles.authSkipRow}>
+            <Pressable onPress={() => setShowAuthScreen(false)} style={[styles.authSkipRow, { marginTop: 12 }]}>
               <Text style={styles.authSkipTxt}>Continue as guest</Text>
             </Pressable>
           </View>
@@ -8678,9 +8949,6 @@ export default function HomeScreen() {
     const fadeOut = authViewAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
     return (
       <Animated.View style={[styles.authRoot, { opacity: fadeOut, transform: [{ translateX: slideX }] }]}>
-        <View style={styles.authBlobTL} />
-        <View style={styles.authBlobBR} />
-
         {/* Hero image */}
         <View style={styles.authHeroWrap}>
           <Image
@@ -9042,6 +9310,9 @@ export default function HomeScreen() {
         quizFlatListRef, quizNumbersScrollRef, setIsImporting, pendingAiFile, setPendingAiFile,
         showAddMenu, setShowAddMenu
       }} />
+
+      {/* ── Battle Fullscreen Countdown ── */}
+      {battleCountdown !== null && <FullscreenBattleCountdown count={battleCountdown} isDark={settingsDarkMode} />}
 
       {/* ── AI Generation Screen ── */}
       {aiGenPhase === "generating" && <AIGeneratingScreen isDark={settingsDarkMode} documentCharCount={aiGenCharCount} generationTimeoutMs={appConfig?.aiConfig?.generationTimeoutMs ?? 60000} connectionLost={aiGenConnectionLost} onCancel={() => { setIsGeneratingInBackground(true); isBackgroundGen.current = true; setAiGenPhase(null); setAiGenConnectionLost(false); }} />}

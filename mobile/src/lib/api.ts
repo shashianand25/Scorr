@@ -41,11 +41,14 @@ async function apiFetch<T>(
     } catch (parseErr: any) {
       const text = await responseClone.text();
       console.warn(`[API Parse Error] Failed to parse JSON from ${path}. Status: ${res.status}. Response text (first 800 chars):`, text.substring(0, 800));
-      return { data: null, error: `JSON Parse error from server (Status ${res.status}): ${parseErr.message}` };
+      if (res.status === 404) {
+        return { data: null, error: `Service endpoint not found (Status 404). Please ensure backend is updated on server.` };
+      }
+      return { data: null, error: `Server response error (Status ${res.status}). Please try again.` };
     }
 
     if (!res.ok) {
-      return { data: null, error: json?.error ?? `HTTP ${res.status}` };
+      return { data: null, error: json?.error ?? `Server error (Status ${res.status})` };
     }
     return { data: json as T, error: null };
   } catch (err: any) {
@@ -306,6 +309,8 @@ export async function updateMobileQuiz(params: {
   quizId: string;
   title?: string;
   category?: string;
+  questionCount?: number;
+  sourceText?: string;
   attempts?: any[];
   wrongQuestions?: any[];
   uniqueCorrectIds?: string[];
@@ -492,3 +497,40 @@ export async function checkAiDailyLimit(userId: string): Promise<{ allowed: bool
   }
 }
 
+// ── Email Passcode / OTP Verification ──────────────────────────────────────
+export async function sendOtpEmail(email: string): Promise<{ ok: boolean; error?: string; devCode?: string }> {
+  try {
+    const { data, error } = await apiFetch<{ ok?: boolean; error?: string; devCode?: string }>("/api/send-otp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+      timeoutMs: 12000,
+    });
+    if (error) {
+      if (error.includes("404") || error.toLowerCase().includes("not found")) {
+        return { ok: false, error: "OTP service endpoint not found on production server yet. Please push your backend git commit to Vercel." };
+      }
+      return { ok: false, error };
+    }
+    if (data?.error) return { ok: false, error: data.error };
+    return { ok: true, devCode: data?.devCode };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Failed to send passcode" };
+  }
+}
+
+export async function verifyOtpCode(email: string, code: string): Promise<{ valid: boolean; error?: string }> {
+  try {
+    const { data, error } = await apiFetch<{ valid: boolean; error?: string }>("/api/verify-otp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, code }),
+      timeoutMs: 8000,
+    });
+    if (error) return { valid: false, error };
+    if (!data?.valid) return { valid: false, error: data?.error || "Invalid verification code" };
+    return { valid: true };
+  } catch (err: any) {
+    return { valid: false, error: err?.message || "Verification failed" };
+  }
+}

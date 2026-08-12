@@ -8,7 +8,8 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.scorrapp.com"
+        "EXPO_PUBLIC_API_URL": "https://api.scorrapp.com",
+        "EXPO_PUBLIC_POSTHOG_KEY": "phc_r9C5JHVQYkPejwHsKbL2KoBA7oxVCyk3eYTFsQXoY98q"
       }
     },
     "preview": {
@@ -17,12 +18,14 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.scorrapp.com"
+        "EXPO_PUBLIC_API_URL": "https://api.scorrapp.com",
+        "EXPO_PUBLIC_POSTHOG_KEY": "phc_r9C5JHVQYkPejwHsKbL2KoBA7oxVCyk3eYTFsQXoY98q"
       }
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.scorrapp.com"
+        "EXPO_PUBLIC_API_URL": "https://api.scorrapp.com",
+        "EXPO_PUBLIC_POSTHOG_KEY": "phc_r9C5JHVQYkPejwHsKbL2KoBA7oxVCyk3eYTFsQXoY98q"
       }
     }
   },

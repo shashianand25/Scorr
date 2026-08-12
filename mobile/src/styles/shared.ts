@@ -1665,11 +1665,11 @@ export const styles = StyleSheet.create({
   // ────────────────────────────────────────────
   landingSafeArea: {
     flex: 1,
-    backgroundColor: "#080a0e",
+    backgroundColor: "#0B0F1C",
   },
   landingContainer: {
     flex: 1,
-    backgroundColor: "#080a0e",
+    backgroundColor: "#0B0F1C",
     paddingHorizontal: 28,
     justifyContent: "space-between",
     paddingTop: 20,
@@ -1839,7 +1839,7 @@ export const styles = StyleSheet.create({
   authRoot: {
     flex: 1,
     minHeight: 600,
-    backgroundColor: "#0d0d2e",
+    backgroundColor: "#0B0F1C",
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 28,
@@ -1847,22 +1847,10 @@ export const styles = StyleSheet.create({
     paddingTop: 8,
   },
   authBlobTL: {
-    position: "absolute",
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    backgroundColor: "rgba(99, 84, 255, 0.1)",
-    top: -40,
-    left: -60,
+    display: "none",
   },
   authBlobBR: {
-    position: "absolute",
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: "rgba(0, 229, 160, 0.06)",
-    bottom: 40,
-    right: -40,
+    display: "none",
   },
   authHeroWrap: {
     width: 168,

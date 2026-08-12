@@ -5,12 +5,18 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": ["scorr", "recall", "mobile"],
+    "scheme": [
+      "scorr",
+      "recall",
+      "mobile"
+    ],
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",
       "bundleIdentifier": "com.radium230sorganization.quizforge",
-      "associatedDomains": ["applinks:scorrapp.com"]
+      "associatedDomains": [
+        "applinks:scorrapp.com"
+      ]
     },
     "android": {
       "adaptiveIcon": {
@@ -27,9 +33,16 @@
           "action": "VIEW",
           "autoVerify": true,
           "data": [
-            { "scheme": "https", "host": "scorrapp.com", "pathPrefix": "/share/quiz" }
+            {
+              "scheme": "https",
+              "host": "scorrapp.com",
+              "pathPrefix": "/share/quiz"
+            }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -46,11 +59,18 @@
           "image": "./assets/images/splash-icon.png"
         }
       ],
-
       "expo-audio",
       "@react-native-google-signin/google-signin",
       "expo-localization",
-      "expo-asset"
+      "expo-asset",
+      [
+        "@sentry/react-native/expo",
+        {
+          "organization": "radium230s-organization",
+          "project": "scorr"
+        }
+      ],
+      "@sentry/react-native"
     ],
     "experiments": {
       "typedRoutes": true,

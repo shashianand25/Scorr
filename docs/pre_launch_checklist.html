@@ -117,7 +117,7 @@ const PHASES=[{label:"Phase 1 — Server",emoji:"🖥️",sections:[{id:"backend
 
 const KEY="scorr_v3";
 let filter="all";
-function gs(){try{return JSON.parse(localStorage.getItem(KEY)||"{}")}catch{return{}}}
+function gs(){try{const s=JSON.parse(localStorage.getItem(KEY)||"{}");if(s.f8===undefined)s.f8=true;return s;}catch{return{f8:true}}}
 function ss(s){localStorage.setItem(KEY,JSON.stringify(s))}
 function allItems(){return PHASES.flatMap(p=>p.sections.flatMap(s=>s.items))}
 function toggle(id,e){e.stopPropagation();const s=gs();s[id]=!s[id];ss(s);render()}

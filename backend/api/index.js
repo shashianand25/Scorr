@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
 const { Pool } = require('pg');
 const { Resend } = require('resend');
 const multer = require('multer');
@@ -9,6 +10,7 @@ require('dotenv').config();
 const upload = multer({ storage: multer.memoryStorage() });
 
 const app = express();
+app.use(compression());
 const resend = new Resend(process.env.RESEND_API_KEY);
 const allowedOrigins = [
   'https://scorrapp.com',
@@ -136,6 +138,91 @@ app.delete('/api/sync-user', async (req, res) => {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// ── OTP Email Passcode Verification ──────────────────────────────────────────
+const otpStore = new Map(); // email.toLowerCase() -> { code: '123456', expires: timestamp }
+
+app.post('/api/send-otp', async (req, res) => {
+  const { email } = req.body;
+  if (!email || !email.includes('@')) {
+    return res.status(400).json({ error: 'Please enter a valid email address.' });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  otpStore.set(cleanEmail, {
+    code,
+    expires: Date.now() + 10 * 60 * 1000 // 10 minutes
+  });
+
+  const fromEmail = process.env.RESEND_FROM_EMAIL || 'support@scorrapp.com';
+
+  try {
+    if (process.env.RESEND_API_KEY) {
+      try {
+        await resend.emails.send({
+          from: `Scorrapp <${fromEmail}>`,
+          to: cleanEmail,
+          subject: `${code} is your Scorrapp verification code`,
+          html: `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0b0f19; color: #ffffff; padding: 40px 20px; border-radius: 12px; max-width: 480px; margin: 0 auto;">
+              <h2 style="color: #6366f1; margin-top: 0; text-align: center; font-size: 24px;">Welcome to Scorrapp!</h2>
+              <p style="color: #94a3b8; font-size: 15px; text-align: center; line-height: 22px;">Enter this 6-digit passcode to verify your email and complete your account creation:</p>
+              <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0;">
+                <span style="font-size: 36px; font-weight: 800; letter-spacing: 8px; color: #38bdf8;">${code}</span>
+              </div>
+              <p style="color: #64748b; font-size: 13px; text-align: center;">This passcode will expire in 10 minutes. If you did not request this, please ignore this email.</p>
+            </div>
+          `
+        });
+        console.log(`[Backend] OTP sent to ${cleanEmail}`);
+        return res.json({ ok: true });
+      } catch (primaryErr) {
+        console.warn("[Backend] Primary domain email send failed, trying fallback resend address:", primaryErr);
+        await resend.emails.send({
+          from: 'onboarding@resend.dev',
+          to: cleanEmail,
+          subject: `${code} is your Scorrapp verification code`,
+          html: `<p>Your Scorrapp verification code is <strong>${code}</strong></p>`
+        });
+        return res.json({ ok: true });
+      }
+    } else {
+      console.warn("[Backend] RESEND_API_KEY missing. Returning OTP code in dev mode.");
+      res.json({ ok: true, devCode: code });
+    }
+  } catch (err) {
+    console.error("[Backend] Resend email send failed:", err);
+    res.status(500).json({ error: "Failed to send verification email. Please check your email and try again." });
+  }
+});
+
+app.post('/api/verify-otp', (req, res) => {
+  const { email, code } = req.body;
+  if (!email || !code) {
+    return res.status(400).json({ valid: false, error: 'Email and passcode are required.' });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const entry = otpStore.get(cleanEmail);
+
+  if (!entry) {
+    return res.status(400).json({ valid: false, error: 'No verification passcode found. Please request a new code.' });
+  }
+
+  if (Date.now() > entry.expires) {
+    otpStore.delete(cleanEmail);
+    return res.status(400).json({ valid: false, error: 'Verification code has expired. Please request a new code.' });
+  }
+
+  if (entry.code !== code.trim()) {
+    return res.status(400).json({ valid: false, error: 'Incorrect passcode. Please check your email and try again.' });
+  }
+
+  // Code matches! Clear entry
+  otpStore.delete(cleanEmail);
+  res.json({ valid: true });
 });
 
 // ── Feedback ─────────────────────────────────────────────────────────────
@@ -279,14 +366,26 @@ app.get('/api/mobile-quizzes', async (req, res) => {
   const { userId } = req.query;
   try {
     const result = await pool.query(`SELECT * FROM mobile_quizzes WHERE user_id = $1 AND deleted_at IS NULL`, [userId]);
-    const quizzes = result.rows.map(r => ({
-      ...r,
-      questionCount: r.question_count,
-      sourceText: r.source_text,
-      wrongQuestions: typeof r.wrong_questions === 'string' ? JSON.parse(r.wrong_questions) : r.wrong_questions,
-      uniqueCorrectIds: typeof r.unique_correct_ids === 'string' ? JSON.parse(r.unique_correct_ids) : r.unique_correct_ids,
-      attempts: typeof r.attempts === 'string' ? JSON.parse(r.attempts) : r.attempts
-    }));
+    const quizzes = result.rows.map(r => {
+      const cleanSourceText = typeof r.source_text === 'string'
+        ? r.source_text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
+        : r.source_text;
+
+      const safeParse = (val, fallback = []) => {
+        if (!val) return fallback;
+        if (typeof val !== 'string') return val;
+        try { return JSON.parse(val.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')); } catch { return fallback; }
+      };
+
+      return {
+        ...r,
+        questionCount: r.question_count,
+        sourceText: cleanSourceText,
+        wrongQuestions: safeParse(r.wrong_questions, []),
+        uniqueCorrectIds: safeParse(r.unique_correct_ids, []),
+        attempts: safeParse(r.attempts, [])
+      };
+    });
     res.json({ quizzes });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -458,6 +557,7 @@ app.get('/api/app-config', (req, res) => {
       promptTemplate: GEMINI_MCQ_PROMPT_TEMPLATE,
       chunkSize: 10000,
       maxChunks: 10,
+      concurrencyLimit: parseInt(process.env.GEMINI_CONCURRENCY_LIMIT || '10', 10),
       maxOutputTokens: parseInt(process.env.GEMINI_MAX_OUTPUT_TOKENS || '65536', 10),
       temperature: parseFloat(process.env.GEMINI_TEMPERATURE || '0.2'),
       generationTimeoutMs: parseInt(process.env.AI_GENERATION_TIMEOUT_MS || '60000', 10),
