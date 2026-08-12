@@ -62,6 +62,14 @@ pool.query(`
   )
 `).catch(err => console.error('[Backend] Failed to ensure ai_usage table:', err));
 
+pool.query(`
+  CREATE TABLE IF NOT EXISTS otp_codes (
+    email TEXT PRIMARY KEY,
+    code TEXT NOT NULL,
+    expires_at BIGINT NOT NULL
+  )
+`).catch(err => console.error('[Backend] Failed to ensure otp_codes table:', err));
+
 // ── AI Usage / Rate Limiting ──────────────────────────────────────────────
 // Called by the mobile app before every AI generation.
 // Increments the user's daily count and returns whether generation is allowed.
@@ -141,8 +149,6 @@ app.delete('/api/sync-user', async (req, res) => {
 });
 
 // ── OTP Email Passcode Verification ──────────────────────────────────────────
-const otpStore = new Map(); // email.toLowerCase() -> { code: '123456', expires: timestamp }
-
 app.post('/api/send-otp', async (req, res) => {
   const { email } = req.body;
   if (!email || !email.includes('@')) {
@@ -151,14 +157,19 @@ app.post('/api/send-otp', async (req, res) => {
 
   const cleanEmail = email.trim().toLowerCase();
   const code = Math.floor(100000 + Math.random() * 900000).toString();
-  otpStore.set(cleanEmail, {
-    code,
-    expires: Date.now() + 10 * 60 * 1000 // 10 minutes
-  });
-
-  const fromEmail = process.env.RESEND_FROM_EMAIL || 'support@scorrapp.com';
+  const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
 
   try {
+    // Store in Postgres DB (works across all serverless instances and cold starts)
+    await pool.query(
+      `INSERT INTO otp_codes (email, code, expires_at)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (email) DO UPDATE SET code = $2, expires_at = $3`,
+      [cleanEmail, code, expiresAt]
+    );
+
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'support@scorrapp.com';
+
     if (process.env.RESEND_API_KEY) {
       try {
         await resend.emails.send({
@@ -198,31 +209,42 @@ app.post('/api/send-otp', async (req, res) => {
   }
 });
 
-app.post('/api/verify-otp', (req, res) => {
+app.post('/api/verify-otp', async (req, res) => {
   const { email, code } = req.body;
   if (!email || !code) {
     return res.status(400).json({ valid: false, error: 'Email and passcode are required.' });
   }
 
   const cleanEmail = email.trim().toLowerCase();
-  const entry = otpStore.get(cleanEmail);
 
-  if (!entry) {
-    return res.status(400).json({ valid: false, error: 'No verification passcode found. Please request a new code.' });
+  try {
+    const result = await pool.query(
+      `SELECT code, expires_at FROM otp_codes WHERE LOWER(email) = LOWER($1)`,
+      [cleanEmail]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(400).json({ valid: false, error: 'No verification passcode found. Please request a new code.' });
+    }
+
+    const { code: savedCode, expires_at: expiresAt } = result.rows[0];
+
+    if (Date.now() > Number(expiresAt)) {
+      await pool.query(`DELETE FROM otp_codes WHERE LOWER(email) = LOWER($1)`, [cleanEmail]);
+      return res.status(400).json({ valid: false, error: 'Verification code has expired. Please request a new code.' });
+    }
+
+    if (savedCode !== code.trim()) {
+      return res.status(400).json({ valid: false, error: 'Incorrect passcode. Please check your email and try again.' });
+    }
+
+    // Code matches! Clear entry
+    await pool.query(`DELETE FROM otp_codes WHERE LOWER(email) = LOWER($1)`, [cleanEmail]);
+    return res.json({ valid: true });
+  } catch (err) {
+    console.error('[Backend] verify-otp error:', err);
+    return res.status(500).json({ valid: false, error: 'Failed to verify passcode. Please try again.' });
   }
-
-  if (Date.now() > entry.expires) {
-    otpStore.delete(cleanEmail);
-    return res.status(400).json({ valid: false, error: 'Verification code has expired. Please request a new code.' });
-  }
-
-  if (entry.code !== code.trim()) {
-    return res.status(400).json({ valid: false, error: 'Incorrect passcode. Please check your email and try again.' });
-  }
-
-  // Code matches! Clear entry
-  otpStore.delete(cleanEmail);
-  res.json({ valid: true });
 });
 
 // ── Feedback ─────────────────────────────────────────────────────────────
