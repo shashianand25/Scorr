@@ -3723,11 +3723,29 @@ export default function HomeScreen() {
       let errMsg = err.message || "Unknown error";
       if (errMsg.includes("couldn't generate enough questions")) {
         errMsg = "We couldn't generate enough questions. Please try again.";
-      } else if (errMsg.includes("generativelanguage.googleapis.com") || errMsg.includes("UnknownHostException") || errMsg.includes("Network request failed") || errMsg.toLowerCase().includes("failed to fetch") || errMsg.includes("Failed to connect to server")) {
-        errMsg = "Failed to connect to server. Please check your internet connection.";
+      } else if (errMsg.includes("generativelanguage.googleapis.com") || errMsg.includes("UnknownHostException") || errMsg.includes("Network request failed") || errMsg.toLowerCase().includes("failed to fetch") || errMsg.includes("Failed to connect to server") || errMsg.toLowerCase().includes("network error") || errMsg.toLowerCase().includes("timeout")) {
+        errMsg = "Server or network connection was interrupted. Please check your connection and try again.";
       }
-      if (Platform.OS === "web") alert("AI generation failed: " + errMsg);
-      else Alert.alert("Generation Failed", typeof __DEV__ !== 'undefined' && __DEV__ ? errMsg : getUserErrorMessage(errMsg));
+      const displayMsg = typeof __DEV__ !== 'undefined' && __DEV__ ? errMsg : getUserErrorMessage(errMsg);
+      if (Platform.OS === "web") {
+        if (confirm(`AI generation failed: ${displayMsg}\n\nWould you like to try again?`)) {
+          handleGenerateWithAI(text, fileName);
+        }
+      } else {
+        Alert.alert(
+          "Generation Failed",
+          displayMsg,
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Try Again",
+              onPress: () => {
+                setTimeout(() => handleGenerateWithAI(text, fileName), 200);
+              }
+            }
+          ]
+        );
+      }
     }
   };
 
