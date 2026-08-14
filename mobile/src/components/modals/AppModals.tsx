@@ -1303,7 +1303,7 @@ export function AppModals({ p }: { p: any }) {
                     { id: "unanswered", title: "Unanswered", sub: "Questions you haven't answered yet", icon: "layers-outline", color: "#f59e0b" },
                     { id: "pop", title: "Pop Quiz", sub: "10 random questions", icon: "flash", color: "#ef4444" },
                     { id: "mistakes", title: "Mistakes", sub: "Review incorrect answers", icon: "bandage", color: "#f97316" },
-                    { id: "exam", title: "Exam", sub: "Shuffled, no feedback, no timer", icon: "document-text", color: "#eab308" },
+                    { id: "exam", title: "Exam", sub: "All questions, no feedback, no timer", icon: "document-text", color: "#eab308" },
                     { id: "custom", title: "Custom", sub: "Configure your own settings", icon: "build", color: "#6366f1" },
                   ].map((preset) => {
                     const isActive = quizPreset === preset.id;
@@ -1342,8 +1342,8 @@ export function AppModals({ p }: { p: any }) {
                               (p.setQuizTimeLimit || (()=>{}))(null);
                               (p.setQuizPerQuestionTimer || (()=>{}))(null);
                               (p.setTimeLimitText || (()=>{}))("");
-                              (p.setShuffleQuestions || (()=>{}))(true);
-                              (p.setShuffleAnswers || (()=>{}))(true);
+                              (p.setShuffleQuestions || (()=>{}))(false);
+                              (p.setShuffleAnswers || (()=>{}))(false);
                               (p.setShowAnswerOnSubmit || (()=>{}))(false);
                             } else if (preset.id === "mistakes") {
                               (p.setSelectionMode || (()=>{}))("wrong");
