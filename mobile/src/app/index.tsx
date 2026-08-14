@@ -3598,6 +3598,32 @@ export default function HomeScreen() {
       return;
     }
 
+    // ── Pre-flight: try to detect if the uploaded file is already valid .qst format ──
+    // If the file itself contains parseable questions with at least one correct answer,
+    // skip AI entirely and import it directly — fast, free, and no quota used.
+    try {
+      const quickParsed = parseQstText(text);
+      const hasValidQuestions = quickParsed.questions.length >= 1 &&
+        quickParsed.questions.some((q: any) =>
+          q.answers && q.answers.length >= 2 && q.answers.some((a: any) => a.isCorrect === true)
+        );
+      if (hasValidQuestions) {
+        console.log(`[AI Generation] Detected valid .qst format with ${quickParsed.questions.length} question(s). Skipping AI — importing directly.`);
+        // Dismiss the "generating" spinner that AppModals set, then import directly
+        setAiGenPhase(null);
+        handleImportQst(text, fileName);
+        setCustomToast({
+          message: `✨ Imported ${quickParsed.questions.length} question${quickParsed.questions.length !== 1 ? "s" : ""} directly from your file — no AI needed!`,
+          icon: "checkmark-circle",
+          color: "#10b981",
+        });
+        setTimeout(() => setCustomToast(null), 4500);
+        return;
+      }
+    } catch {
+      // Parsing failed — not a valid .qst file. Fall through to normal AI generation.
+    }
+
     // ── Fast internet check ────────────────────────────────────────────────
     if (!isConnected) {
       setAiGenPhase(null);
