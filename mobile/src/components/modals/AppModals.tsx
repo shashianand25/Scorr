@@ -74,7 +74,7 @@ export function AppModals({ p }: { p: any }) {
       (p.setQuizPerQuestionTimer || (()=>{}))(null);
       (p.setTimeLimitText || (()=>{}))("");
       (p.setShuffleQuestions || (()=>{}))(false);
-      (p.setShuffleAnswers || (()=>{}))(false);
+      (p.setShuffleAnswers || (()=>{}))(true);
       (p.setShowAnswerOnSubmit || (()=>{}))(true);
     }
   }, [p.selectedQuiz]);
@@ -857,7 +857,7 @@ export function AppModals({ p }: { p: any }) {
                             questions: filteredList,
                             selectionMode: "wrong",
                             shuffleQuestions: false,
-                            shuffleAnswers: false,
+                            shuffleAnswers: true,
                             showAnswerOnSubmit: true,
                             timePerQuestion: null,
                             currentIndex: 0,
@@ -1303,7 +1303,7 @@ export function AppModals({ p }: { p: any }) {
                     { id: "unanswered", title: "Unanswered", sub: "Questions you haven't answered yet", icon: "layers-outline", color: "#f59e0b" },
                     { id: "pop", title: "Pop Quiz", sub: "10 random questions", icon: "flash", color: "#ef4444" },
                     { id: "mistakes", title: "Mistakes", sub: "Review incorrect answers", icon: "bandage", color: "#f97316" },
-                    { id: "exam", title: "Exam", sub: "Timed, shuffled, no feedback", icon: "document-text", color: "#eab308" },
+                    { id: "exam", title: "Exam", sub: "Shuffled, no feedback, no timer", icon: "document-text", color: "#eab308" },
                     { id: "custom", title: "Custom", sub: "Configure your own settings", icon: "build", color: "#6366f1" },
                   ].map((preset) => {
                     const isActive = quizPreset === preset.id;
@@ -1318,7 +1318,7 @@ export function AppModals({ p }: { p: any }) {
                               (p.setQuizPerQuestionTimer || (()=>{}))(null);
                               (p.setTimeLimitText || (()=>{}))("");
                               (p.setShuffleQuestions || (()=>{}))(false);
-                              (p.setShuffleAnswers || (()=>{}))(false);
+                              (p.setShuffleAnswers || (()=>{}))(true);
                               (p.setShowAnswerOnSubmit || (()=>{}))(true);
                             } else if (preset.id === "unanswered") {
                               (p.setSelectionMode || (()=>{}))("unanswered");
@@ -1326,7 +1326,7 @@ export function AppModals({ p }: { p: any }) {
                               (p.setQuizPerQuestionTimer || (()=>{}))(null);
                               (p.setTimeLimitText || (()=>{}))("");
                               (p.setShuffleQuestions || (()=>{}))(false);
-                              (p.setShuffleAnswers || (()=>{}))(false);
+                              (p.setShuffleAnswers || (()=>{}))(true);
                               (p.setShowAnswerOnSubmit || (()=>{}))(true);
                             } else if (preset.id === "pop") {
                               (p.setSelectionMode || (()=>{}))("random");
@@ -1334,10 +1334,14 @@ export function AppModals({ p }: { p: any }) {
                               (p.setQuizTimeLimit || (()=>{}))(null);
                               (p.setQuizPerQuestionTimer || (()=>{}))(null);
                               (p.setTimeLimitText || (()=>{}))("");
+                              (p.setShuffleQuestions || (()=>{}))(true);
+                              (p.setShuffleAnswers || (()=>{}))(true);
+                              (p.setShowAnswerOnSubmit || (()=>{}))(true);
                             } else if (preset.id === "exam") {
                               (p.setSelectionMode || (()=>{}))("all");
-                              (p.setQuizTimeLimit || (()=>{}))(Math.ceil(totalQuestions));
-                              (p.setTimeLimitText || (()=>{}))(String(Math.ceil(totalQuestions)));
+                              (p.setQuizTimeLimit || (()=>{}))(null);
+                              (p.setQuizPerQuestionTimer || (()=>{}))(null);
+                              (p.setTimeLimitText || (()=>{}))("");
                               (p.setShuffleQuestions || (()=>{}))(true);
                               (p.setShuffleAnswers || (()=>{}))(true);
                               (p.setShowAnswerOnSubmit || (()=>{}))(false);
@@ -1346,9 +1350,14 @@ export function AppModals({ p }: { p: any }) {
                               (p.setQuizTimeLimit || (()=>{}))(null);
                               (p.setQuizPerQuestionTimer || (()=>{}))(null);
                               (p.setTimeLimitText || (()=>{}))("");
+                              (p.setShuffleQuestions || (()=>{}))(false);
+                              (p.setShuffleAnswers || (()=>{}))(true);
+                              (p.setShowAnswerOnSubmit || (()=>{}))(true);
                             } else if (preset.id === "custom") {
                               (p.setSelectionMode || (()=>{}))("range");
                               (p.setQuizPerQuestionTimer || (()=>{}))(null);
+                              (p.setShuffleAnswers || (()=>{}))(true);
+                              (p.setShowAnswerOnSubmit || (()=>{}))(true);
                               setTimeout(() => {
                                 optionsScrollRef.current?.scrollTo({ y: 380, animated: true });
                               }, 300);
@@ -1543,6 +1552,11 @@ export function AppModals({ p }: { p: any }) {
                     <Ionicons name="play" size={18} color={(questionCount === 0 || (quizPreset === "mistakes" && wrongCount === 0)) ? (p.settingsDarkMode ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.3)") : "#000000"} />
                     <Text style={{ fontSize: 16, fontWeight: "700", color: (questionCount === 0 || (quizPreset === "mistakes" && wrongCount === 0)) ? (p.settingsDarkMode ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.3)") : "#000000" }}>Start Quiz ({questionCount} Qs)</Text>
                   </Pressable>
+                  {p.selectedQuiz?.category === "AI Generated" && (
+                    <Text style={{ textAlign: "center", fontSize: 11, color: p.settingsDarkMode ? "rgba(255,255,255,0.38)" : "rgba(0,0,0,0.4)", marginTop: 8 }}>
+                      AI-generated content may contain errors. Please verify important information.
+                    </Text>
+                  )}
                 </View>
               </>
             </View>
@@ -1738,8 +1752,21 @@ export function AppModals({ p }: { p: any }) {
                             if (pr.error) throw new Error(pr.error);
                             text = pr.text;
                           } else if (ext === "ppt" || ext === "pptx") {
+                            const pptMaxMB = p.appConfig?.fileLimits?.pptMaxMB || 4.5;
+                            if (fileSize > pptMaxMB * 1024 * 1024) {
+                              (p.setAiGenPhase || (() => {}))(null);
+                              Alert.alert("File Too Large", `PPT upload limit is ${pptMaxMB} MB. Try uploading as a PDF for larger files.`);
+                              return;
+                            }
                             const pr = await (p.parsePptFromBackend || (() => {}))(fileUri, fileName);
-                            if (pr.error) throw new Error(pr.error);
+                            if (pr.error) {
+                              if (String(pr.error).includes('PAYLOAD_TOO_LARGE') || String(pr.error).includes('413') || String(pr.error).toLowerCase().includes('ppt upload limit')) {
+                                (p.setAiGenPhase || (() => {}))(null);
+                                Alert.alert("File Too Large", `PPT upload limit is ${pptMaxMB} MB. Try uploading as a PDF for larger files.`);
+                                return;
+                              }
+                              throw new Error(pr.error);
+                            }
                             text = pr.text;
                           } else if (ext === "docx" || ext === "doc") {
                             const b64 = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.Base64 });
@@ -1765,11 +1792,25 @@ export function AppModals({ p }: { p: any }) {
                           setTimeout(() => (p.handleGenerateWithAI || (() => {}))(text, fileName), 150);
                         } catch (err: any) {
                           (p.setAiGenPhase || (() => {}))(null);
+                          const errMsg = err?.message || String(err);
+                          if (errMsg.toLowerCase().includes("ppt upload limit") || errMsg.toLowerCase().includes("payload_too_large") || errMsg.toLowerCase().includes("413")) {
+                            const pptMaxMB = p.appConfig?.fileLimits?.pptMaxMB || 4.5;
+                            Alert.alert("File Too Large", `PPT upload limit is ${pptMaxMB} MB. Try uploading as a PDF for larger files.`);
+                            return;
+                          }
                           Alert.alert("Error", typeof __DEV__ !== 'undefined' && __DEV__ ? err.message : getUserErrorMessage(err));
                         }
                       }, 50);
                     }
-                  } catch (err: any) { Alert.alert("Error", typeof __DEV__ !== 'undefined' && __DEV__ ? err.message : getUserErrorMessage(err)); }
+                  } catch (err: any) {
+                    const errMsg = err?.message || String(err);
+                    if (errMsg.toLowerCase().includes("ppt upload limit") || errMsg.toLowerCase().includes("payload_too_large") || errMsg.toLowerCase().includes("413")) {
+                      const pptMaxMB = p.appConfig?.fileLimits?.pptMaxMB || 4.5;
+                      Alert.alert("File Too Large", `PPT upload limit is ${pptMaxMB} MB. Try uploading as a PDF for larger files.`);
+                    } else {
+                      Alert.alert("Error", typeof __DEV__ !== 'undefined' && __DEV__ ? err.message : getUserErrorMessage(err));
+                    }
+                  }
                 }, 350);
               }
             }}
@@ -1865,12 +1906,16 @@ export function AppModals({ p }: { p: any }) {
                             } else if (ext === "ppt" || ext === "pptx") {
                               const pptMaxMB = p.appConfig?.fileLimits?.pptMaxMB || 4.5;
                               if (fileSize > pptMaxMB * 1024 * 1024) {
-                                throw new Error(`PPT upload limit ${pptMaxMB} MB, try uploading pdf for a larger size`);
+                                (p.setIsImporting || (() => {}))(false);
+                                Alert.alert("File Too Large", `PPT upload limit is ${pptMaxMB} MB. Try uploading as a PDF for larger files.`);
+                                return;
                               }
                               const pptResult = await (p.parsePptFromBackend || (() => {}))(fileUri, fileName);
                               if (pptResult.error) {
-                                if (String(pptResult.error).includes('PAYLOAD_TOO_LARGE') || String(pptResult.error).includes('413')) {
-                                  throw new Error(`PPT upload limit ${pptMaxMB} MB, try uploading pdf for a larger size`);
+                                if (String(pptResult.error).includes('PAYLOAD_TOO_LARGE') || String(pptResult.error).includes('413') || String(pptResult.error).toLowerCase().includes('ppt upload limit')) {
+                                  (p.setIsImporting || (() => {}))(false);
+                                  Alert.alert("File Too Large", `PPT upload limit is ${pptMaxMB} MB. Try uploading as a PDF for larger files.`);
+                                  return;
                                 }
                                 throw new Error(`Backend PPT parsing failed: ${pptResult.error}`);
                               }
@@ -1908,8 +1953,14 @@ export function AppModals({ p }: { p: any }) {
                             (p.setIsImporting || (() => {}))(false);
                             setTimeout(() => (p.handleImportQst || (() => {}))(text, fileName, fileUri), 150);
                           } catch (err: any) {
+                            (p.setIsImporting || (() => {}))(false);
+                            const errMsg = err?.message || String(err);
+                            if (errMsg.toLowerCase().includes("ppt upload limit") || errMsg.toLowerCase().includes("payload_too_large") || errMsg.toLowerCase().includes("413")) {
+                              const pptMaxMB = p.appConfig?.fileLimits?.pptMaxMB || 4.5;
+                              Alert.alert("File Too Large", `PPT upload limit is ${pptMaxMB} MB. Try uploading as a PDF for larger files.`);
+                              return;
+                            }
                             if (ext === "pdf" || ext === "doc" || ext === "docx" || ext === "ppt" || ext === "pptx") {
-                              (p.setIsImporting || (() => {}))(false);
                               Alert.alert("Error", typeof __DEV__ !== 'undefined' && __DEV__ ? `Failed to parse ${ext.toUpperCase()} file.\n\n${err.message}` : getUserErrorMessage(err));
                               return;
                             }
