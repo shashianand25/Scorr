@@ -285,6 +285,7 @@ export async function fetchMobileQuizzes(
  * Saves a new quiz to Neon. Returns the quiz with its server-assigned id.
  */
 export async function createMobileQuiz(params: {
+  id?: string;
   userId: string;
   title: string;
   category: string;

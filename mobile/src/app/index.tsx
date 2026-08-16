@@ -573,6 +573,7 @@ export default function HomeScreen() {
               console.log(`[NeonSync] Neon has ${normalizedQuizzes.length} quizzes, ${unsynced.length} local unsynced`);
               for (const q of unsynced) {
                 createMobileQuiz({
+                  id: q.id,
                   userId: user.uid,
                   title: q.title,
                   category: q.category || "General",
@@ -596,6 +597,7 @@ export default function HomeScreen() {
               for (const q of quizzesRef.current) {
                 if (q.neonId || q.isSample || q.id === "sample_quiz") continue; // already synced somehow or is sample
                 createMobileQuiz({
+                  id: q.id,
                   userId: user.uid,
                   title: q.title,
                   category: q.category || "General",
@@ -1033,7 +1035,7 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
-    if (pendingSharedQuizId && firebaseUser?.uid && isConnected) {
+    if (pendingSharedQuizId && isConnected) {
       const id = pendingSharedQuizId;
       setPendingSharedQuizId(null);
       
@@ -1045,23 +1047,44 @@ export default function HomeScreen() {
             throw new Error(error || "Course not found or no longer available.");
           }
           
-          const { quiz: savedQuiz, error: saveErr } = await createMobileQuiz({
-            userId: firebaseUser.uid,
+          const parsed = parseQstText(quiz.sourceText);
+          const questionsList = parsed?.questions && parsed.questions.length > 0 ? parsed.questions : [];
+          const flashcards = parsed?.flashcards && parsed.flashcards.length > 0 ? parsed.flashcards : [];
+          const qCount = questionsList.length || quiz.questionCount || 0;
+
+          let finalQuiz: any = {
+            id: quiz.id || ("shared_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9)),
+            neonId: quiz.id,
             title: quiz.title,
-            category: quiz.category,
-            questionCount: quiz.questionCount,
+            category: quiz.category || "General",
+            questions: qCount,
+            questionsList,
+            flashcards,
             sourceText: quiz.sourceText,
             attempts: [],
             wrongQuestions: [],
             uniqueCorrectIds: []
-          });
-          
-          if (saveErr || !savedQuiz) {
-            throw new Error(saveErr || "Failed to save the shared course.");
+          };
+
+          if (firebaseUser?.uid) {
+            const { quiz: savedQuiz } = await createMobileQuiz({
+              id: finalQuiz.id,
+              userId: firebaseUser.uid,
+              title: quiz.title,
+              category: quiz.category || "General",
+              questionCount: qCount,
+              sourceText: quiz.sourceText,
+              attempts: [],
+              wrongQuestions: [],
+              uniqueCorrectIds: []
+            });
+            if (savedQuiz) {
+              finalQuiz = { ...finalQuiz, ...savedQuiz, questionsList, flashcards, sourceText: quiz.sourceText, neonId: savedQuiz.id };
+            }
           }
           
-          setQuizzes((prev) => [{ ...savedQuiz, sourceText: quiz.sourceText }, ...prev]);
-          trackQuizCreated({ source: "shared_link", questionCount: quiz.questionCount || 0 });
+          setQuizzes((prev) => [finalQuiz, ...prev.filter(q => q.id !== finalQuiz.id && q.neonId !== finalQuiz.id)]);
+          trackQuizCreated({ source: "shared_link", questionCount: qCount });
           setActiveTab("library");
           setLibraryTab("courses");
           setCustomToast({
@@ -3055,6 +3078,7 @@ export default function HomeScreen() {
       if (firebaseUser && neonUserReadyRef.current) {
         console.log("[NeonSync-Import] Calling POST /api/mobile-quizzes...");
         createMobileQuiz({
+          id: localId,
           userId: firebaseUser.uid,
           title: newQuiz.title,
           category: newQuiz.category,
@@ -3383,8 +3407,25 @@ export default function HomeScreen() {
         return;
       }
       
+      const targetId = quiz.neonId || quiz.id;
+      // Ensure the quiz is synced to Neon under targetId so anyone with the link can access it
+      if (firebaseUser && targetId) {
+        const sourceText = quiz.sourceText || questionsToSourceText(quiz.title, quiz.category || "General", quiz.questionsList || [], quiz.flashcards || []);
+        createMobileQuiz({
+          id: targetId,
+          userId: firebaseUser.uid,
+          title: quiz.title,
+          category: quiz.category || "General",
+          questionCount: quiz.questionsList?.length ?? quiz.questions ?? 0,
+          sourceText,
+          attempts: quiz.attempts || [],
+          wrongQuestions: quiz.wrongQuestions || [],
+          uniqueCorrectIds: quiz.uniqueCorrectIds || [],
+        }).catch(err => console.warn("[ShareSync] ensure sync failed:", err));
+      }
+
       const shareBase = appConfig?.appLinks?.shareBaseUrl || "https://scorrapp.com/share/quiz/";
-      const shareUrl = `${shareBase}${quiz.id}`;
+      const shareUrl = `${shareBase}${targetId}`;
       const message = `Check out this quiz on Scorr: ${quiz.title}\n\nTap this link to open it in the app:\n${shareUrl}`;
       
       await Share.share({
@@ -3528,6 +3569,7 @@ export default function HomeScreen() {
       }
       console.log("[NeonSync-Manual] Calling POST /api/mobile-quizzes...");
       createMobileQuiz({
+        id: localId,
         userId: firebaseUser.uid,
         title: newQuiz.title,
         category: newQuiz.category,
@@ -3838,6 +3880,7 @@ export default function HomeScreen() {
       const initialSourceText = questionsToSourceText(title, "AI Generated", newQuiz.questionsList, newQuiz.flashcards);
       if (firebaseUser && neonUserReadyRef.current) {
         createMobileQuiz({
+          id: localId,
           userId: firebaseUser.uid,
           title,
           category: "AI Generated",
@@ -3928,6 +3971,7 @@ export default function HomeScreen() {
                   }).catch(err => console.warn("[NeonSync-BGUpdate] failed:", err));
                 } else {
                   createMobileQuiz({
+                    id: localId,
                     userId: firebaseUser.uid,
                     title,
                     category: "AI Generated",
@@ -6417,7 +6461,7 @@ export default function HomeScreen() {
                 <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }}
                   onPress={() => setShowDeckPicker(false)}>
                   <View style={{ backgroundColor: settingsDarkMode ? "#1e293b" : "#ffffff",
-                    borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 8, paddingBottom: Platform.OS === "ios" ? 36 : Math.max(insets.bottom, 16), maxHeight: "75%",
+                    borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 8, paddingBottom: Math.max(insets.bottom, Platform.OS === "android" ? 36 : 24) + 16, maxHeight: "75%",
                     shadowColor: "#000", shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 20 }}
                     onStartShouldSetResponder={() => true}>
                     <View style={{ width: 36, height: 4, borderRadius: 2,
@@ -6575,7 +6619,7 @@ export default function HomeScreen() {
                 <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }}
                   onPress={() => setShowEllipsisMenu(false)}>
                   <View style={{ backgroundColor: settingsDarkMode ? "#1e293b" : "#ffffff",
-                    borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 8, paddingBottom: Platform.OS === "ios" ? 36 : Math.max(insets.bottom, 16),
+                    borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 8, paddingBottom: Math.max(insets.bottom, Platform.OS === "android" ? 36 : 24) + 16,
                     shadowColor: "#000", shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 20 }}
                     onStartShouldSetResponder={() => true}>
                     <View style={{ width: 36, height: 4, borderRadius: 2,

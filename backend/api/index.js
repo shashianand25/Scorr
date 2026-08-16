@@ -415,12 +415,19 @@ app.get('/api/mobile-quizzes', async (req, res) => {
 });
 
 app.post('/api/mobile-quizzes', async (req, res) => {
-  const { userId, title, category, questionCount, sourceText, attempts, wrongQuestions, uniqueCorrectIds } = req.body;
-  const quizId = generateId();
+  const { id, userId, title, category, questionCount, sourceText, attempts, wrongQuestions, uniqueCorrectIds } = req.body;
+  const quizId = id || generateId();
   try {
     const result = await pool.query(
       `INSERT INTO mobile_quizzes (id, user_id, title, category, question_count, source_text, attempts, wrong_questions, unique_correct_ids) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       ON CONFLICT (id) DO UPDATE SET
+         title = EXCLUDED.title,
+         category = EXCLUDED.category,
+         question_count = EXCLUDED.question_count,
+         source_text = EXCLUDED.source_text,
+         updated_at = CURRENT_TIMESTAMP
+       RETURNING *`,
       [quizId, userId, title, category, questionCount || 0, sourceText || '', JSON.stringify(attempts || []), JSON.stringify(wrongQuestions || []), JSON.stringify(uniqueCorrectIds || [])]
     );
     const r = result.rows[0];
