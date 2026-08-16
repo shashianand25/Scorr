@@ -3112,7 +3112,7 @@ export default function HomeScreen() {
         wrongQuestions: [],
         uniqueCorrectIds: [],
       };
-      setQuizzes([...quizzes, newQuiz]);
+      setQuizzes((prev) => [newQuiz, ...prev.filter((q: any) => q.id !== newQuiz.id)]);
       trackQuizCreated({ source: "import", questionCount: newQuiz.questions });
       setActiveTab("insights");
       setViewingInsightsQuiz(newQuiz);
@@ -3580,7 +3580,7 @@ export default function HomeScreen() {
       uniqueCorrectIds: []
     };
 
-    setQuizzes([...quizzes, newQuiz]);
+    setQuizzes((prev) => [newQuiz, ...prev.filter((q: any) => q.id !== newQuiz.id)]);
     setNewTitle("");
     setNewCategory("");
     setNewQuestionsCount("");
@@ -3815,8 +3815,8 @@ export default function HomeScreen() {
           questionsList: parsed.questions.map((q: any) => ({ ...q, answers: [...q.answers].sort(() => Math.random() - 0.5) })),
           attempts: [], wrongQuestions: [], uniqueCorrectIds: [],
         };
-        AsyncStorage.setItem(storageKey("quizzes"), JSON.stringify([...quizzesRef.current, newQuiz])).catch(() => {});
-        setQuizzes((prev: any[]) => [...prev, newQuiz]);
+        AsyncStorage.setItem(storageKey("quizzes"), JSON.stringify([newQuiz, ...quizzesRef.current.filter((q: any) => q.id !== newQuiz.id)])).catch(() => {});
+        setQuizzes((prev: any[]) => [newQuiz, ...prev.filter((q: any) => q.id !== newQuiz.id)]);
         trackQuizCreated({ source: "ai", questionCount: parsed.questions.length, flashcardCount: (parsed.flashcards || []).length });
         if (firebaseUser && neonUserReadyRef.current) {
           createMobileQuiz({ id: localId, userId: firebaseUser.uid, title, category: "AI Generated",
@@ -3962,7 +3962,7 @@ export default function HomeScreen() {
         wrongQuestions: [],
         uniqueCorrectIds: [],
       };
-      setQuizzes((prev: any[]) => [...prev, newQuiz]);
+      setQuizzes((prev: any[]) => [newQuiz, ...prev.filter((q: any) => q.id !== newQuiz.id)]);
       trackAiGenerationSucceeded({
         questionCount: parsed.questions.length,
         chunkCount: chunks.length,
@@ -5958,7 +5958,7 @@ export default function HomeScreen() {
 
         const isCoursesTab = libraryTab === "courses";
 
-        const filteredQuizzes = [...quizzes].reverse().filter((q: any) => {
+        const filteredQuizzes = [...quizzes].filter((q: any) => {
           const qc = typeof q.questions === "number" ? q.questions : (q.questionsList?.length || 0);
           const cc = q.flashcards?.length || 0;
           if (qc === 0 && cc === 0) return false;
@@ -5988,10 +5988,26 @@ export default function HomeScreen() {
         };
 
         const quizGroups = groupByTime(filteredQuizzes, (q: any) => {
-          const a = q.attempts || []; return a.length > 0 ? (a[0].timestamp || a[0].date || 0) : 0;
+          const attempts = q.attempts || [];
+          const latestAttemptTime = attempts.length > 0
+            ? Math.max(...attempts.map((a: any) => new Date(a.timestamp || a.date || 0).getTime() || 0))
+            : 0;
+          const createdTime = q.createdAt || q.created_at
+            ? new Date(q.createdAt || q.created_at).getTime()
+            : 0;
+          const effectiveDate = Math.max(latestAttemptTime, createdTime);
+          return effectiveDate > 0 ? effectiveDate : Date.now();
         });
         const deckGroups = groupByTime(filteredDecks, (d: any) => {
-          const a = d.attempts || []; return a.length > 0 ? (a[a.length - 1].date || 0) : 0;
+          const attempts = d.attempts || [];
+          const latestAttemptTime = attempts.length > 0
+            ? Math.max(...attempts.map((a: any) => new Date(a.timestamp || a.date || 0).getTime() || 0))
+            : 0;
+          const createdTime = d.createdAt || d.created_at
+            ? new Date(d.createdAt || d.created_at).getTime()
+            : 0;
+          const effectiveDate = Math.max(latestAttemptTime, createdTime);
+          return effectiveDate > 0 ? effectiveDate : Date.now();
         });
 
         const hasItems = isCoursesTab ? filteredQuizzes.length > 0 : filteredDecks.length > 0;
