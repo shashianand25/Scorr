@@ -3329,34 +3329,9 @@ export default function HomeScreen() {
   React.useEffect(() => { fcIndexRef.current = fcIndex; }, [fcIndex]);
   React.useEffect(() => { viewingInsightsQuizRef.current = viewingInsightsQuiz; }, [viewingInsightsQuiz]);
 
-  // Ensure insights flashcard flip animation & state is always cleanly reset to front when card index changes
-  React.useEffect(() => {
-    insightsFlipAnim.stopAnimation();
-    insightsFlipAnim.setValue(0);
-    setFcFlipped(false);
-  }, [fcIndex, activeTab]);
-
-  // Ensure study flashcard flip animation & state is always cleanly reset to front when active study card changes
-  const activeStudyCardId = studyQueue[0];
-  React.useEffect(() => {
-    flipAnim.stopAnimation();
-    flipAnim.setValue(0);
-    setStudyFlipped(false);
-    setStudyTypedAnswer("");
-    setStudyChecked(false);
-  }, [activeStudyCardId, studyingDeck?.id]);
-
   const insightsPanResponder = useRef(PanResponder.create({
     onStartShouldSetPanResponder: () => false,
     onMoveShouldSetPanResponder: (_, { dx, dy }) => Math.abs(dx) > 5 || Math.abs(dy) > 5,
-    // As soon as a horizontal swipe is detected, snap the flip back to front so the
-    // outgoing card always exits face-up (question side), regardless of whether the
-    // user had tapped to reveal the answer before swiping.
-    onPanResponderGrant: () => {
-      insightsFlipAnim.stopAnimation();
-      insightsFlipAnim.setValue(0);
-      setFcFlipped(false);
-    },
     // setValue has no driver concept — avoids native/JS driver clash entirely
     onPanResponderMove: (_, { dx, dy }) => {
       insightsSwipeX.setValue(dx);
@@ -3383,10 +3358,6 @@ export default function HomeScreen() {
         }
 
         const outVal = dir === 'right' ? W : -W;
-        // Flip already reset in onPanResponderGrant — just ensure it stays at 0
-        insightsFlipAnim.stopAnimation();
-        insightsFlipAnim.setValue(0);
-        setFcFlipped(false);
         Animated.parallel([
           Animated.timing(insightsSwipeX, { toValue: outVal, duration: 120, easing: Easing.in(Easing.quad), useNativeDriver: true }),
           Animated.timing(insightsSwipeY, { toValue: 0, duration: 120, easing: Easing.in(Easing.quad), useNativeDriver: true }),
@@ -3396,9 +3367,8 @@ export default function HomeScreen() {
           } else {
             setFcIndex(idx - 1);
           }
-          insightsFlipAnim.stopAnimation();
-          insightsFlipAnim.setValue(0);
           setFcFlipped(false);
+          insightsFlipAnim.setValue(0);
           
           insightsSwipeX.setValue(dir === 'left' ? W : -W);
           insightsSwipeY.setValue(0);
@@ -5148,9 +5118,8 @@ export default function HomeScreen() {
       }
 
       setStudyQueue(newQueue);
-      flipAnim.stopAnimation();
-      flipAnim.setValue(0);
       setStudyFlipped(false);
+      flipAnim.setValue(0);
       setStudyTypedAnswer("");
       setStudyChecked(false);
       setSelectedRating(null);
@@ -5769,14 +5738,9 @@ export default function HomeScreen() {
     const backOpacity      = insightsFlipAnim.interpolate({ inputRange: [89, 90], outputRange: [0, 1], extrapolate: "clamp" });
 
     const flipCard = () => {
-      insightsFlipAnim.stopAnimation();
-      // Read current animation value synchronously so we are never misled by stale
-      // fcFlipped state (e.g. right after a swipe resets the anim but before React re-renders).
-      const currentVal = (insightsFlipAnim as any)._value as number;
-      const isCurrentlyFlipped = currentVal > 89;
-      const toVal = isCurrentlyFlipped ? 0 : 180;
+      const toVal = fcFlipped ? 0 : 180;
       Animated.spring(insightsFlipAnim, { toValue: toVal, friction: 8, tension: 10, useNativeDriver: true }).start();
-      setFcFlipped(!isCurrentlyFlipped);
+      setFcFlipped(!fcFlipped);
     };
 
     // ── Text helpers ────────────────────────────────────────────────────────
@@ -5917,14 +5881,10 @@ export default function HomeScreen() {
           <Pressable
             onPress={() => { 
               if (fcIndex > 0) { 
-                insightsFlipAnim.stopAnimation();
-                insightsFlipAnim.setValue(0);
-                setFcFlipped(false);
                 Animated.timing(buttonSlideX, { toValue: W, duration: 120, easing: Easing.in(Easing.quad), useNativeDriver: true }).start(() => {
                   setFcIndex(i => i - 1); 
-                  insightsFlipAnim.stopAnimation();
-                  insightsFlipAnim.setValue(0); 
                   setFcFlipped(false); 
+                  insightsFlipAnim.setValue(0); 
                   insightsSwipeX.setValue(0); 
                   insightsSwipeY.setValue(0);
                   buttonSlideX.setValue(-W);
@@ -5947,14 +5907,10 @@ export default function HomeScreen() {
           <Pressable
             onPress={() => { 
               if (fcIndex < cards.length - 1) { 
-                insightsFlipAnim.stopAnimation();
-                insightsFlipAnim.setValue(0);
-                setFcFlipped(false);
                 Animated.timing(buttonSlideX, { toValue: -W, duration: 120, easing: Easing.in(Easing.quad), useNativeDriver: true }).start(() => {
                   setFcIndex(i => i + 1); 
-                  insightsFlipAnim.stopAnimation();
-                  insightsFlipAnim.setValue(0); 
                   setFcFlipped(false); 
+                  insightsFlipAnim.setValue(0); 
                   insightsSwipeX.setValue(0); 
                   insightsSwipeY.setValue(0);
                   buttonSlideX.setValue(W);
@@ -7600,7 +7556,6 @@ export default function HomeScreen() {
           const swipeRotate = studyTiltAnim.interpolate({ inputRange: [-20, 0, 20], outputRange: ["-20deg", "0deg", "20deg"], extrapolate: "clamp" });
 
           const flipCard = () => {
-            flipAnim.stopAnimation();
             if (studyFlipped) {
               Animated.spring(flipAnim, { toValue: 0, friction: 8, tension: 10, useNativeDriver: true }).start();
               setStudyFlipped(false);
@@ -7792,9 +7747,8 @@ export default function HomeScreen() {
                         setStudyingDeck(updatedDeck);
                         setFlashcardDecks((prev) => prev.map(d => d.id === studyingDeck.id ? updatedDeck : d));
                         
-                        flipAnim.stopAnimation();
-                        flipAnim.setValue(0);
                         setStudyFlipped(false);
+                        flipAnim.setValue(0);
                         swipeX.setValue(0);
                         if (newQueue.length === 0) {
                           // Restore full deck so completion screen has accurate data
@@ -9911,7 +9865,6 @@ export default function HomeScreen() {
             setStudyingDeck(tempDeck);
             setStudyQueue([]);         // empty queue → completion screen
             setIsPreviewMode(false);
-            flipAnim.stopAnimation();
             flipAnim.setValue(0);
             swipeX.setValue(0);
             setActiveTab("flashcards" as any);
@@ -9921,9 +9874,8 @@ export default function HomeScreen() {
           setStudyModeModalVisible(false);
           if (selectedStudyMode === "simple") {
             setFcIndex(0);
-            insightsFlipAnim.stopAnimation();
-            insightsFlipAnim.setValue(0);
             setFcFlipped(false);
+            insightsFlipAnim.setValue(0);
             insightsSwipeX.setValue(0);
             insightsSwipeY.setValue(0);
             setActiveTab("insights-flashcard" as any);
