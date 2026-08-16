@@ -8424,11 +8424,14 @@ export default function HomeScreen() {
                 </View>
 
                 {/* ── New user or Signed Out: sample try-it-out card ── */}
-                {((!firebaseUser) || (!hasContent && !sampleDismissed)) && !homeSearch && sampleQuiz && (
+                {/* Show whenever: not logged in, OR library is completely empty (regardless of sampleDismissed) */}
+                {((!firebaseUser) || (!hasContent)) && !homeSearch && sampleQuiz && (
                   <View style={{ marginTop: 24, marginBottom: 8 }}>
                     <View style={{ paddingHorizontal: 20, marginBottom: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                      <Text style={{ fontSize: 18, fontWeight: "700", color: txt }}>Try your first quiz 👋</Text>
-                      <Text style={{ fontSize: 13, color: muted }}>New user</Text>
+                      <Text style={{ fontSize: 18, fontWeight: "700", color: txt }}>
+                        {sampleDismissed ? "Your library is empty" : "Try your first quiz 👋"}
+                      </Text>
+                      <Text style={{ fontSize: 13, color: muted }}>{sampleDismissed ? "Sample" : "New user"}</Text>
                     </View>
 
                     <View
