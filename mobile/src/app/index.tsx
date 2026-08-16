@@ -460,47 +460,48 @@ export default function HomeScreen() {
             neonUserReadyRef.current = false;
           } else {
             neonUserReadyRef.current = true;
-            // 4. Fetch quizzes from Neon
+
+            // 4. Flush any offline-queued deletions to Neon FIRST, before fetching.
+            //    This guarantees that fetchMobileQuizzes never returns quizzes the user
+            //    already deleted — even when the delete happened while offline.
+            const pendingValPre = await AsyncStorage.getItem("quizforge_pending_deletions");
+            const pendingIdsPre: string[] = pendingValPre ? JSON.parse(pendingValPre) : [];
+            // Also merge in-memory tombstones (added synchronously at delete time)
+            const allPendingIds = Array.from(new Set([...pendingIdsPre, ...pendingDeleteIdsRef.current]));
+            // Ensure the ref is fully populated before the fetch
+            allPendingIds.forEach(id => pendingDeleteIdsRef.current.add(id));
+
+            if (allPendingIds.length > 0) {
+              console.log(`[NeonSync] Flushing ${allPendingIds.length} pending deletion(s) before fetch…`);
+              const remaining: string[] = [];
+              for (const pid of allPendingIds) {
+                try {
+                  const res = await deleteMobileQuiz(user.uid, pid);
+                  if (res.error) {
+                    console.warn("[NeonSync] pending delete failed:", res.error);
+                    remaining.push(pid);
+                  } else {
+                    // Successfully deleted — remove from in-memory tombstone
+                    pendingDeleteIdsRef.current.delete(pid);
+                  }
+                } catch (err) {
+                  remaining.push(pid);
+                }
+              }
+              // Persist only the ones that still couldn't be deleted
+              await AsyncStorage.setItem("quizforge_pending_deletions", JSON.stringify(remaining));
+            }
+
+            // 5. Fetch quizzes from Neon (deleted quizzes are now gone from the DB)
             const quizzesRes = await fetchMobileQuizzes(user.uid);
 
             if (quizzesRes.error) {
               console.warn("[NeonSync] fetch failed:", quizzesRes.error);
             }
 
-            // Run pending deletions sync in background
-            AsyncStorage.getItem("quizforge_pending_deletions").then(async (val) => {
-              if (val) {
-                const pending = JSON.parse(val);
-                if (pending.length > 0) {
-                  const remaining = [];
-                  for (const pid of pending) {
-                    try {
-                      const res = await deleteMobileQuiz(user.uid, pid);
-                      if (res.error) {
-                        console.warn("[NeonSync] pending delete failed:", res.error);
-                        remaining.push(pid);
-                      }
-                    } catch (err) {
-                      remaining.push(pid);
-                    }
-                  }
-                  if (remaining.length !== pending.length) {
-                    AsyncStorage.setItem("quizforge_pending_deletions", JSON.stringify(remaining));
-                  }
-                }
-              }
-            }).catch(() => {});
-
-            // Auto-import safety: Filter out any IDs that are in the pending deletions list.
-            // Use the in-memory ref as the primary source of truth — it is always up-to-date
-            // because handleDeleteQuizOnMobile adds to it synchronously at delete time.
-            // The AsyncStorage read is a secondary fallback for the first sync after app restart.
-            const pendingVal = await AsyncStorage.getItem("quizforge_pending_deletions");
-            const pendingIdsRaw: string[] = pendingVal ? JSON.parse(pendingVal) : [];
-            // Merge both sources into one authoritative tombstone set
-            const pendingIds = new Set([...pendingIdsRaw, ...pendingDeleteIdsRef.current]);
-            // Also ensure the in-memory ref contains all persisted tombstones
-            pendingIdsRaw.forEach(id => pendingDeleteIdsRef.current.add(id));
+            // Tombstone filter — secondary safety net in case any delete still failed
+            // (e.g. the quiz ID in Neon differs from the local tombstone ID for old quizzes)
+            const pendingIds = new Set([...pendingDeleteIdsRef.current]);
             if (!quizzesRes.error && quizzesRes.quizzes) {
               quizzesRes.quizzes = quizzesRes.quizzes.filter((q: any) => !pendingIds.has(q.id));
             }
