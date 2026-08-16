@@ -344,6 +344,10 @@ export default function HomeScreen() {
   // Track which uid slot is currently loaded so we know when to switch
   const loadedUidRef = React.useRef<string | null | undefined>(undefined); // undefined = not loaded yet
   const quizzesRef = React.useRef<any[]>([]);
+  // In-memory tombstone set — updated synchronously on every delete so that Neon re-syncs
+  // (which happen whenever Firebase re-emits auth state, e.g. on network reconnect) can
+  // never resurrect a quiz the user has already deleted.
+  const pendingDeleteIdsRef = React.useRef<Set<string>>(new Set());
 
   useEffect(() => {
     AsyncStorage.getItem("user-language").then(setSavedAppLanguage);
@@ -487,10 +491,16 @@ export default function HomeScreen() {
               }
             }).catch(() => {});
 
-            // Auto-import safety: Filter out any IDs that are in the pending deletions list
+            // Auto-import safety: Filter out any IDs that are in the pending deletions list.
+            // Use the in-memory ref as the primary source of truth — it is always up-to-date
+            // because handleDeleteQuizOnMobile adds to it synchronously at delete time.
+            // The AsyncStorage read is a secondary fallback for the first sync after app restart.
             const pendingVal = await AsyncStorage.getItem("quizforge_pending_deletions");
             const pendingIdsRaw: string[] = pendingVal ? JSON.parse(pendingVal) : [];
-            const pendingIds = new Set(pendingIdsRaw);
+            // Merge both sources into one authoritative tombstone set
+            const pendingIds = new Set([...pendingIdsRaw, ...pendingDeleteIdsRef.current]);
+            // Also ensure the in-memory ref contains all persisted tombstones
+            pendingIdsRaw.forEach(id => pendingDeleteIdsRef.current.add(id));
             if (!quizzesRes.error && quizzesRes.quizzes) {
               quizzesRes.quizzes = quizzesRes.quizzes.filter((q: any) => !pendingIds.has(q.id));
             }
@@ -553,8 +563,14 @@ export default function HomeScreen() {
                   return synced || l;
                 });
 
-                // Append any completely new quizzes from the server
-                const newFromServer = normalizedQuizzes.filter(n => !cleanLocal.find(l => l.id === n.id || l.neonId === n.id));
+                // Append any completely new quizzes from the server — but never resurrect
+                // tombstoned (locally-deleted) quizzes. This is the key guard that prevents
+                // deleted quizzes from coming back after internet reconnection.
+                const newFromServer = normalizedQuizzes.filter(n =>
+                  !cleanLocal.find(l => l.id === n.id || l.neonId === n.id) &&
+                  !pendingDeleteIdsRef.current.has(n.id) &&
+                  !pendingDeleteIdsRef.current.has(n.neonId)
+                );
 
                 const combined = [...updatedLocal, ...newFromServer];
                 return combined.filter((q: any) => {
@@ -678,11 +694,19 @@ export default function HomeScreen() {
   useEffect(() => {
     (async () => {
       try {
-        const [qRaw, sRaw, dRaw] = await Promise.all([
+        const [qRaw, sRaw, dRaw, pendRaw] = await Promise.all([
           AsyncStorage.getItem(storageKey("quizzes")),
           AsyncStorage.getItem(`quizforge_starred_global`),
           AsyncStorage.getItem(`quizforge_flashcard_decks`),
+          AsyncStorage.getItem("quizforge_pending_deletions"),
         ]);
+        // Populate in-memory tombstone set from persisted list
+        if (pendRaw) {
+          try {
+            const ids: string[] = JSON.parse(pendRaw);
+            ids.forEach(id => pendingDeleteIdsRef.current.add(id));
+          } catch {}
+        }
         if (qRaw) {
           const parsed = JSON.parse(qRaw).filter((q: any) => {
             const qc = typeof q.questions === "number" ? q.questions : (q.questionsList?.length || 0);
@@ -2161,6 +2185,12 @@ export default function HomeScreen() {
       // always finds a match regardless of which ID Neon returns.
       const idsToTombstone = Array.from(new Set([quizToDelete.id, neonId].filter(Boolean)));
 
+      // ── Synchronously mark as deleted in memory ──────────────────────────
+      // This is the critical guard: any Neon re-sync that fires while the app is
+      // running (e.g. after internet reconnects and Firebase re-emits auth state)
+      // will check pendingDeleteIdsRef before adding quizzes back to local state.
+      idsToTombstone.forEach(id => pendingDeleteIdsRef.current.add(id));
+
       AsyncStorage.getItem("quizforge_pending_deletions").then(val => {
         const pending: string[] = val ? JSON.parse(val) : [];
         let changed = false;
@@ -2174,8 +2204,9 @@ export default function HomeScreen() {
           return deleteMobileQuiz(firebaseUser.uid, neonId);
         }
       }).then((res: any) => {
-        // If backend delete succeeded, clean up tombstones
+        // If backend delete succeeded, clean up tombstones from both storage and the ref
         if (res && !res.error) {
+          idsToTombstone.forEach(id => pendingDeleteIdsRef.current.delete(id));
           AsyncStorage.getItem("quizforge_pending_deletions").then(val => {
             if (val) {
               const pending = JSON.parse(val);
@@ -2185,9 +2216,10 @@ export default function HomeScreen() {
             }
           });
         }
-        // If offline/fails → keep tombstone so sync will retry
+        // If offline/fails → keep tombstone in ref + storage so next sync will filter it
       }).catch((err: any) => {
         console.warn("[NeonSync] quiz delete failed or offline:", err);
+        // Leave tombstone in pendingDeleteIdsRef — it will be retried on next login/sync
       });
     }
 
