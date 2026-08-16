@@ -2215,27 +2215,18 @@ export default function HomeScreen() {
         }
         if (changed) return AsyncStorage.setItem("quizforge_pending_deletions", JSON.stringify(pending));
       }).then(() => {
-        // Only hit the backend if there's a real Neon ID (non-local_)
+        // Fire the delete to Neon immediately if online (best-effort)
         if (firebaseUser && !String(neonId).startsWith("local_")) {
           return deleteMobileQuiz(firebaseUser.uid, neonId);
         }
-      }).then((res: any) => {
-        // If backend delete succeeded, clean up tombstones from both storage and the ref
-        if (res && !res.error) {
-          idsToTombstone.forEach(id => pendingDeleteIdsRef.current.delete(id));
-          AsyncStorage.getItem("quizforge_pending_deletions").then(val => {
-            if (val) {
-              const pending = JSON.parse(val);
-              AsyncStorage.setItem("quizforge_pending_deletions",
-                JSON.stringify(pending.filter((id: string) => !idsToTombstone.includes(id)))
-              );
-            }
-          });
-        }
-        // If offline/fails → keep tombstone in ref + storage so next sync will filter it
+      }).then((_res: any) => {
+        // Whether the delete succeeded or failed, we intentionally keep the tombstone
+        // in AsyncStorage. The sync pipeline is the ONLY place that clears tombstones —
+        // it does so only after confirming the quiz is gone from Neon AND filtering it
+        // out of local state. Clearing tombstones here (even on success) caused a bug
+        // where pressing R would reload stale local data but find no tombstone to filter it.
       }).catch((err: any) => {
-        console.warn("[NeonSync] quiz delete failed or offline:", err);
-        // Leave tombstone in pendingDeleteIdsRef — it will be retried on next login/sync
+        console.warn("[NeonSync] quiz delete failed or offline — tombstone kept for next sync:", err);
       });
     }
 
