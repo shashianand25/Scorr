@@ -466,30 +466,29 @@ export default function HomeScreen() {
             //    already deleted — even when the delete happened while offline.
             const pendingValPre = await AsyncStorage.getItem("quizforge_pending_deletions");
             const pendingIdsPre: string[] = pendingValPre ? JSON.parse(pendingValPre) : [];
-            // Also merge in-memory tombstones (added synchronously at delete time)
-            const allPendingIds = Array.from(new Set([...pendingIdsPre, ...pendingDeleteIdsRef.current]));
-            // Ensure the ref is fully populated before the fetch
-            allPendingIds.forEach(id => pendingDeleteIdsRef.current.add(id));
+            // Merge persisted tombstones + in-memory tombstones (added synchronously at delete time)
+            const allTombstoneIds = new Set([...pendingIdsPre, ...pendingDeleteIdsRef.current]);
+            // Ensure the in-memory ref is fully populated
+            allTombstoneIds.forEach(id => pendingDeleteIdsRef.current.add(id));
 
-            if (allPendingIds.length > 0) {
-              console.log(`[NeonSync] Flushing ${allPendingIds.length} pending deletion(s) before fetch…`);
-              const remaining: string[] = [];
-              for (const pid of allPendingIds) {
+            // Track which tombstones still couldn't be flushed (stay pending)
+            let remainingTombstones: string[] = [];
+
+            if (allTombstoneIds.size > 0) {
+              console.log(`[NeonSync] Flushing ${allTombstoneIds.size} pending deletion(s) before fetch…`);
+              for (const pid of allTombstoneIds) {
                 try {
                   const res = await deleteMobileQuiz(user.uid, pid);
                   if (res.error) {
                     console.warn("[NeonSync] pending delete failed:", res.error);
-                    remaining.push(pid);
-                  } else {
-                    // Successfully deleted — remove from in-memory tombstone
-                    pendingDeleteIdsRef.current.delete(pid);
+                    remainingTombstones.push(pid);
                   }
+                  // Successfully deleted — do NOT remove from allTombstoneIds yet.
+                  // We keep it in the set so the merge below can filter stale local data.
                 } catch (err) {
-                  remaining.push(pid);
+                  remainingTombstones.push(pid);
                 }
               }
-              // Persist only the ones that still couldn't be deleted
-              await AsyncStorage.setItem("quizforge_pending_deletions", JSON.stringify(remaining));
             }
 
             // 5. Fetch quizzes from Neon (deleted quizzes are now gone from the DB)
@@ -499,11 +498,9 @@ export default function HomeScreen() {
               console.warn("[NeonSync] fetch failed:", quizzesRes.error);
             }
 
-            // Tombstone filter — secondary safety net in case any delete still failed
-            // (e.g. the quiz ID in Neon differs from the local tombstone ID for old quizzes)
-            const pendingIds = new Set([...pendingDeleteIdsRef.current]);
+            // Pre-filter the Neon response — belt-and-suspenders guard for ID mismatches
             if (!quizzesRes.error && quizzesRes.quizzes) {
-              quizzesRes.quizzes = quizzesRes.quizzes.filter((q: any) => !pendingIds.has(q.id));
+              quizzesRes.quizzes = quizzesRes.quizzes.filter((q: any) => !allTombstoneIds.has(q.id));
             }
 
             if (!quizzesRes.error && quizzesRes.quizzes.length > 0) {
@@ -555,8 +552,15 @@ export default function HomeScreen() {
                 };
               });
               setQuizzes((local: any[]) => {
-                // Exclude sample_quiz — it lives in its own sampleQuiz state, not the main quizzes array
-                const cleanLocal = local.filter((l) => l.id !== "sample_quiz");
+                // Exclude sample_quiz — it lives in its own sampleQuiz state, not the main quizzes array.
+                // ALSO exclude any quiz that is tombstoned — this catches the case where the quiz
+                // was reloaded from stale AsyncStorage data after a JS bundle reload (pressing R),
+                // but was already deleted. allTombstoneIds stays populated through the full merge.
+                const cleanLocal = local.filter((l) =>
+                  l.id !== "sample_quiz" &&
+                  !allTombstoneIds.has(l.id) &&
+                  !allTombstoneIds.has(l.neonId)
+                );
                 
                 // Preserve local ordering
                 const updatedLocal = cleanLocal.map(l => {
@@ -564,13 +568,11 @@ export default function HomeScreen() {
                   return synced || l;
                 });
 
-                // Append any completely new quizzes from the server — but never resurrect
-                // tombstoned (locally-deleted) quizzes. This is the key guard that prevents
-                // deleted quizzes from coming back after internet reconnection.
+                // Append any completely new quizzes from the server — but never resurrect tombstoned quizzes
                 const newFromServer = normalizedQuizzes.filter(n =>
                   !cleanLocal.find(l => l.id === n.id || l.neonId === n.id) &&
-                  !pendingDeleteIdsRef.current.has(n.id) &&
-                  !pendingDeleteIdsRef.current.has(n.neonId)
+                  !allTombstoneIds.has(n.id) &&
+                  !allTombstoneIds.has(n.neonId)
                 );
 
                 const combined = [...updatedLocal, ...newFromServer];
@@ -588,7 +590,7 @@ export default function HomeScreen() {
                 q.id !== "sample_quiz" &&
                 !neonIds.has(q.id) &&
                 !q.neonId &&
-                !pendingIds.has(q.id)
+                !allTombstoneIds.has(q.id)
               );
               console.log(`[NeonSync] Neon has ${normalizedQuizzes.length} quizzes, ${unsynced.length} local unsynced`);
               for (const q of unsynced) {
@@ -616,7 +618,7 @@ export default function HomeScreen() {
               console.log(`[NeonSync] Neon empty, uploading ${quizzesRef.current.length} local quizzes`);
               for (const q of quizzesRef.current) {
                 if (q.neonId || q.isSample || q.id === "sample_quiz") continue; // already synced or is sample
-                if (pendingIds.has(q.id)) continue; // deleted offline — never re-upload
+                if (allTombstoneIds.has(q.id)) continue; // deleted offline — never re-upload
                 createMobileQuiz({
                   id: q.id,
                   userId: user.uid,
@@ -639,7 +641,14 @@ export default function HomeScreen() {
               }
             }
 
-            // 5. Fetch battle history from Neon and merge
+            // Now that the merge is complete, persist only the tombstones that still
+            // couldn't be deleted (e.g. still offline). Successfully deleted ones are gone
+            // from Neon so they no longer need to be in the pending list.
+            await AsyncStorage.setItem("quizforge_pending_deletions", JSON.stringify(remainingTombstones));
+            // Update in-memory ref to match — only keep the ones still unresolved
+            pendingDeleteIdsRef.current = new Set(remainingTombstones);
+
+            // 6. Fetch battle history from Neon and merge
             const battleHistoryRes = await fetchBattleHistory(user.uid);
             if (!battleHistoryRes.error && battleHistoryRes.history.length > 0) {
               AsyncStorage.getItem("battle_history").then(val => {
