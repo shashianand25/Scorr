@@ -23,9 +23,6 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons, FontAwesome6, MaterialCommunityIcons } from "@expo/vector-icons";
-import IconSwords from "tabler-icons-react-native/icons-js/IconSwords";
-import IconUser from "tabler-icons-react-native/icons-js/IconUser";
-import IconFolder from "tabler-icons-react-native/icons-js/IconFolder";
 import { CustomChartIcon } from "../components/ui/CustomChartIcon";
 
 import { GestureHandlerRootView, FlingGestureHandler, Directions, State } from "react-native-gesture-handler";
@@ -492,9 +489,10 @@ export default function HomeScreen() {
 
             // Auto-import safety: Filter out any IDs that are in the pending deletions list
             const pendingVal = await AsyncStorage.getItem("quizforge_pending_deletions");
-            const pendingIds = pendingVal ? JSON.parse(pendingVal) : [];
+            const pendingIdsRaw: string[] = pendingVal ? JSON.parse(pendingVal) : [];
+            const pendingIds = new Set(pendingIdsRaw);
             if (!quizzesRes.error && quizzesRes.quizzes) {
-              quizzesRes.quizzes = quizzesRes.quizzes.filter((q: any) => !pendingIds.includes(q.id));
+              quizzesRes.quizzes = quizzesRes.quizzes.filter((q: any) => !pendingIds.has(q.id));
             }
 
             if (!quizzesRes.error && quizzesRes.quizzes.length > 0) {
@@ -566,9 +564,15 @@ export default function HomeScreen() {
                 });
               });
 
-              // Backfill local-only quizzes that aren't in Neon yet (exclude sample_quiz — it must never be uploaded)
+              // Backfill local-only quizzes that aren't in Neon yet (exclude sample_quiz and tombstoned quizzes)
               const neonIds = new Set(normalizedQuizzes.map((q) => q.id));
-              const unsynced = quizzesRef.current.filter((q) => !q.isSample && q.id !== "sample_quiz" && !neonIds.has(q.id) && !q.neonId);
+              const unsynced = quizzesRef.current.filter((q) =>
+                !q.isSample &&
+                q.id !== "sample_quiz" &&
+                !neonIds.has(q.id) &&
+                !q.neonId &&
+                !pendingIds.has(q.id)
+              );
               console.log(`[NeonSync] Neon has ${normalizedQuizzes.length} quizzes, ${unsynced.length} local unsynced`);
               for (const q of unsynced) {
                 createMobileQuiz({
@@ -591,10 +595,11 @@ export default function HomeScreen() {
                 }).catch((err) => console.warn("[NeonSync] backfill failed:", err));
               }
             } else if (!quizzesRes.error) {
-              // Neon is empty — upload all local quizzes
+              // Neon is empty — upload all local quizzes (skip tombstoned ones)
               console.log(`[NeonSync] Neon empty, uploading ${quizzesRef.current.length} local quizzes`);
               for (const q of quizzesRef.current) {
-                if (q.neonId || q.isSample || q.id === "sample_quiz") continue; // already synced somehow or is sample
+                if (q.neonId || q.isSample || q.id === "sample_quiz") continue; // already synced or is sample
+                if (pendingIds.has(q.id)) continue; // deleted offline — never re-upload
                 createMobileQuiz({
                   id: q.id,
                   userId: user.uid,
@@ -2150,32 +2155,40 @@ export default function HomeScreen() {
     }
 
     const quizToDelete = quizzes.find(q => q.id === quizId);
-    if (quizToDelete && firebaseUser) {
+    if (quizToDelete) {
       const neonId = quizToDelete.neonId ?? quizToDelete.id;
-      if (!String(neonId).startsWith("local_")) {
-        // 1. Add quiz ID to pending deletions & 2. Persist AsyncStorage
-        AsyncStorage.getItem("quizforge_pending_deletions").then(val => {
-          const pending = val ? JSON.parse(val) : [];
-          if (!pending.includes(neonId)) pending.push(neonId);
-          return AsyncStorage.setItem("quizforge_pending_deletions", JSON.stringify(pending));
-        }).then(() => {
-          // 4. Attempt backend DELETE
+      // Tombstone both the local id and neonId so the sync filter
+      // always finds a match regardless of which ID Neon returns.
+      const idsToTombstone = Array.from(new Set([quizToDelete.id, neonId].filter(Boolean)));
+
+      AsyncStorage.getItem("quizforge_pending_deletions").then(val => {
+        const pending: string[] = val ? JSON.parse(val) : [];
+        let changed = false;
+        for (const tombId of idsToTombstone) {
+          if (!pending.includes(tombId)) { pending.push(tombId); changed = true; }
+        }
+        if (changed) return AsyncStorage.setItem("quizforge_pending_deletions", JSON.stringify(pending));
+      }).then(() => {
+        // Only hit the backend if there's a real Neon ID (non-local_)
+        if (firebaseUser && !String(neonId).startsWith("local_")) {
           return deleteMobileQuiz(firebaseUser.uid, neonId);
-        }).then((res) => {
-          // 5. If successful (or already deleted) -> remove tombstone
-          if (!res.error) {
-            AsyncStorage.getItem("quizforge_pending_deletions").then(val => {
-              if (val) {
-                const pending = JSON.parse(val);
-                AsyncStorage.setItem("quizforge_pending_deletions", JSON.stringify(pending.filter((id: string) => id !== neonId)));
-              }
-            });
-          }
-          // 6. If offline/fails -> keep tombstone
-        }).catch((err) => {
-          console.warn("[NeonSync] quiz delete failed or offline:", err);
-        });
-      }
+        }
+      }).then((res: any) => {
+        // If backend delete succeeded, clean up tombstones
+        if (res && !res.error) {
+          AsyncStorage.getItem("quizforge_pending_deletions").then(val => {
+            if (val) {
+              const pending = JSON.parse(val);
+              AsyncStorage.setItem("quizforge_pending_deletions",
+                JSON.stringify(pending.filter((id: string) => !idsToTombstone.includes(id)))
+              );
+            }
+          });
+        }
+        // If offline/fails → keep tombstone so sync will retry
+      }).catch((err: any) => {
+        console.warn("[NeonSync] quiz delete failed or offline:", err);
+      });
     }
 
     AsyncStorage.getItem(`quiz_file_${quizId}`).then(uri => {
@@ -9147,18 +9160,22 @@ export default function HomeScreen() {
                 style={styles.tabItem}
                 scaleTo={0.88}
               >
-                <IconFolder size={24}
-                  strokeWidth={effectiveTab === "library" ? 2.5 : 2}
-                  color={effectiveTab === "library" ? "#FFFFFF" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"} />
-                <Text style={[styles.tabLabel, { color: effectiveTab === "library" ? "#FFFFFF" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)", fontWeight: effectiveTab === "library" ? "800" : "500" }]}>Library</Text>
+                <Ionicons
+                  name={effectiveTab === "library" ? "folder" : "folder-outline"}
+                  size={23}
+                  color={effectiveTab === "library" ? (settingsDarkMode ? "#FFFFFF" : "#000000") : (settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)")}
+                />
+                <Text style={[styles.tabLabel, { color: effectiveTab === "library" ? (settingsDarkMode ? "#FFFFFF" : "#000000") : (settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"), fontWeight: effectiveTab === "library" ? "800" : "500" }]}>Library</Text>
               </AnimatedPressable>
 
               {/* Profile */}
               <AnimatedPressable onPress={() => setActiveTab("menu")} style={styles.tabItem} scaleTo={0.88}>
-                <IconUser size={24}
-                  strokeWidth={effectiveTab === "menu" ? 2.5 : 2}
-                  color={effectiveTab === "menu" ? "#FFFFFF" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"} />
-                <Text style={[styles.tabLabel, { color: effectiveTab === "menu" ? "#FFFFFF" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)", fontWeight: effectiveTab === "menu" ? "800" : "500" }]}>{t('tabs.profile')}</Text>
+                <Ionicons
+                  name={effectiveTab === "menu" ? "person" : "person-outline"}
+                  size={23}
+                  color={effectiveTab === "menu" ? (settingsDarkMode ? "#FFFFFF" : "#000000") : (settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)")}
+                />
+                <Text style={[styles.tabLabel, { color: effectiveTab === "menu" ? (settingsDarkMode ? "#FFFFFF" : "#000000") : (settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"), fontWeight: effectiveTab === "menu" ? "800" : "500" }]}>{t('tabs.profile')}</Text>
               </AnimatedPressable>
 
             </View>
