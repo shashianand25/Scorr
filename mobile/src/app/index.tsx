@@ -1180,6 +1180,31 @@ export default function HomeScreen() {
     }
   }, [pendingSharedQuizId, firebaseUser, isConnected]);
 
+  // ── Bottom Capsule Toast (Pill) ──
+  const [bottomToastMessage, setBottomToastMessage] = useState<string | null>(null);
+  const bottomToastOpacity = useRef(new Animated.Value(0)).current;
+  const bottomToastTranslateY = useRef(new Animated.Value(20)).current;
+  const bottomToastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const showBottomPillToast = React.useCallback((message: string, durationMs = 1800) => {
+    if (bottomToastTimeoutRef.current) clearTimeout(bottomToastTimeoutRef.current);
+    setBottomToastMessage(message);
+    bottomToastOpacity.setValue(0);
+    bottomToastTranslateY.setValue(20);
+
+    Animated.parallel([
+      Animated.timing(bottomToastOpacity, { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.spring(bottomToastTranslateY, { toValue: 0, friction: 7, tension: 40, useNativeDriver: true }),
+    ]).start();
+
+    bottomToastTimeoutRef.current = setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(bottomToastOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
+        Animated.timing(bottomToastTranslateY, { toValue: 12, duration: 200, useNativeDriver: true }),
+      ]).start(() => setBottomToastMessage(null));
+    }, durationMs);
+  }, []);
+
   // ── Pull to Refresh ──
   const [pullRefreshing, setPullRefreshing] = useState(false);
 
@@ -1245,8 +1270,9 @@ export default function HomeScreen() {
     } finally {
       await minDelay;
       setPullRefreshing(false);
+      showBottomPillToast("Updated just now ✨");
     }
-  }, [firebaseUser]);
+  }, [firebaseUser, showBottomPillToast]);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [hasSeenLogin, setHasSeenLogin] = useState(false);
@@ -9375,6 +9401,40 @@ export default function HomeScreen() {
             />
           )}
         </>
+      )}
+
+      {/* ── Floating Bottom Pill Toast (Capsule) ── */}
+      {!!bottomToastMessage && (
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            bottom: Math.max(insets.bottom, 16) + 68,
+            alignSelf: "center",
+            zIndex: 9999,
+            opacity: bottomToastOpacity,
+            transform: [{ translateY: bottomToastTranslateY }],
+            backgroundColor: settingsDarkMode ? "rgba(15, 23, 42, 0.94)" : "rgba(15, 23, 42, 0.90)",
+            paddingHorizontal: 20,
+            paddingVertical: 10,
+            borderRadius: 999,
+            borderWidth: 1,
+            borderColor: settingsDarkMode ? "rgba(255, 255, 255, 0.12)" : "rgba(255, 255, 255, 0.18)",
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 6 },
+            shadowOpacity: 0.35,
+            shadowRadius: 10,
+            elevation: 8,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <Ionicons name="sparkles" size={14} color="#38bdf8" />
+          <Text style={{ color: "#ffffff", fontSize: 13, fontWeight: "600", letterSpacing: 0.2 }}>
+            {bottomToastMessage}
+          </Text>
+        </Animated.View>
       )}
 
     </SafeAreaView>
