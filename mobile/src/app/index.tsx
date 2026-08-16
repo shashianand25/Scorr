@@ -1085,8 +1085,9 @@ export default function HomeScreen() {
           
           setQuizzes((prev) => [finalQuiz, ...prev.filter(q => q.id !== finalQuiz.id && q.neonId !== finalQuiz.id)]);
           trackQuizCreated({ source: "shared_link", questionCount: qCount });
-          setActiveTab("library");
-          setLibraryTab("courses");
+          setActiveTab("insights");
+          setViewingInsightsQuiz(finalQuiz);
+          setViewingInsightsQuizFromTab("home");
           setCustomToast({
             message: `Imported shared course: ${quiz.title}`,
             icon: 'download-outline',
@@ -3300,6 +3301,14 @@ export default function HomeScreen() {
   const insightsPanResponder = useRef(PanResponder.create({
     onStartShouldSetPanResponder: () => false,
     onMoveShouldSetPanResponder: (_, { dx, dy }) => Math.abs(dx) > 5 || Math.abs(dy) > 5,
+    // As soon as a horizontal swipe is detected, snap the flip back to front so the
+    // outgoing card always exits face-up (question side), regardless of whether the
+    // user had tapped to reveal the answer before swiping.
+    onPanResponderGrant: () => {
+      insightsFlipAnim.stopAnimation();
+      insightsFlipAnim.setValue(0);
+      setFcFlipped(false);
+    },
     // setValue has no driver concept — avoids native/JS driver clash entirely
     onPanResponderMove: (_, { dx, dy }) => {
       insightsSwipeX.setValue(dx);
@@ -3326,6 +3335,7 @@ export default function HomeScreen() {
         }
 
         const outVal = dir === 'right' ? W : -W;
+        // Flip already reset in onPanResponderGrant — just ensure it stays at 0
         insightsFlipAnim.stopAnimation();
         insightsFlipAnim.setValue(0);
         setFcFlipped(false);
@@ -5650,9 +5660,13 @@ export default function HomeScreen() {
 
     const flipCard = () => {
       insightsFlipAnim.stopAnimation();
-      const toVal = fcFlipped ? 0 : 180;
+      // Read current animation value synchronously so we are never misled by stale
+      // fcFlipped state (e.g. right after a swipe resets the anim but before React re-renders).
+      const currentVal = (insightsFlipAnim as any)._value as number;
+      const isCurrentlyFlipped = currentVal > 89;
+      const toVal = isCurrentlyFlipped ? 0 : 180;
       Animated.spring(insightsFlipAnim, { toValue: toVal, friction: 8, tension: 10, useNativeDriver: true }).start();
-      setFcFlipped(!fcFlipped);
+      setFcFlipped(!isCurrentlyFlipped);
     };
 
     // ── Text helpers ────────────────────────────────────────────────────────
