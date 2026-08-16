@@ -819,7 +819,7 @@ export function AppModals({ p }: { p: any }) {
       <Modal visible={true} animationType="slide" transparent onRequestClose={() => (p.setSelectedAttemptForModal || (() => {}))(null)}>
         <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }} onPress={() => (p.setSelectedAttemptForModal || (() => {}))(null)}>
           {p.selectedAttemptForModal && (
-            <View style={{ backgroundColor: p.settingsDarkMode ? "#16162a" : "#ffffff", borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 40 }} onStartShouldSetResponder={() => true}>
+            <View style={{ backgroundColor: p.settingsDarkMode ? "#16162a" : "#ffffff", borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: Math.max(insets.bottom, 16) + 20 }} onStartShouldSetResponder={() => true}>
               {/* Drag Handle */}
               <View style={{ width: 40, height: 4, backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)", borderRadius: 2, alignSelf: "center", marginBottom: 24 }} />
               
@@ -969,7 +969,7 @@ export function AppModals({ p }: { p: any }) {
             <Text style={{ fontSize: 18, fontWeight: "700", color: p.settingsDarkMode ? "#fff" : "#0d0f14", marginLeft: 14 }}>Feedback</Text>
           </View>
 
-          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 100 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: Math.max(insets.bottom, 16) + 40 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             <View style={{
               borderRadius: 24, padding: 24, marginBottom: 20,
               backgroundColor: p.settingsDarkMode ? "#141930" : "#ffffff",
@@ -1062,7 +1062,7 @@ export function AppModals({ p }: { p: any }) {
             <Text style={{ fontSize: 17, fontWeight: "700", color: p.settingsDarkMode ? "#fff" : "#0d0f14", letterSpacing: -0.3 }}>Privacy Policy</Text>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 80 }}>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 40 }}>
 
             {/* Hero banner */}
             <LinearGradient colors={p.settingsDarkMode ? ["#1a1040", "#0d1535"] : ["#ebe9ff", "#f0f4ff"]}
@@ -1162,7 +1162,7 @@ export function AppModals({ p }: { p: any }) {
             <Text style={{ fontSize: 17, fontWeight: "700", color: p.settingsDarkMode ? "#fff" : "#0d0f14", letterSpacing: -0.3 }}>Terms of Service</Text>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 80 }}>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 40 }}>
 
             {/* Hero banner */}
             <LinearGradient colors={p.settingsDarkMode ? ["#0d2010", "#0d1535"] : ["#e6fff5", "#f0f9ff"]}
@@ -1297,7 +1297,7 @@ export function AppModals({ p }: { p: any }) {
                   </Pressable>
                 </View>
 
-                <ScrollView ref={optionsScrollRef} style={{ paddingHorizontal: 20 }} contentContainerStyle={{ paddingBottom: 100 }}>
+                <ScrollView ref={optionsScrollRef} style={{ paddingHorizontal: 20 }} contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 120 }}>
                   {[
                     { id: "marathon", title: "Marathon", sub: "All questions, no timer", icon: "help-circle", color: "#3b82f6" },
                     { id: "unanswered", title: "Unanswered", sub: "Questions you haven't answered yet", icon: "layers-outline", color: "#f59e0b" },
@@ -1539,7 +1539,7 @@ export function AppModals({ p }: { p: any }) {
                   })}
                 </ScrollView>
 
-                <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingHorizontal: 20, paddingBottom: Platform.OS === "ios" ? 44 : 36, paddingTop: 16, backgroundColor: p.settingsDarkMode ? "#0f172a" : "#f4f4f8" }}>
+                <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 16) + (p.selectedQuiz?.category === "AI Generated" ? 12 : 16), paddingTop: 16, backgroundColor: p.settingsDarkMode ? "#0f172a" : "#f4f4f8" }}>
                   <Pressable
                     disabled={questionCount === 0 || (quizPreset === "mistakes" && wrongCount === 0)}
                     onPress={() => { (p.handleStartQuiz || (() => {}))(); setQuizSetupStep("presets"); }}
@@ -1598,7 +1598,7 @@ export function AppModals({ p }: { p: any }) {
               return p.pdfViewQuiz?.questionsList || [];
             })()}
             keyExtractor={(item, index) => String(item.id || index)}
-            contentContainerStyle={{ padding: 16, paddingBottom: 80, gap: 12, backgroundColor: p.settingsDarkMode ? "#0f172a" : "#f4f4f8" }}
+            contentContainerStyle={{ padding: 16, paddingBottom: Math.max(insets.bottom, 16) + 40, gap: 12, backgroundColor: p.settingsDarkMode ? "#0f172a" : "#f4f4f8" }}
             renderItem={({ item, index }) => (
               <View style={{
                 backgroundColor: p.settingsDarkMode ? "#1e293b" : "#ffffff",
@@ -1697,7 +1697,7 @@ export function AppModals({ p }: { p: any }) {
           <View style={{
             backgroundColor: p.settingsDarkMode ? "#090A0F" : "#F4F4F8",
             borderTopLeftRadius: 28, borderTopRightRadius: 28,
-            paddingBottom: Platform.OS === "ios" ? 44 : 24,
+            paddingBottom: Math.max(insets.bottom, 16) + 16,
             paddingHorizontal: 16,
             overflow: "hidden",
           }} onStartShouldSetResponder={() => true}>
@@ -2081,7 +2081,7 @@ export function AppModals({ p }: { p: any }) {
       {p.showFlashcardOptions != null && (
       <Modal visible={true} transparent animationType="slide" onRequestClose={() => (p.setShowFlashcardOptions || (() => {}))(null)}>
         <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }} onPress={() => (p.setShowFlashcardOptions || (() => {}))(null)}>
-          <View style={{ backgroundColor: p.settingsDarkMode ? "#1e293b" : "#ffffff", borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 8, paddingBottom: 36 }} onStartShouldSetResponder={() => true}>
+          <View style={{ backgroundColor: p.settingsDarkMode ? "#1e293b" : "#ffffff", borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 8, paddingBottom: Math.max(insets.bottom, 16) + 16 }} onStartShouldSetResponder={() => true}>
             <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.12)", alignSelf: "center", marginBottom: 16 }} />
             <Text style={{ fontSize: 17, fontWeight: "700", color: p.settingsDarkMode ? "#ffffff" : "#0d0f14", paddingHorizontal: 20, marginBottom: 12 }}>
               {p.showFlashcardOptions?.title}
@@ -2161,7 +2161,7 @@ export function AppModals({ p }: { p: any }) {
             </View>
 
             {/* List */}
-            <ScrollView style={{ flex: 1, paddingHorizontal: 20 }}>
+            <ScrollView style={{ flex: 1, paddingHorizontal: 20 }} contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 24 }}>
               {APP_LANGUAGES.filter(l => l.name.toLowerCase().includes((p.languageSearch || "").toLowerCase()) || l.nativeName.toLowerCase().includes((p.languageSearch || "").toLowerCase())).map((l, idx) => {
                 const isSelected = (l.id === 'system' && !p.savedAppLanguage) || (p.savedAppLanguage === l.code && l.id !== 'system');
                 return (

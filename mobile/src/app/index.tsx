@@ -986,6 +986,9 @@ export default function HomeScreen() {
   const [showWrongReview, setShowWrongReview] = useState<boolean>(false);
   const [snapshotReviewData, setSnapshotReviewData] = useState<any[]>([]);
   const [viewingReportCardData, setViewingReportCardData] = useState<{ attempt: any, quiz: any } | null>(null);
+  const [activeSession, setActiveSession] = useState<any | null>(null);
+  const [isConnected, setIsConnected] = useState<boolean>(true);
+  const [studyQueue, setStudyQueue] = useState<string[]>([]);
 
   const reportCardQs = useMemo(() => {
     const rcq: any[] = [];
@@ -1149,7 +1152,6 @@ export default function HomeScreen() {
   const [signOutLoading, setSignOutLoading] = useState(false);
 
   // ── Network State ──
-  const [isConnected, setIsConnected] = useState<boolean>(true);
   const [offlineModalParams, setOfflineModalParams] = useState<{ title: string; message: string; buttons?: { text: string; onPress: () => void; isPrimary?: boolean }[] } | null>(null);
   const [syncToastMessage, setSyncToastMessage] = useState<string | null>(null);
   const [customToast, setCustomToast] = useState<{ message: string, icon: any, color: string } | null>(null);
@@ -1219,7 +1221,6 @@ export default function HomeScreen() {
     AsyncStorage.setItem("pref_autoSlideEnabled", val ? "1" : "0");
   };
 
-  const [activeSession, setActiveSession] = useState<any | null>(null);
   const activeSessionRef = React.useRef<any>(null);
   React.useEffect(() => {
     activeSessionRef.current = activeSession;
@@ -3291,7 +3292,6 @@ export default function HomeScreen() {
   const [fcCards, setFcCards] = useState<{ front: string; back: string }[]>([{ front: "", back: "" }]);
   const [fcCurrentIdx, setFcCurrentIdx] = useState(0);
   const [studyCardIdx, setStudyCardIdx] = useState(0);
-  const [studyQueue, setStudyQueue] = useState<string[]>([]);
   const [studyQueueTotal, setStudyQueueTotal] = useState<number>(0);
   const [customStudyMode, setCustomStudyMode] = useState(false);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
@@ -4863,7 +4863,7 @@ export default function HomeScreen() {
 
         <ScrollView 
           style={{ flex: 1 }}
-          contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 100 }}
+          contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: Math.max(insets.bottom, 16) + 90 }}
           showsVerticalScrollIndicator={false}
         >
           {/* Mascot */}
@@ -4952,7 +4952,7 @@ export default function HomeScreen() {
         </ScrollView>
 
         {/* Bottom Pinned Continue Button */}
-        <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingHorizontal: 24, paddingVertical: 20, paddingTop: 10, backgroundColor: settingsDarkMode ? "#0b1021" : "#f8fafc" }}>
+        <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingHorizontal: 24, paddingBottom: Math.max(insets.bottom, 16) + 16, paddingTop: 10, backgroundColor: settingsDarkMode ? "#0b1021" : "#f8fafc" }}>
           <Pressable
             onPress={() => saveAndExitQuizSession(true)}
             style={({ pressed }) => ({
@@ -5817,7 +5817,7 @@ export default function HomeScreen() {
         </View>
 
         {/* Bottom Nav */}
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 24, paddingBottom: 32, paddingTop: 10 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 24, paddingBottom: Math.max(insets.bottom, 16) + 16, paddingTop: 10 }}>
           <Pressable
             onPress={() => { 
               if (fcIndex > 0) { 
@@ -6489,7 +6489,7 @@ export default function HomeScreen() {
                 <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }}
                   onPress={() => setShowDeckPicker(false)}>
                   <View style={{ backgroundColor: settingsDarkMode ? "#1e293b" : "#ffffff",
-                    borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 8, paddingBottom: 32, maxHeight: "75%",
+                    borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 8, paddingBottom: Math.max(insets.bottom, 16) + 16, maxHeight: "75%",
                     shadowColor: "#000", shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 20 }}
                     onStartShouldSetResponder={() => true}>
                     <View style={{ width: 36, height: 4, borderRadius: 2,
@@ -6647,7 +6647,7 @@ export default function HomeScreen() {
                 <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }}
                   onPress={() => setShowEllipsisMenu(false)}>
                   <View style={{ backgroundColor: settingsDarkMode ? "#1e293b" : "#ffffff",
-                    borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 8, paddingBottom: 36,
+                    borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 8, paddingBottom: Math.max(insets.bottom, 16) + 16,
                     shadowColor: "#000", shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 20 }}
                     onStartShouldSetResponder={() => true}>
                     <View style={{ width: 36, height: 4, borderRadius: 2,
@@ -7372,7 +7372,7 @@ export default function HomeScreen() {
                   </Pressable>
                 </View>
 
-                <ScrollView contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
+                <ScrollView contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: Math.max(insets.bottom, 16) + 90 }} showsVerticalScrollIndicator={false}>
                   {/* Performance Breakdown Box */}
                   <View style={{ backgroundColor: settingsDarkMode ? "#172033" : "#ffffff", borderRadius: 16, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
                     {/* Perfectly */}
@@ -7464,7 +7464,7 @@ export default function HomeScreen() {
                 </ScrollView>
 
                 {/* Bottom Pinned Done Button */}
-                <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingHorizontal: 24, paddingVertical: 20, paddingTop: 10, backgroundColor: settingsDarkMode ? "#0b1021" : "#f8fafc" }}>
+                <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingHorizontal: 24, paddingBottom: Math.max(insets.bottom, 16) + 16, paddingTop: 10, backgroundColor: settingsDarkMode ? "#0b1021" : "#f8fafc" }}>
                   <Pressable
                     onPress={handleGoBack}
                     style={({ pressed }) => ({
@@ -7673,7 +7673,7 @@ export default function HomeScreen() {
               </View>
 
               {/* Bottom Actions — fixed height so card never shifts */}
-              <View style={{ height: 160, justifyContent: "center", borderTopWidth: 1, borderTopColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)" }}>
+              <View style={{ height: 130 + Math.max(insets.bottom, 16), paddingBottom: Math.max(insets.bottom, 16), justifyContent: "center", borderTopWidth: 1, borderTopColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)" }}>
               {isPreviewMode ? (
                 // ── Preview mode: no rating buttons, just flip + advance ──
                 <View style={{ paddingHorizontal: 20, gap: 12 }}>
@@ -9244,7 +9244,7 @@ export default function HomeScreen() {
               <Ionicons name="close" size={28} color={settingsDarkMode ? "#ffffff" : "#111827"} />
             </Pressable>
           </View>
-          <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 20, paddingBottom: 100 }}>
+          <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 20, paddingBottom: Math.max(insets.bottom, 16) + 40 }}>
             {(() => {
               // Live session review uses the snapshot captured at press time.
               // History report card uses reportCardQs from useMemo.
@@ -9412,7 +9412,7 @@ export default function HomeScreen() {
             <FlatList
               data={(!sampleDismissed && sampleQuiz) ? [sampleQuiz, ...quizzes].reverse() : [...quizzes].reverse()}
               keyExtractor={(item) => item.id}
-              contentContainerStyle={{ padding: 16, gap: 10 }}
+              contentContainerStyle={{ padding: 16, paddingBottom: Math.max(insets.bottom, 16) + 24, gap: 10 }}
               renderItem={({ item }) => (
                 <Pressable
                   onPress={() => handleHostBattle(item.id)}
@@ -9480,7 +9480,7 @@ export default function HomeScreen() {
             </SafeAreaView>
 
             <ScrollView
-              contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 160, paddingTop: 4 }}
+              contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 16) + 140, paddingTop: 4 }}
               showsVerticalScrollIndicator={false}
             >
 
@@ -9639,7 +9639,7 @@ export default function HomeScreen() {
               position: "absolute", bottom: 0, left: 0, right: 0,
               backgroundColor: isDark ? "#0B0F1C" : "#f4f4f8",
               borderTopWidth: 1, borderTopColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)",
-              paddingHorizontal: 20, paddingTop: 16, paddingBottom: Platform.OS === "ios" ? 36 : 20,
+              paddingHorizontal: 20, paddingTop: 16, paddingBottom: Math.max(insets.bottom, 16) + 16,
               gap: 10,
             }}>
               {/* Join code row removed as per user request */}
@@ -9702,7 +9702,7 @@ export default function HomeScreen() {
               <FlatList
                 data={[...battleHistory].sort((a, b) => b.date - a.date)}
                 keyExtractor={(_, i) => String(i)}
-                contentContainerStyle={{ padding: 16, gap: 10 }}
+                contentContainerStyle={{ padding: 16, paddingBottom: Math.max(insets.bottom, 16) + 24, gap: 10 }}
                 renderItem={({ item }) => {
                   const d = new Date(item.date);
                   const dateStr = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -9941,7 +9941,7 @@ export default function HomeScreen() {
                 </Pressable>
               </View>
 
-              <ScrollView style={{ paddingHorizontal: 20 }} contentContainerStyle={{ paddingBottom: 100 }}>
+              <ScrollView style={{ paddingHorizontal: 20 }} contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 100 }}>
                 {/* Spaced Repetition option */}
                 <Pressable
                   onPress={() => setSelectedStudyMode("spaced")}
@@ -9994,7 +9994,7 @@ export default function HomeScreen() {
               </ScrollView>
 
               {/* Start Flashcards button — pinned to bottom */}
-              <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingHorizontal: 20, paddingBottom: Platform.OS === "ios" ? 44 : 36, paddingTop: 16, backgroundColor: isDark ? "#0f172a" : "#f4f4f8" }}>
+              <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 16) + 16, paddingTop: 16, backgroundColor: isDark ? "#0f172a" : "#f4f4f8" }}>
                 <Pressable
                   onPress={handleStart}
                   style={({ pressed }) => [
