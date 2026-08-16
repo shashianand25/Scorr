@@ -20,6 +20,7 @@ import {
   BackHandler,
   FlatList,
   Share,
+  RefreshControl,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons, FontAwesome6, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -1114,38 +1115,49 @@ export default function HomeScreen() {
           const flashcards = parsed?.flashcards && parsed.flashcards.length > 0 ? parsed.flashcards : [];
           const qCount = questionsList.length || quiz.questionCount || 0;
 
+          const newQuizId = "quiz_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
+
           let finalQuiz: any = {
-            id: quiz.id || ("shared_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9)),
-            neonId: quiz.id,
+            id: newQuizId,
+            neonId: null,
             title: quiz.title,
             category: quiz.category || "General",
             questions: qCount,
             questionsList,
             flashcards,
             sourceText: quiz.sourceText,
+            createdAt: new Date().toISOString(),
             attempts: [],
             wrongQuestions: [],
             uniqueCorrectIds: []
           };
 
-          if (firebaseUser?.uid) {
-            const { quiz: savedQuiz } = await createMobileQuiz({
-              id: finalQuiz.id,
-              userId: firebaseUser.uid,
-              title: quiz.title,
-              category: quiz.category || "General",
-              questionCount: qCount,
-              sourceText: quiz.sourceText,
-              attempts: [],
-              wrongQuestions: [],
-              uniqueCorrectIds: []
-            });
-            if (savedQuiz) {
-              finalQuiz = { ...finalQuiz, ...savedQuiz, questionsList, flashcards, sourceText: quiz.sourceText, neonId: savedQuiz.id };
+          if (firebaseUser?.uid && neonUserReadyRef.current) {
+            try {
+              const { quiz: savedQuiz, error: saveErr } = await createMobileQuiz({
+                id: newQuizId,
+                userId: firebaseUser.uid,
+                title: quiz.title,
+                category: quiz.category || "General",
+                questionCount: qCount,
+                sourceText: quiz.sourceText,
+                attempts: [],
+                wrongQuestions: [],
+                uniqueCorrectIds: []
+              });
+              if (savedQuiz && !saveErr) {
+                finalQuiz = { ...finalQuiz, neonId: savedQuiz.id };
+              }
+            } catch (saveError) {
+              console.warn("[SharedQuizImport] Cloud sync warning:", saveError);
             }
           }
           
-          setQuizzes((prev) => [finalQuiz, ...prev.filter(q => q.id !== finalQuiz.id && q.neonId !== finalQuiz.id)]);
+          setQuizzes((prev) => {
+            const updated = [finalQuiz, ...prev.filter((q: any) => q.id !== finalQuiz.id && q.id !== newQuizId)];
+            AsyncStorage.setItem(storageKey("quizzes"), JSON.stringify(updated)).catch(() => {});
+            return updated;
+          });
           trackQuizCreated({ source: "shared_link", questionCount: qCount });
           setActiveTab("insights");
           setViewingInsightsQuiz(finalQuiz);
@@ -1167,6 +1179,74 @@ export default function HomeScreen() {
       fetchAndImport();
     }
   }, [pendingSharedQuizId, firebaseUser, isConnected]);
+
+  // ── Pull to Refresh ──
+  const [pullRefreshing, setPullRefreshing] = useState(false);
+
+  const handlePullRefresh = React.useCallback(async () => {
+    setPullRefreshing(true);
+    const minDelay = new Promise((resolve) => setTimeout(resolve, 800));
+    try {
+      const { config } = await fetchAppConfig();
+      if (config) setAppConfig(config);
+
+      if (firebaseUser && neonUserReadyRef.current) {
+        const pendRaw = await AsyncStorage.getItem("quizforge_pending_deletions");
+        const pendingIds: string[] = pendRaw ? JSON.parse(pendRaw) : [];
+        const allTombstones = new Set([...pendingIds, ...pendingDeleteIdsRef.current]);
+
+        const quizzesRes = await fetchMobileQuizzes(firebaseUser.uid);
+        if (!quizzesRes.error && quizzesRes.quizzes) {
+          const filteredFromDb = quizzesRes.quizzes.filter((q: any) => !allTombstones.has(q.id));
+          if (filteredFromDb.length > 0) {
+            const normalized = filteredFromDb.map((q: any) => {
+              const localCopy = quizzesRef.current.find((l: any) => l.id === q.id || l.neonId === q.id);
+              return {
+                id: q.id,
+                neonId: q.id,
+                title: q.title,
+                questions: q.questionCount,
+                category: q.category,
+                time: "Synced",
+                questionsList: (() => {
+                  if (localCopy?.questionsList?.length > 0) return localCopy.questionsList;
+                  try {
+                    const parsed = JSON.parse(q.sourceText);
+                    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+                  } catch {}
+                  try { return parseQstText(q.sourceText).questions; } catch { return []; }
+                })(),
+                flashcards: (() => {
+                  if (localCopy?.flashcards?.length > 0) return localCopy.flashcards;
+                  try { return parseQstText(q.sourceText).flashcards || []; } catch { return []; }
+                })(),
+                attempts: (() => {
+                  const dbAttempts = q.attempts ?? [];
+                  const locAttempts = localCopy?.attempts ?? [];
+                  const attemptMap = new Map();
+                  for (const a of dbAttempts) attemptMap.set(a.id, a);
+                  for (const a of locAttempts) attemptMap.set(a.id, a);
+                  return Array.from(attemptMap.values()).sort((a, b) => Number(b.id) - Number(a.id));
+                })(),
+                wrongQuestions: q.wrongQuestions ?? localCopy?.wrongQuestions ?? [],
+                uniqueCorrectIds: q.uniqueCorrectIds ?? localCopy?.uniqueCorrectIds ?? [],
+              };
+            });
+
+            const localOnly = quizzesRef.current.filter((l: any) => !allTombstones.has(l.id) && !filteredFromDb.some((dbQ: any) => dbQ.id === l.id || dbQ.id === l.neonId));
+            const merged = [...normalized, ...localOnly];
+            setQuizzes(merged);
+            AsyncStorage.setItem(storageKey("quizzes"), JSON.stringify(merged)).catch(() => {});
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("[PullRefresh] failed:", err);
+    } finally {
+      await minDelay;
+      setPullRefreshing(false);
+    }
+  }, [firebaseUser]);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [hasSeenLogin, setHasSeenLogin] = useState(false);
@@ -6173,6 +6253,15 @@ export default function HomeScreen() {
             <ScrollView
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 120 }}
+              refreshControl={
+                <RefreshControl
+                  refreshing={pullRefreshing}
+                  onRefresh={handlePullRefresh}
+                  tintColor={settingsDarkMode ? "#818cf8" : "#4f46e5"}
+                  colors={["#4f46e5", "#818cf8"]}
+                  progressBackgroundColor={settingsDarkMode ? "#1e293b" : "#ffffff"}
+                />
+              }
             >
               {!hasItems ? (
                 <View style={{ alignItems: "center", paddingTop: 64, gap: 14 }}>
@@ -8413,6 +8502,15 @@ export default function HomeScreen() {
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
                 contentContainerStyle={{ paddingBottom: 90 }}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={pullRefreshing}
+                    onRefresh={handlePullRefresh}
+                    tintColor={settingsDarkMode ? "#818cf8" : "#4f46e5"}
+                    colors={["#4f46e5", "#818cf8"]}
+                    progressBackgroundColor={settingsDarkMode ? "#1e293b" : "#ffffff"}
+                  />
+                }
               >
                 {/* ── Top: Search + Avatar ── */}
                 <View style={{
