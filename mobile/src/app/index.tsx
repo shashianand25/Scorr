@@ -722,19 +722,25 @@ export default function HomeScreen() {
           AsyncStorage.getItem(`quizforge_flashcard_decks`),
           AsyncStorage.getItem("quizforge_pending_deletions"),
         ]);
-        // Populate in-memory tombstone set from persisted list
+        // Populate in-memory tombstone set from persisted list BEFORE loading quizzes,
+        // so we can filter them out immediately.
+        const tombstoneIds: Record<string, true> = {};
         if (pendRaw) {
           try {
             const ids: string[] = JSON.parse(pendRaw);
-            ids.forEach(id => pendingDeleteIdsRef.current.add(id));
+            ids.forEach(id => { tombstoneIds[id] = true; pendingDeleteIdsRef.current.add(id); });
           } catch {}
         }
         if (qRaw) {
-          const parsed = JSON.parse(qRaw).filter((q: any) => {
-            const qc = typeof q.questions === "number" ? q.questions : (q.questionsList?.length || 0);
-            const cc = q.flashcards?.length || 0;
-            return qc > 0 || cc > 0;
-          });
+          const parsed = JSON.parse(qRaw)
+            .filter((q: any) => {
+              // Strip tombstoned quizzes — they were deleted but AsyncStorage may still
+              // have them if the app restarted before the persistence effect fired.
+              if (tombstoneIds[q.id] || tombstoneIds[q.neonId]) return false;
+              const qc = typeof q.questions === "number" ? q.questions : (q.questionsList?.length || 0);
+              const cc = q.flashcards?.length || 0;
+              return qc > 0 || cc > 0;
+            });
           setQuizzes(prev => prev.length === 0 ? parsed : prev);
         }
         if (sRaw) {
@@ -2244,6 +2250,10 @@ export default function HomeScreen() {
     }).catch(() => {});
 
     const updatedQuizzes = quizzes.filter((q) => q.id !== quizId);
+    // Write immediately to AsyncStorage so any app restart loads the correct list.
+    // Don't wait for the persistence useEffect — it fires after the render cycle and
+    // a fast R-press could reload stale data before it runs.
+    AsyncStorage.setItem(storageKey("quizzes"), JSON.stringify(updatedQuizzes)).catch(() => {});
     setQuizzes(updatedQuizzes);
     setViewingInsightsQuiz(null);
     setActiveTab(viewingInsightsQuizFromTab as any || "home");
@@ -2472,7 +2482,7 @@ export default function HomeScreen() {
           >
             <Feather name="arrow-left" size={18} color={textSub} />
             <Text style={{ fontSize: 14, color: textSub, fontWeight: "500" }}>
-              {viewingInsightsQuizFromTab === "library" ? "Back to library" : "Back to home"}
+              {viewingInsightsQuizFromTab === "library" ? (t('insight.back_to_library') || "Back to library") : (t('insight.back_to_home') || "Back to home")}
             </Text>
           </Pressable>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
@@ -2488,45 +2498,22 @@ export default function HomeScreen() {
             <View style={{ backgroundColor: isDark ? "#123324" : "#dcfce7", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
               <Text style={{ color: isDark ? "#4ADE80" : "#166534", fontSize: 11, fontWeight: "600" }}>{quiz.category || "General"}</Text>
             </View>
-            <Text style={{ fontSize: 12, color: textSub }}>{(quiz.questionsList || []).length} questions</Text>
+            <Text style={{ fontSize: 12, color: textSub }}>{(quiz.questionsList || []).length} {t('actions.questions') || "questions"}</Text>
           </View>
           <Text style={{ fontSize: 18, fontWeight: "600", color: textMain, lineHeight: 24 }} numberOfLines={3} ellipsizeMode="tail">
             {(quiz.title || "").replace(/[\r\n]+/g, " ").replace(/[-_]/g, (match: string) => `${match}\u200B`)}
           </Text>
         </View>
 
-        {/* Stats Grid (Temporarily Hidden for UI Testing) */}
-        {/*
-        <View style={{ flexDirection: "row", gap: 10, marginBottom: 20 }}>
-          <View style={{ flex: 1.2, backgroundColor: isDark ? "#2B2560" : "#ede9fe", borderRadius: 16, padding: 16, justifyContent: "center" }}>
-            <Ionicons name="trophy" size={24} color={isDark ? "#B5A8FF" : "#7c3aed"} />
-            <View style={{ marginTop: 12 }}>
-              <Text style={{ fontSize: 32, fontWeight: "700", color: isDark ? "#EDE9FE" : "#4c1d95", marginBottom: 2 }}>{attempts.length > 0 ? `${highScore}%` : "—"}</Text>
-              <Text style={{ fontSize: 13, color: isDark ? "rgba(181, 168, 255, 0.9)" : "#6d28d9", fontWeight: "500" }}>Peak score</Text>
-            </View>
-          </View>
-          <View style={{ flex: 1, gap: 10 }}>
-            <View style={{ flex: 1, backgroundColor: cardBg, borderRadius: 16, padding: 14, justifyContent: "center", borderWidth: 1, borderColor: border }}>
-              <Text style={{ fontSize: 22, fontWeight: "700", color: textMain, marginBottom: 2 }}>{attempts.length > 0 ? `${avgScore}%` : "—"}</Text>
-              <Text style={{ fontSize: 12, color: textSub, fontWeight: "500" }}>Avg score</Text>
-            </View>
-            <View style={{ flex: 1, backgroundColor: cardBg, borderRadius: 16, padding: 14, justifyContent: "center", borderWidth: 1, borderColor: border }}>
-              <Text style={{ fontSize: 22, fontWeight: "700", color: textMain, marginBottom: 2 }}>{attempts.length}</Text>
-              <Text style={{ fontSize: 12, color: textSub, fontWeight: "500" }}>Sessions</Text>
-            </View>
-          </View>
-        </View>
-        */}
-
         {/* Practice Modes */}
-        <Text style={{ fontSize: 16, fontWeight: "600", color: textMain, marginTop: 12, marginBottom: 12, marginLeft: 4 }}>Practice</Text>
+        <Text style={{ fontSize: 16, fontWeight: "600", color: textMain, marginTop: 12, marginBottom: 12, marginLeft: 4 }}>{t('insight.practice') || "Practice"}</Text>
         <View style={{ flexDirection: "row", gap: 10, marginBottom: 24 }}>
           <Pressable onPress={() => handleOpenQuizOptions(quiz)} style={({pressed}) => [{ flex: 1, backgroundColor: cardBg, borderRadius: 16, paddingVertical: 16, paddingHorizontal: 8, borderWidth: 1, borderColor: border, flexDirection: "row", alignItems: "center" }, pressed && {opacity: 0.8}]}>
             <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: isDark ? "#20264A" : "#e0e7ff", alignItems: "center", justifyContent: "center", marginRight: 6 }}>
               <Ionicons name="help-circle" size={18} color={isDark ? "#7C9DFF" : "#4338ca"} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 15, fontWeight: "700", color: textMain, marginBottom: 4 }} adjustsFontSizeToFit numberOfLines={1}>Quiz</Text>
+              <Text style={{ fontSize: 15, fontWeight: "700", color: textMain, marginBottom: 4 }} adjustsFontSizeToFit numberOfLines={1}>{t('create_pick.quiz_title') || "Quiz"}</Text>
               <Text style={{ fontSize: 12, color: isDark ? "rgba(255,255,255,0.8)" : textSub }} numberOfLines={1}>{(quiz.questionsList || []).length} Qs</Text>
             </View>
             <Feather name="chevron-right" size={16} color={isDark ? "#FFFFFF" : "#9ca3af"} style={{ opacity: isDark ? 0.8 : 1 }} />
@@ -2537,7 +2524,7 @@ export default function HomeScreen() {
               <Ionicons name="albums" size={16} color={isDark ? "#B5A8FF" : "#7c3aed"} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 15, fontWeight: "700", color: textMain, marginBottom: 4 }} adjustsFontSizeToFit numberOfLines={1}>Flashcards</Text>
+              <Text style={{ fontSize: 15, fontWeight: "700", color: textMain, marginBottom: 4 }} adjustsFontSizeToFit numberOfLines={1}>{t('create_pick.flashcard_title') || "Flashcards"}</Text>
               <Text style={{ fontSize: 12, color: isDark ? "rgba(255,255,255,0.8)" : textSub }} numberOfLines={1}>{(quiz.flashcards || []).length} Cards</Text>
             </View>
             <Feather name="chevron-right" size={16} color={isDark ? "#FFFFFF" : "#9ca3af"} style={{ opacity: isDark ? 0.8 : 1 }} />
@@ -2554,19 +2541,16 @@ export default function HomeScreen() {
             <Ionicons name="flame" size={18} color={isDark ? "#FB7185" : "#e11d48"} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 16, fontWeight: "700", color: textMain, marginBottom: 4 }} numberOfLines={1}>Challenge a Friend</Text>
-            <Text style={{ fontSize: 12, color: isDark ? "rgba(255,255,255,0.8)" : textSub }} numberOfLines={1}>Battle using this quiz in real-time</Text>
+            <Text style={{ fontSize: 16, fontWeight: "700", color: textMain, marginBottom: 4 }} numberOfLines={1}>{t('battle.challenge_friend') || "Challenge a Friend"}</Text>
+            <Text style={{ fontSize: 12, color: isDark ? "rgba(255,255,255,0.8)" : textSub }} numberOfLines={1}>{t('battle.challenge_desc') || "Battle using this quiz in real-time"}</Text>
           </View>
           <Feather name="chevron-right" size={16} color={isDark ? "#FFFFFF" : "#9ca3af"} style={{ opacity: isDark ? 0.8 : 1 }} />
         </Pressable>
 
-
-
-
         {/* Continue Last Attempt (if one exists) */}
         {savedSessions[quiz.id] && (
           <View style={{ marginBottom: 32 }}>
-            <Text style={{ fontSize: 12, fontWeight: "600", color: textSub, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 12, marginLeft: 4 }}>In Progress</Text>
+            <Text style={{ fontSize: 12, fontWeight: "600", color: textSub, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 12, marginLeft: 4 }}>{t('insight.in_progress') || "In Progress"}</Text>
             <Pressable 
               onPress={() => {
                 setActiveSession(savedSessions[quiz.id]);
@@ -2581,13 +2565,13 @@ export default function HomeScreen() {
             >
               <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: "#f59e0b", marginRight: 12 }} />
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 16, fontWeight: "700", color: textMain, marginBottom: 4 }}>Resume Attempt #{attempts.length + 1}</Text>
+                <Text style={{ fontSize: 16, fontWeight: "700", color: textMain, marginBottom: 4 }}>{t('insight.resume_attempt') || "Resume Attempt"} #{attempts.length + 1}</Text>
                 <Text style={{ fontSize: 13, color: textSub }}>
                   {Object.keys(savedSessions[quiz.id].answers || {}).length} / {(savedSessions[quiz.id].questions || []).length} completed
                 </Text>
               </View>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                <Text style={{ fontSize: 14, fontWeight: "600", color: "#f59e0b" }}>Continue</Text>
+                <Text style={{ fontSize: 14, fontWeight: "600", color: "#f59e0b" }}>{t('common.continue') || "Continue"}</Text>
                 <Feather name="arrow-right" size={16} color="#f59e0b" />
               </View>
             </Pressable>
@@ -2596,7 +2580,7 @@ export default function HomeScreen() {
 
         {/* Past Attempts */}
         <Text style={{ fontSize: 12, fontWeight: "600", color: textSub, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 12, marginLeft: 4 }}>
-          {savedSessions[quiz.id] ? "Past Attempts" : "Attempt History"}
+          {savedSessions[quiz.id] ? (t('insight.past_attempts') || "Past Attempts") : (t('insight.attempt_history') || "Attempt History")}
         </Text>
         {attempts.length === 0 ? (
           <View style={{ borderWidth: 1, borderStyle: "dashed", borderColor: isDark ? "#2A3050" : "#d1d5db", borderRadius: 16, padding: 24, alignItems: "center" }}>
@@ -2617,7 +2601,7 @@ export default function HomeScreen() {
                 >
                   <View style={{ flex: 1 }}>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                      <Text style={{ fontSize: 14, fontWeight: "600", color: textMain }}>Attempt #{attemptNum}</Text>
+                      <Text style={{ fontSize: 14, fontWeight: "600", color: textMain }}>{t('insight.attempt') || "Attempt"} #{attemptNum}</Text>
                       {isRetry && (
                         <View style={{ backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
                           <Text style={{ fontSize: 10, fontWeight: "600", color: textSub }}>Retry of #{attempt.retryOfAttemptNum}</Text>
@@ -4616,49 +4600,17 @@ export default function HomeScreen() {
               let effectiveWin = false;
               let myTime = host ? (data.hostTime ?? Infinity) : (data.guestTime ?? Infinity);
               let oppTime = host ? (data.guestTime ?? Infinity) : (data.hostTime ?? Infinity);
-              if (myScore > oppScore) effectiveWin = true;
-              else if (myScore === oppScore) {
-                effectiveWin = myTime < oppTime;
-              }
-              const qList = activeSessionRef.current?.questions || activeSession?.questions || [];
-              const aMap = activeSessionRef.current?.answers || activeSession?.answers || {};
-              saveBattleResult(code, myScore, oppScore, oppName, data.quizTitle || "", effectiveWin, myTime !== Infinity ? myTime : undefined, oppTime !== Infinity ? oppTime : undefined, qList, aMap);
-              setBattlePopup({ myScore, opponentScore: oppScore, opponentName: oppName, won: effectiveWin, myTime, opponentTime: oppTime });
-              if (effectiveWin) triggerConfettiBurst();
-              unsubscribe();
-            }
-          });
-        }
-
-        if (battleUnsubscribeRef.current) battleUnsubscribeRef.current();
-        setBattleRoomCode("");
-        setBattleRoomState(null);
-        setActiveSession(null);
-        setIsHost(false);
-        setJoinCodeInput("");
-        setActiveTab("battle");
-      };
-
-      // ── WAITING FOR OPPONENT ────────────────────────────────────────
-      if (!bothFinished) {
-        const isDark = settingsDarkMode;
-        const bg = isDark ? "#0f172a" : "#f4f4f8";
-        const cardBg = isDark ? "#1e293b" : "#ffffff";
-        const txt = isDark ? "#ffffff" : "#0d0f14";
-        const muted = isDark ? "#94a3b8" : "#64748b";
-        const border = isDark ? "rgba(255,255,255,0.08)" : "#e2e8f0";
-
-        return (
+                    return (
           <View style={{ flex: 1, backgroundColor: bg, alignItems: "center", justifyContent: "center", padding: 24 }}>
             {/* My score card */}
             <View style={{ backgroundColor: cardBg, borderRadius: 20, padding: 24, width: "100%",
               borderWidth: 1, borderColor: border, alignItems: "center", marginBottom: 28 }}>
               <Text style={{ fontSize: 12, fontWeight: "700", color: muted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 16 }}>
-                Your Score
+                {t('battle.your_score') || "Your Score"}
               </Text>
               <Text style={{ fontSize: 56, fontWeight: "900", color: txt, letterSpacing: -2 }}>{myScore}</Text>
               <Text style={{ fontSize: 13, color: muted, marginTop: 4 }}>
-                {activeSession.correctCount || 0} correct of {activeSession.questions?.length || 0} questions
+                {t('quiz_results.score_desc', { correct: activeSession.correctCount || 0, total: activeSession.questions?.length || 0 }) || `${activeSession.correctCount || 0} correct of ${activeSession.questions?.length || 0} questions`}
               </Text>
             </View>
 
@@ -4666,10 +4618,10 @@ export default function HomeScreen() {
             <View style={{ alignItems: "center", marginBottom: 36, gap: 12 }}>
               <ActivityIndicator size="large" color={isDark ? "#818cf8" : "#6366f1"} />
               <Text style={{ fontSize: 16, fontWeight: "700", color: txt }}>
-                Waiting for {opponentName} to finish…
+                {t('battle.waiting_finish', { name: opponentName }) || `Waiting for ${opponentName} to finish…`}
               </Text>
               <Text style={{ fontSize: 13, color: muted, textAlign: "center" }}>
-                Results will appear when both players are done.
+                {t('battle.both_done_desc') || "Results will appear when both players are done."}
               </Text>
               <Pressable
                 onPress={() => {
@@ -4681,7 +4633,7 @@ export default function HomeScreen() {
                 }}
                 style={({ pressed }) => [{ marginTop: 8, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }, pressed && { opacity: 0.7 }]}
               >
-                <Text style={{ fontSize: 13, fontWeight: "600", color: isDark ? "#818cf8" : "#6366f1" }}>Refresh Status</Text>
+                <Text style={{ fontSize: 13, fontWeight: "600", color: isDark ? "#818cf8" : "#6366f1" }}>{t('battle.refresh_status') || "Refresh Status"}</Text>
               </Pressable>
             </View>
 
@@ -4693,7 +4645,7 @@ export default function HomeScreen() {
                 paddingVertical: 14, borderRadius: 14, width: "100%", alignItems: "center",
               }, pressed && { opacity: 0.7 }]}
             >
-              <Text style={{ color: muted, fontSize: 15, fontWeight: "600" }}>Exit to Library</Text>
+              <Text style={{ color: muted, fontSize: 15, fontWeight: "600" }}>{t('battle.exit_to_library') || "Exit to Library"}</Text>
             </Pressable>
           </View>
         );
@@ -4728,7 +4680,7 @@ export default function HomeScreen() {
 
             <Text style={{ fontSize: 34, fontWeight: "900", letterSpacing: -1, marginBottom: 4,
               color: effectiveWin ? "#22c55e" : isPerfectDraw ? "#6366f1" : "#ef4444" }}>
-              {effectiveWin ? "VICTORY!" : isPerfectDraw ? "DRAW!" : "DEFEATED"}
+              {effectiveWin ? (t('battle.victory') || "VICTORY!") : isPerfectDraw ? (t('battle.draw') || "DRAW!") : (t('battle.defeated') || "DEFEATED")}
             </Text>
             {/* Tie-breaker explanation */}
             {isTie && !isPerfectDraw && (
@@ -4736,12 +4688,12 @@ export default function HomeScreen() {
                 borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6, marginBottom: 6,
                 borderWidth: 1, borderColor: tiebreakerWin ? "rgba(34,197,94,0.25)" : "rgba(239,68,68,0.2)" }}>
                 <Text style={{ fontSize: 12, fontWeight: "700", color: tiebreakerWin ? "#22c55e" : "#ef4444" }}>
-                  {tiebreakerWin ? "⚡ You were faster — tiebreaker win!" : "⚡ Opponent was faster — tiebreaker loss"}
+                  {tiebreakerWin ? (t('battle.tiebreaker_won') || "⚡ You were faster — tiebreaker win!") : (t('battle.tiebreaker_lost') || "⚡ Opponent was faster — tiebreaker loss")}
                 </Text>
               </View>
             )}
             <Text style={{ fontSize: 14, color: settingsDarkMode ? "#64748b" : "#64748b", marginBottom: 28, textAlign: "center", fontWeight: "500" }}>
-              {effectiveWin ? "You dominated the quiz!" : isPerfectDraw ? "Perfectly matched!" : "Better luck next time!"}
+              {effectiveWin ? (t('battle.dominated_msg') || "You dominated the quiz!") : isPerfectDraw ? (t('battle.draw_msg') || "Perfect match!") : (t('battle.defeated_msg') || "Better luck next time!")}
             </Text>
 
             {/* Score card */}
@@ -4755,9 +4707,9 @@ export default function HomeScreen() {
                 <Text style={{ fontSize: 26 }}>🦊</Text>
                 <Text style={{ fontSize: 11, color: settingsDarkMode ? "#71717a" : "#64748b", fontWeight: "700", marginBottom: 2 }}>{myName}</Text>
                 <Text style={{ fontSize: 30, fontWeight: "900", color: settingsDarkMode ? "#fff" : "#0d0f14", letterSpacing: -1 }}>{myScore}</Text>
-                <Text style={{ fontSize: 10, color: settingsDarkMode ? "#52525b" : "#94a3b8", fontWeight: "700", textTransform: "uppercase" }}>pts</Text>
+                <Text style={{ fontSize: 10, color: settingsDarkMode ? "#52525b" : "#94a3b8", fontWeight: "700", textTransform: "uppercase" }}>{t('battle.pts') || "pts"}</Text>
                 {effectiveWin && <View style={{ backgroundColor: "rgba(34,197,94,0.2)", borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2, marginTop: 4 }}>
-                  <Text style={{ fontSize: 9, fontWeight: "800", color: "#22c55e", textTransform: "uppercase", letterSpacing: 0.5 }}>Winner</Text>
+                  <Text style={{ fontSize: 9, fontWeight: "800", color: "#22c55e", textTransform: "uppercase", letterSpacing: 0.5 }}>{t('battle.winner_badge') || "Winner"}</Text>
                 </View>}
               </View>
 
@@ -4769,16 +4721,16 @@ export default function HomeScreen() {
                 <Text style={{ fontSize: 26 }}>🐺</Text>
                 <Text style={{ fontSize: 11, color: settingsDarkMode ? "#71717a" : "#64748b", fontWeight: "700", marginBottom: 2 }}>{opponentName}</Text>
                 <Text style={{ fontSize: 30, fontWeight: "900", color: settingsDarkMode ? "#fff" : "#0d0f14", letterSpacing: -1 }}>{opponentScore}</Text>
-                <Text style={{ fontSize: 10, color: settingsDarkMode ? "#52525b" : "#94a3b8", fontWeight: "700", textTransform: "uppercase" }}>pts</Text>
+                <Text style={{ fontSize: 10, color: settingsDarkMode ? "#52525b" : "#94a3b8", fontWeight: "700", textTransform: "uppercase" }}>{t('battle.pts') || "pts"}</Text>
                 {!effectiveWin && !isPerfectDraw && <View style={{ backgroundColor: "rgba(34,197,94,0.2)", borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2, marginTop: 4 }}>
-                  <Text style={{ fontSize: 9, fontWeight: "800", color: "#22c55e", textTransform: "uppercase", letterSpacing: 0.5 }}>Winner</Text>
+                  <Text style={{ fontSize: 9, fontWeight: "800", color: "#22c55e", textTransform: "uppercase", letterSpacing: 0.5 }}>{t('battle.winner_badge') || "Winner"}</Text>
                 </View>}
               </View>
             </View>
 
             {/* Stats row */}
             <View style={{ flexDirection: "row", gap: 10, width: "100%", marginBottom: 32 }}>
-              {[{label: "Questions", value: String(totalQs)}, {label: "Correct", value: String(activeSession.correctCount || 0)}, {label: "Accuracy", value: accuracy + "%"}].map((s) => (
+              {[{label: t('library.questions_count') || "Questions", value: String(totalQs)}, {label: t('quiz_results.correct') || "Correct", value: String(activeSession.correctCount || 0)}, {label: t('dashboard.accuracy') || "Accuracy", value: accuracy + "%"}].map((s) => (
                 <View key={s.label} style={{ flex: 1,
                   backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.04)" : "#ffffff",
                   borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.07)" : "#e2e8f0",
@@ -4804,7 +4756,7 @@ export default function HomeScreen() {
                 paddingVertical: 16, borderRadius: 14, width: "100%", alignItems: "center",
               }, pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }]}
             >
-              <Text style={{ color: "#fff", fontSize: 16, fontWeight: "800" }}>⚔️ Back to Battle Lobby</Text>
+              <Text style={{ color: "#fff", fontSize: 16, fontWeight: "800" }}>{t('battle.back_to_lobby') || "⚔️ Back to Battle Lobby"}</Text>
             </Pressable>
           </ScrollView>
         </View>
@@ -4901,7 +4853,7 @@ export default function HomeScreen() {
       <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#0b1021" : "#f8fafc" }}>
         {/* Header with Close Button */}
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 24, paddingTop: 20, paddingBottom: 0 }}>
-          <Text style={{ fontSize: 24, fontWeight: "600", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Quiz Results</Text>
+          <Text style={{ fontSize: 24, fontWeight: "600", color: settingsDarkMode ? "#ffffff" : "#111827" }}>{t('quiz_results.title') || "Quiz Results"}</Text>
           <Pressable onPress={() => saveAndExitQuizSession(true)} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 8 })}>
             <Ionicons name="close" size={28} color={settingsDarkMode ? "#ffffff" : "#111827"} />
           </Pressable>
@@ -4929,7 +4881,7 @@ export default function HomeScreen() {
           <View style={{ alignItems: "center", marginBottom: 24 }}>
             <Text style={{ fontSize: 48, fontWeight: "800", color: "#84cc16" }}>{scorePct}%</Text>
             <Text style={{ fontSize: 15, color: settingsDarkMode ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.6)", marginTop: 4 }}>
-              {correctCount} out of {totalQs} correct
+              {t('quiz_results.score_desc', { correct: correctCount, total: totalQs }) || `${correctCount} out of ${totalQs} correct`}
             </Text>
           </View>
 
@@ -4939,13 +4891,13 @@ export default function HomeScreen() {
               <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "#84cc16", alignItems: "center", justifyContent: "center" }}>
                 <Ionicons name="checkmark-sharp" size={22} color="#ffffff" />
               </View>
-              <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>{correctCount} Correct</Text>
+              <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>{correctCount} {t('quiz_results.correct') || "Correct"}</Text>
             </View>
             <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#172033" : "#ffffff", borderRadius: 16, padding: 20, flexDirection: "row", alignItems: "center", gap: 14, borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
               <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "#ef4444", alignItems: "center", justifyContent: "center" }}>
                 <Ionicons name="close-sharp" size={22} color="#ffffff" />
               </View>
-              <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>{wrongCount} Incorrect</Text>
+              <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>{wrongCount} {t('quiz_results.incorrect') || "Incorrect"}</Text>
             </View>
           </View>
 
@@ -4954,10 +4906,8 @@ export default function HomeScreen() {
             <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "#0284c7", alignItems: "center", justifyContent: "center" }}>
               <Text style={{ fontSize: 16, fontWeight: "700", color: "#ffffff" }}>{totalQs}</Text>
             </View>
-            <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>{totalQs} Answered</Text>
+            <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>{totalQs} {t('quiz_results.answered') || "Answered"}</Text>
           </View>
-
-
 
           {/* Report Card Button */}
           <Pressable 
@@ -4991,7 +4941,7 @@ export default function HomeScreen() {
           >
             <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
               <Text style={{ fontSize: 24 }}>📝</Text>
-              <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>Review Answers</Text>
+              <Text style={{ fontSize: 16, fontWeight: "500", color: settingsDarkMode ? "#ffffff" : "#111827" }}>{t('quiz_results.review_answers') || "Review Answers"}</Text>
             </View>
             <Feather name="chevron-right" size={22} color={settingsDarkMode ? "#ffffff" : "#111827"} />
           </Pressable>
@@ -5011,7 +4961,7 @@ export default function HomeScreen() {
               shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8
             })}
           >
-            <Text style={{ fontSize: 16, fontWeight: "600", color: "#111827" }}>Continue</Text>
+            <Text style={{ fontSize: 16, fontWeight: "600", color: "#111827" }}>{t('quiz_results.continue_btn') || "Continue"}</Text>
           </Pressable>
         </View>
       </View>
@@ -5320,9 +5270,9 @@ export default function HomeScreen() {
             alignItems: "center", justifyContent: "center", marginBottom: 24 }}>
             <Text style={{ fontSize: 44 }}>⚔️</Text>
           </View>
-          <Text style={{ fontSize: 26, fontWeight: "900", color: isDark ? "#fff" : "#0d0f14", letterSpacing: -0.5, marginBottom: 10, textAlign: "center" }}>Sign in to Battle</Text>
+          <Text style={{ fontSize: 26, fontWeight: "900", color: isDark ? "#fff" : "#0d0f14", letterSpacing: -0.5, marginBottom: 10, textAlign: "center" }}>{t('battle.signin_title') || "Sign in to Battle"}</Text>
           <Text style={{ fontSize: 15, color: isDark ? "#94a3b8" : "#64748b", textAlign: "center", lineHeight: 22, marginBottom: 36 }}>
-            Quiz Clash requires an account so your identity is verified and results are saved fairly.
+            {t('battle.signin_desc') || "Quiz Clash requires an account so your identity is verified and results are saved fairly."}
           </Text>
           <Pressable
             onPress={() => setShowAuthScreen(true)}
@@ -5331,7 +5281,7 @@ export default function HomeScreen() {
               borderRadius: 16, alignItems: "center", width: "100%",
             }, pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }]}
           >
-            <Text style={{ color: "#fff", fontSize: 16, fontWeight: "800" }}>Sign In / Create Account</Text>
+            <Text style={{ color: "#fff", fontSize: 16, fontWeight: "800" }}>{t('battle.signin_btn') || "Sign In / Create Account"}</Text>
           </Pressable>
         </View>
       );
@@ -5399,7 +5349,7 @@ export default function HomeScreen() {
               </AnimatedPressable>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                 <MaterialCommunityIcons name="sword-cross" size={19} color={isDark ? "#818cf8" : "#6366f1"} />
-                <Text style={{ fontSize: 15, color: isDark ? "#818cf8" : "#6366f1", fontWeight: "700" }}>Battle Arena</Text>
+                <Text style={{ fontSize: 15, color: isDark ? "#818cf8" : "#6366f1", fontWeight: "700" }}>{t('battle.title') || "Battle Arena"}</Text>
               </View>
             </View>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -5412,7 +5362,7 @@ export default function HomeScreen() {
                 }}
               >
                 <Ionicons name="time-outline" size={13} color={muted} />
-                <Text style={{ fontSize: 12, fontWeight: "500", color: muted }}>History</Text>
+                <Text style={{ fontSize: 12, fontWeight: "500", color: muted }}>{t('battle.history') || "History"}</Text>
               </AnimatedPressable>
               
               <AnimatedPressable
@@ -5435,7 +5385,7 @@ export default function HomeScreen() {
             </Text>
           </View>
           <Text style={{ fontSize: 13, color: muted, fontWeight: "400", textAlign: "center", marginBottom: 20 }}>
-            Challenge friends. Prove your knowledge.
+            {t('battle.subtitle') || "Challenge friends in real-time matches"}
           </Text>
 
           {/* Error banner removed to use inline errors */}
@@ -5463,8 +5413,8 @@ export default function HomeScreen() {
                   <Ionicons name="trophy" size={19} color={isDark ? "#f0b429" : "#d97706"} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 14, fontWeight: "500", color: txt, marginBottom: 1 }}>Host a battle</Text>
-                  <Text style={{ fontSize: 12, color: muted }}>Pick your quiz & invite opponents</Text>
+                  <Text style={{ fontSize: 14, fontWeight: "500", color: txt, marginBottom: 1 }}>{t('battle.host_battle') || "Host a battle"}</Text>
+                  <Text style={{ fontSize: 12, color: muted }}>{t('battle.host_desc') || "Pick your quiz & invite opponents"}</Text>
                 </View>
                 <Feather name="chevron-right" size={17} color={mutedSub} />
               </AnimatedPressable>
@@ -5472,7 +5422,7 @@ export default function HomeScreen() {
               {/* Divider */}
               <View style={{ flexDirection: "row", alignItems: "center", marginVertical: 14, gap: 10 }}>
                 <View style={{ flex: 1, height: 0.5, backgroundColor: sepColor }} />
-                <Text style={{ color: mutedSub, fontSize: 11 }}>or</Text>
+                <Text style={{ color: mutedSub, fontSize: 11 }}>{t('common.or') || "or"}</Text>
                 <View style={{ flex: 1, height: 0.5, backgroundColor: sepColor }} />
               </View>
 
@@ -5490,8 +5440,8 @@ export default function HomeScreen() {
                     <Ionicons name="locate" size={19} color={isDark ? "#2dd4a7" : "#0d9488"} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 14, fontWeight: "500", color: txt, marginBottom: 1 }}>Join a battle</Text>
-                    <Text style={{ fontSize: 12, color: muted }}>Enter your friend's room code</Text>
+                    <Text style={{ fontSize: 14, fontWeight: "500", color: txt, marginBottom: 1 }}>{t('battle.join_battle') || "Join a battle"}</Text>
+                    <Text style={{ fontSize: 12, color: muted }}>{t('battle.join_desc') || "Enter your friend's room code"}</Text>
                   </View>
                 </View>
                 <View style={{ flexDirection: "row", gap: 8 }}>
@@ -5504,7 +5454,7 @@ export default function HomeScreen() {
                       borderRadius: 10, paddingHorizontal: 12,
                       fontSize: 13, color: txt, letterSpacing: 2
                     }}
-                    placeholder="CODE"
+                    placeholder={t('battle.code_placeholder') || "CODE"}
                     placeholderTextColor={mutedSub}
                     maxLength={5}
                     value={joinCodeInput}
@@ -5531,7 +5481,7 @@ export default function HomeScreen() {
                     {battleCreating ? (
                       <ActivityIndicator size="small" color={isDark ? "#ffffff" : "#ffffff"} />
                     ) : (
-                      <Text style={{ color: (joinCodeInput.length === 5 && !battleCreating) ? "#ffffff" : (isDark ? "#777d99" : "#64748b"), fontSize: 13, fontWeight: (joinCodeInput.length === 5) ? "700" : "500" }}>Join</Text>
+                      <Text style={{ color: (joinCodeInput.length === 5 && !battleCreating) ? "#ffffff" : (isDark ? "#777d99" : "#64748b"), fontSize: 13, fontWeight: (joinCodeInput.length === 5) ? "700" : "500" }}>{t('battle.join_btn') || "Join"}</Text>
                     )}
                   </AnimatedPressable>
                 </View>
@@ -5555,7 +5505,7 @@ export default function HomeScreen() {
                       <Text style={{ fontSize: 17, fontWeight: "500", color: txt }}>{winRate}%</Text>
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 13, fontWeight: "500", color: txt, marginBottom: 2 }}>Win rate</Text>
+                      <Text style={{ fontSize: 13, fontWeight: "500", color: txt, marginBottom: 2 }}>{t('battle.win_rate') || "Win rate"}</Text>
                       <Text style={{ fontSize: 11, color: muted }}>{totalWins} win{totalWins !== 1 ? 's' : ''} out of {totalBattles} battle{totalBattles !== 1 ? 's' : ''} played</Text>
                     </View>
                   </View>
@@ -5566,14 +5516,14 @@ export default function HomeScreen() {
                       <Ionicons name="flame" size={19} color="#e8825a" />
                       <View>
                         <Text style={{ fontSize: 15, fontWeight: "500", color: txt }}>{dayStreak}</Text>
-                        <Text style={{ fontSize: 10, color: isDark ? "#c98e75" : "#e8825a" }}>day streak</Text>
+                        <Text style={{ fontSize: 10, color: isDark ? "#c98e75" : "#e8825a" }}>{t('battle.day_streak') || "day streak"}</Text>
                       </View>
                     </View>
                     <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: isDark ? "rgba(240,180,41,0.12)" : "rgba(240,180,41,0.08)", borderRadius: 14, padding: 10 }}>
                       <Ionicons name="trophy" size={19} color="#f0b429" />
                       <View>
                         <Text style={{ fontSize: 15, fontWeight: "500", color: txt }}>{totalWins}</Text>
-                        <Text style={{ fontSize: 10, color: isDark ? "#cda85f" : "#f0b429" }}>total wins</Text>
+                        <Text style={{ fontSize: 10, color: isDark ? "#cda85f" : "#f0b429" }}>{t('battle.total_wins') || "total wins"}</Text>
                       </View>
                     </View>
                   </View>
@@ -5609,7 +5559,7 @@ export default function HomeScreen() {
                     <Text style={{ fontSize: 36, color: isDark ? "#818cf8" : "#6366f1", fontWeight: "900" }}>?</Text>
                   </View>
                   <Text style={{ color: muted, fontSize: 13, fontWeight: "700" }}>
-                    {battleRoomState?.status === "playing" ? (isHost ? battleRoomState?.guestName : battleRoomState?.hostName) || "Rival" : "Waiting..."}
+                    {battleRoomState?.status === "playing" ? (isHost ? battleRoomState?.guestName : battleRoomState?.hostName) || "Rival" : (t('battle.waiting') || "Waiting...")}
                   </Text>
                 </View>
               </View>
@@ -5621,7 +5571,7 @@ export default function HomeScreen() {
                   borderWidth: 1, borderColor: cardBorder,
                   borderRadius: 20, padding: 24, width: "100%", alignItems: "center", marginBottom: 24
                 }}>
-                  <Text style={{ fontSize: 11, color: mutedSub, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 14 }}>Share This Code</Text>
+                  <Text style={{ fontSize: 11, color: mutedSub, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 14 }}>{t('battle.share_code') || "Share This Code"}</Text>
                   <View style={{ flexDirection: "row", gap: 8, marginBottom: 14 }}>
                     {battleRoomCode.split("").map((ch, i) => (
                       <View key={i} style={{
@@ -5634,14 +5584,14 @@ export default function HomeScreen() {
                       </View>
                     ))}
                   </View>
-                  <Text style={{ fontSize: 13, color: muted, fontWeight: "500" }}>Waiting for opponent to join...</Text>
+                  <Text style={{ fontSize: 13, color: muted, fontWeight: "500" }}>{t('battle.waiting_opponent') || "Waiting for opponent to join..."}</Text>
                 </View>
               )}
 
               {battleCountdown !== null ? (
                 <View style={{ alignItems: "center", gap: 10, marginBottom: 28 }}>
                   <Text style={{ fontSize: 72, color: isDark ? "#818cf8" : "#6366f1", fontWeight: "900" }}>{battleCountdown}</Text>
-                  <Text style={{ fontSize: 20, color: txt, fontWeight: "800", marginTop: -10 }}>Get Ready!</Text>
+                  <Text style={{ fontSize: 20, color: txt, fontWeight: "800", marginTop: -10 }}>{t('battle.get_ready') || "Get Ready!"}</Text>
                 </View>
               ) : battleRoomState?.status === "playing" ? (
                 <View style={{ alignItems: "center", gap: 10, marginBottom: 28 }}>
@@ -5672,7 +5622,7 @@ export default function HomeScreen() {
                 }}
                 style={({ pressed }) => [{ paddingVertical: 10, paddingHorizontal: 20 }, pressed && { opacity: 0.7 }]}
               >
-                <Text style={{ color: "#ef4444", fontSize: 15, fontWeight: "700" }}>✕ Cancel & Leave</Text>
+                <Text style={{ color: "#ef4444", fontSize: 15, fontWeight: "700" }}>✕ {t('common.cancel') || "Cancel"}</Text>
               </Pressable>
             </View>
           )}
@@ -5698,8 +5648,8 @@ export default function HomeScreen() {
           </View>
           <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 40, paddingBottom: 60 }}>
              <Text style={{ fontSize: 50, marginBottom: 20 }}>📭</Text>
-             <Text style={{ fontSize: 20, fontWeight: "700", color: isDark ? "#fff" : "#111827", textAlign: "center", marginBottom: 8 }}>No flashcards available.</Text>
-             <Text style={{ fontSize: 15, color: isDark ? "#9ca3af" : "#6b7280", textAlign: "center", lineHeight: 22 }}>This quiz doesn't include flashcards.</Text>
+             <Text style={{ fontSize: 20, fontWeight: "700", color: isDark ? "#fff" : "#111827", textAlign: "center", marginBottom: 8 }}>{t('flashcards.no_cards') || "No flashcards available."}</Text>
+             <Text style={{ fontSize: 15, color: isDark ? "#9ca3af" : "#6b7280", textAlign: "center", lineHeight: 22 }}>{t('flashcards.no_cards_sub') || "This quiz doesn't include flashcards."}</Text>
           </View>
         </View>
       );
@@ -5895,7 +5845,7 @@ export default function HomeScreen() {
           </Pressable>
 
           <Text style={{ fontSize: 14, color: isDark ? "#ffffff" : "#111827", fontWeight: "500" }}>
-            Tap the card to flip
+            {t('flashcards.tap_to_flip') || "Tap the card to flip"}
           </Text>
 
           <Pressable
