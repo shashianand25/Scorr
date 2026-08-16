@@ -23,7 +23,6 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, Ionicons, FontAwesome6, MaterialCommunityIcons } from "@expo/vector-icons";
-import IconHome from "tabler-icons-react-native/icons-js/IconHome";
 import IconSwords from "tabler-icons-react-native/icons-js/IconSwords";
 import IconUser from "tabler-icons-react-native/icons-js/IconUser";
 import IconFolder from "tabler-icons-react-native/icons-js/IconFolder";
@@ -1034,8 +1033,14 @@ export default function HomeScreen() {
     };
   }, []);
 
+  const importingSharedQuizRef = React.useRef<string | null>(null);
+
   useEffect(() => {
     if (pendingSharedQuizId && isConnected) {
+      // Guard: if we're already importing this exact ID, skip
+      if (importingSharedQuizRef.current === pendingSharedQuizId) return;
+      importingSharedQuizRef.current = pendingSharedQuizId;
+
       const id = pendingSharedQuizId;
       setPendingSharedQuizId(null);
       
@@ -1098,6 +1103,7 @@ export default function HomeScreen() {
           Alert.alert("Import Failed", err.message);
         } finally {
           setIsImporting(false);
+          importingSharedQuizRef.current = null;
         }
       };
       
@@ -9116,9 +9122,11 @@ export default function HomeScreen() {
 
               {/* Home */}
               <AnimatedPressable onPress={() => setActiveTab("home")} style={styles.tabItem} scaleTo={0.88}>
-                <IconHome size={24}
-                  strokeWidth={effectiveTab === "home" ? 2.5 : 2}
-                  color={effectiveTab === "home" ? "#FFFFFF" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"} />
+                <Ionicons
+                  name={effectiveTab === "home" ? "home" : "home-outline"}
+                  size={23}
+                  color={effectiveTab === "home" ? "#FFFFFF" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"}
+                />
                 <Text style={[styles.tabLabel, { color: effectiveTab === "home" ? "#FFFFFF" : settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)", fontWeight: effectiveTab === "home" ? "800" : "500" }]}>{t('tabs.home')}</Text>
               </AnimatedPressable>
 
