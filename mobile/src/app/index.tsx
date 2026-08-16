@@ -2386,7 +2386,7 @@ export default function HomeScreen() {
           <Pressable onPress={() => setActiveTab("insights")} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 6, marginLeft: -6 })}>
             <Ionicons name="arrow-back" size={24} color={isDark ? "#ffffff" : "#0f172a"} />
           </Pressable>
-          <Text style={{ fontSize: 18, fontWeight: "700", color: isDark ? "#ffffff" : "#0d0f14" }}>Bookmarked Questions</Text>
+          <Text style={{ fontSize: 18, fontWeight: "700", color: isDark ? "#ffffff" : "#0d0f14" }}>{t('insight.bookmarked_questions') || "Bookmarked Questions"}</Text>
           {/* Use width: 36 to perfectly center the title against the 24px icon + 12px padding */}
           <View style={{ width: 36 }} />
         </View>
@@ -2395,7 +2395,7 @@ export default function HomeScreen() {
           {bookmarkedQs.length === 0 ? (
             <View style={{ alignItems: "center", paddingVertical: 40, marginTop: 40 }}>
               <Ionicons name="bookmark-outline" size={64} color={isDark ? "rgba(255,255,255,0.15)" : "#cbd5e1"} style={{ marginBottom: 16 }} />
-              <Text style={{ fontSize: 16, color: textSub, textAlign: "center" }}>No bookmarked questions yet.</Text>
+              <Text style={{ fontSize: 16, color: textSub, textAlign: "center" }}>{t('insight.no_bookmarks') || "No bookmarked questions yet."}</Text>
             </View>
           ) : (
             <View style={{ gap: 16 }}>
@@ -2404,7 +2404,7 @@ export default function HomeScreen() {
                 style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: isDark ? "#6366f1" : "#4f46e5", paddingVertical: 14, borderRadius: 12, marginBottom: 12 }, pressed && { opacity: 0.8 }]}
               >
                 <Ionicons name="play" size={18} color="#fff" />
-                <Text style={{ color: "#fff", fontWeight: "600", fontSize: 16 }}>Attempt Bookmarked</Text>
+                <Text style={{ color: "#fff", fontWeight: "600", fontSize: 16 }}>{t('insight.attempt_bookmarked') || "Attempt Bookmarked"}</Text>
               </Pressable>
               {bookmarkedQs.map((q: any, i: number) => {
                 const isBookmarked = starredQuestions.has(q.id);
@@ -2665,7 +2665,7 @@ export default function HomeScreen() {
         <View style={[styles.panelCard, !settingsDarkMode && styles.lightCard]}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
             <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, backgroundColor: "rgba(168, 85, 247, 0.12)" }}>
-              <Text style={{ fontSize: 10, fontWeight: "bold", color: "#a855f7" }}>FLASHCARDS</Text>
+              <Text style={{ fontSize: 10, fontWeight: "bold", color: "#a855f7" }}>{t('create_pick.flashcard_title') || "FLASHCARDS"}</Text>
             </View>
           </View>
           <Text style={[styles.tabTitle, !settingsDarkMode && styles.lightText, { fontSize: 20, marginTop: 4 }]} numberOfLines={2}>
@@ -2687,7 +2687,7 @@ export default function HomeScreen() {
               <Ionicons name="albums-outline" size={20} color="#f59e0b" />
             </View>
             <Text style={[styles.statValue, !settingsDarkMode && styles.lightText]}>{cardCount}</Text>
-            <Text style={[styles.statLabel, !settingsDarkMode && styles.lightTextSub]}>Total Cards</Text>
+            <Text style={[styles.statLabel, !settingsDarkMode && styles.lightTextSub]}>{t('insight.total_cards') || "Total Cards"}</Text>
           </View>
 
           <View 
@@ -2702,7 +2702,7 @@ export default function HomeScreen() {
               <Ionicons name="checkmark-circle-outline" size={20} color="#22c55e" />
             </View>
             <Text style={[styles.statValue, !settingsDarkMode && styles.lightText]}>{latestAttempt ? latestAttempt.known : 0}</Text>
-            <Text style={[styles.statLabel, !settingsDarkMode && styles.lightTextSub]}>Mastered</Text>
+            <Text style={[styles.statLabel, !settingsDarkMode && styles.lightTextSub]}>{t('home.mastered') || "Mastered"}</Text>
           </View>
 
           <View 
@@ -2717,7 +2717,7 @@ export default function HomeScreen() {
               <Ionicons name="time-outline" size={20} color="#a855f7" />
             </View>
             <Text style={[styles.statValue, !settingsDarkMode && styles.lightText]}>{attempts.length}</Text>
-            <Text style={[styles.statLabel, !settingsDarkMode && styles.lightTextSub]}>Sessions</Text>
+            <Text style={[styles.statLabel, !settingsDarkMode && styles.lightTextSub]}>{t('insight.sessions') || "Sessions"}</Text>
           </View>
         </View>
 
@@ -2735,13 +2735,13 @@ export default function HomeScreen() {
             }, pressed && styles.pressedScale]}
           >
             <Ionicons name="play" size={18} color="#ffffff" />
-            <Text style={{ fontSize: 15, fontWeight: "700", color: "#ffffff" }}>Study Now</Text>
+            <Text style={{ fontSize: 15, fontWeight: "700", color: "#ffffff" }}>{t('insight.study_now') || "Study Now"}</Text>
           </Pressable>
         </View>
 
         {/* Attempt Log History */}
         <View style={[styles.panelCard, !settingsDarkMode && styles.lightCard]}>
-          <Text style={[styles.optionsSectionTitle, !settingsDarkMode && styles.lightTextSub, { marginBottom: 10, fontSize: 12 }]}>Session History</Text>
+          <Text style={[styles.optionsSectionTitle, !settingsDarkMode && styles.lightTextSub, { marginBottom: 10, fontSize: 12 }]}>{t('insight.session_history') || "Session History"}</Text>
           {attempts.length > 0 ? (
             <View style={{ gap: 8 }}>
               {attempts.slice().reverse().map((attempt: any, index: number) => (
@@ -2754,7 +2754,7 @@ export default function HomeScreen() {
                 >
                   <View style={{ flex: 1, paddingRight: 8 }}>
                     <Text style={[{ fontSize: 12, fontWeight: "bold", color: "#ffffff" }, !settingsDarkMode && styles.lightText]}>
-                      Session #{attempts.length - index}
+                      {t('insight.session_num') || "Session"} #{attempts.length - index}
                     </Text>
                     <Text style={[{ fontSize: 10, color: "#888888", marginTop: 2 }, !settingsDarkMode && styles.lightTextSub]}>
                       {new Date(attempt.date).toLocaleDateString()}
@@ -2769,7 +2769,7 @@ export default function HomeScreen() {
               ))}
             </View>
           ) : (
-            <Text style={{ fontSize: 11, color: "#666", textAlign: "center", paddingVertical: 10 }}>No sessions logged yet.</Text>
+            <Text style={{ fontSize: 11, color: "#666", textAlign: "center", paddingVertical: 10 }}>{t('insight.no_sessions') || "No sessions logged yet."}</Text>
           )}
         </View>
 
@@ -2781,7 +2781,7 @@ export default function HomeScreen() {
           },
           !settingsDarkMode && styles.lightCard
         ]}>
-          <Text style={{ fontSize: 12, fontWeight: "600", color: settingsDarkMode ? "#6e727a" : "#999999", marginBottom: 12 }}>Manage</Text>
+          <Text style={{ fontSize: 12, fontWeight: "600", color: settingsDarkMode ? "#6e727a" : "#999999", marginBottom: 12 }}>{t('insight.manage') || "Manage"}</Text>
           <View style={{ flexDirection: "row", gap: 10 }}>
             <Pressable
               onPress={() => {
@@ -2798,7 +2798,7 @@ export default function HomeScreen() {
                 pressed && styles.opacityPress
               ]}
             >
-              <Text style={{ fontSize: 11, fontWeight: "bold", color: "#ef4444" }}>Delete Deck</Text>
+              <Text style={{ fontSize: 11, fontWeight: "bold", color: "#ef4444" }}>{t('flashcards.delete_deck') || "Delete Deck"}</Text>
             </Pressable>
           </View>
         </View>
@@ -3650,7 +3650,7 @@ export default function HomeScreen() {
     }
   };
 
-  const handleGenerateWithAI = async (text: string, fileName: string) => {
+  const handleGenerateWithAI = async (text: string, fileName: string, fileUri?: string, fileExt?: string) => {
     // ── Require sign-in ────────────────────────────────────────────────────
     if (!firebaseUser) {
       Alert.alert(
@@ -3802,6 +3802,61 @@ export default function HomeScreen() {
       const aiConfig = config.aiConfig;
       const GEMINI_URL = `${aiConfig.modelUrl}?key=${aiConfig.geminiKey}`;
 
+      // ── Visual mode: image-based PDF or PPTX — send file directly to Gemini ──
+      if (text === "__VISUAL__" && fileUri) {
+        if (!aiConfig.promptTemplateVisual) {
+          throw new Error("Visual prompt template not available. Please check your network and try again.");
+        }
+        console.log(`[AI Generation] Visual mode — reading ${fileExt?.toUpperCase() || "file"} as base64 and sending to Gemini`);
+        const base64Data = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.Base64 });
+        const mimeType = (fileExt === "pptx" || fileExt === "ppt")
+          ? "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+          : "application/pdf";
+        const maxOutputTokens = aiConfig.maxOutputTokens || 65536;
+        const temperature = aiConfig.temperature ?? 0.2;
+        const visualRes = await fetch(GEMINI_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [
+              { inlineData: { mimeType, data: base64Data } },
+              { text: aiConfig.promptTemplateVisual },
+            ]}],
+            generationConfig: { maxOutputTokens, temperature },
+          }),
+        });
+        if (!visualRes.ok) throw new Error((await visualRes.json())?.error?.message || visualRes.statusText);
+        const visualRaw = (await visualRes.json())?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        const parsed = parseQstText(visualRaw);
+        if (!parsed || (parsed.questions.length === 0 && (!parsed.flashcards || parsed.flashcards.length === 0))) {
+          throw new Error("Gemini couldn't generate questions from this file. The content may be too minimal or unclear.");
+        }
+        const localId = `ai_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        const title = (parsed.title || fileName).replace(/\.[^.]+$/, "");
+        const newQuiz: any = {
+          id: localId, title, questions: parsed.questions.length,
+          category: "AI Generated", time: "Just now",
+          flashcards: parsed.flashcards || [],
+          questionsList: parsed.questions.map((q: any) => ({ ...q, answers: [...q.answers].sort(() => Math.random() - 0.5) })),
+          attempts: [], wrongQuestions: [], uniqueCorrectIds: [],
+        };
+        AsyncStorage.setItem(storageKey("quizzes"), JSON.stringify([...quizzesRef.current, newQuiz])).catch(() => {});
+        setQuizzes((prev: any[]) => [...prev, newQuiz]);
+        trackQuizCreated({ source: "ai", questionCount: parsed.questions.length, flashcardCount: (parsed.flashcards || []).length });
+        if (firebaseUser && neonUserReadyRef.current) {
+          createMobileQuiz({ id: localId, userId: firebaseUser.uid, title, category: "AI Generated",
+            questionCount: newQuiz.questionsList?.length ?? newQuiz.questions,
+            sourceText: "",
+          }).then(({ quiz: saved }) => {
+            if (saved) setQuizzes((prev: any[]) => prev.map((q) => q.id === localId ? { ...q, neonId: saved.id } : q));
+          }).catch(() => {});
+        }
+        setAiGenPhase(null);
+        setShowQuizCreatedModal({ title, count: newQuiz.questions });
+        setActiveTab("home");
+        return;
+      }
+
       // ── Build prompt for a single chunk ────────────────────────────────
       const buildPromptForChunk = (chunk: string): string => {
         const docSize = chunk.length;
@@ -3821,10 +3876,18 @@ export default function HomeScreen() {
         };
         const minMcqs = scaleRangeBy1_3(minFlashcards);
         const expectedMcqs = scaleRangeBy1_3(expectedFlashcards);
-        if (!aiConfig.promptTemplate) {
+
+        // Detect user's selected language: if Russian or Kazakh, use Russian prompt template
+        const activeLang = (i18n.language || savedAppLanguage || "en").toLowerCase();
+        const isRuOrKk = activeLang.startsWith("ru") || activeLang.startsWith("kk");
+        const templateToUse = (isRuOrKk && aiConfig.promptTemplateRu)
+          ? aiConfig.promptTemplateRu
+          : aiConfig.promptTemplate;
+
+        if (!templateToUse) {
           throw new Error("AI configuration is incomplete (missing promptTemplate). Please check your network and try again.");
         }
-        let prompt = aiConfig.promptTemplate.replace("[PASTE YOUR TEXT HERE]", chunk);
+        let prompt = templateToUse.replace("[PASTE YOUR TEXT HERE]", chunk);
         prompt = prompt.replace(/\{\{MIN_FLASHCARDS\}\}/g, minFlashcards);
         prompt = prompt.replace(/\{\{EXPECTED_FLASHCARDS\}\}/g, expectedFlashcards);
         prompt = prompt.replace(/\{\{MIN_MCQS\}\}/g, minMcqs);
@@ -4600,7 +4663,39 @@ export default function HomeScreen() {
               let effectiveWin = false;
               let myTime = host ? (data.hostTime ?? Infinity) : (data.guestTime ?? Infinity);
               let oppTime = host ? (data.guestTime ?? Infinity) : (data.hostTime ?? Infinity);
-                    return (
+              if (myScore > oppScore) effectiveWin = true;
+              else if (myScore === oppScore) {
+                effectiveWin = myTime < oppTime;
+              }
+              const qList = activeSession.questions || [];
+              const aMap = activeSession.answers || {};
+              saveBattleResult(code, myScore, oppScore, oppName, data.quizTitle || "", effectiveWin, myTime !== Infinity ? myTime : undefined, oppTime !== Infinity ? oppTime : undefined, qList, aMap);
+              setBattlePopup({ myScore, opponentScore: oppScore, opponentName: oppName, won: effectiveWin, myTime, opponentTime: oppTime });
+              if (effectiveWin) triggerConfettiBurst();
+              unsubscribe();
+            }
+          });
+        }
+
+        if (battleUnsubscribeRef.current) battleUnsubscribeRef.current();
+        setBattleRoomCode("");
+        setBattleRoomState(null);
+        setActiveSession(null);
+        setIsHost(false);
+        setJoinCodeInput("");
+        setActiveTab("battle");
+      };
+
+      // ── WAITING FOR OPPONENT ────────────────────────────────────────
+      if (!bothFinished) {
+        const isDark = settingsDarkMode;
+        const bg = isDark ? "#0f172a" : "#f4f4f8";
+        const cardBg = isDark ? "#1e293b" : "#ffffff";
+        const txt = isDark ? "#ffffff" : "#0d0f14";
+        const muted = isDark ? "#94a3b8" : "#64748b";
+        const border = isDark ? "rgba(255,255,255,0.08)" : "#e2e8f0";
+
+        return (
           <View style={{ flex: 1, backgroundColor: bg, alignItems: "center", justifyContent: "center", padding: 24 }}>
             {/* My score card */}
             <View style={{ backgroundColor: cardBg, borderRadius: 20, padding: 24, width: "100%",
@@ -5918,9 +6013,9 @@ export default function HomeScreen() {
           const oneWeek  = 7  * 24 * 60 * 60 * 1000;
           const twoWeeks = 14 * 24 * 60 * 60 * 1000;
           const groups: { label: string; items: any[] }[] = [
-            { label: "This week", items: [] },
-            { label: "Last week", items: [] },
-            { label: "Older",     items: [] },
+            { label: t('library.this_week') || "This week", items: [] },
+            { label: t('library.last_week') || "Last week", items: [] },
+            { label: t('library.older') || "Older",     items: [] },
           ];
           items.forEach(item => {
             const date = getDate(item);
@@ -5972,14 +6067,14 @@ export default function HomeScreen() {
           let subtitleParts: string[] = [];
           if (isQuiz) {
             subtitleParts = [
-              `${questionCount} question${questionCount !== 1 ? "s" : ""}`,
-              `${cardCount} card${cardCount !== 1 ? "s" : ""}`,
-              `${dueCount} due`
+              `${questionCount} ${t('actions.questions') || "questions"}`,
+              `${cardCount} ${t('create_pick.flashcard_title') || "cards"}`,
+              `${dueCount} ${t('library.due') || "due"}`
             ];
           } else {
             subtitleParts = [
               `Flashcard set`,
-              `${cardCount} term${cardCount !== 1 ? "s" : ""}`,
+              `${cardCount} terms`,
               `by you`
             ];
           }
@@ -6035,19 +6130,19 @@ export default function HomeScreen() {
                 {isQuiz ? (
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                     <Text style={{ fontSize: 13, color: "#D1D5DB", fontWeight: "500" }}>
-                      {questionCount} Question{questionCount !== 1 ? "s" : ""}
+                      {questionCount} {t('actions.questions') || "Questions"}
                     </Text>
                     <Text style={{ fontSize: 13, color: "#D1D5DB", fontWeight: "500" }}>
                       •
                     </Text>
                     <Text style={{ fontSize: 13, color: "#D1D5DB", fontWeight: "500" }}>
-                      {cardCount} Card{cardCount !== 1 ? "s" : ""}
+                      {cardCount} {t('create_pick.flashcard_title') || "Cards"}
                     </Text>
                     <Text style={{ fontSize: 13, color: "#D1D5DB", fontWeight: "500" }}>
                       •
                     </Text>
                     <Text style={{ fontSize: 13, color: "#D1D5DB", fontWeight: "500" }}>
-                      {dueCount} Due
+                      {dueCount} {t('library.due') || "Due"}
                     </Text>
                   </View>
                 ) : (
@@ -6085,7 +6180,7 @@ export default function HomeScreen() {
             }}>
               <Ionicons name="search-outline" size={18} color={muted} />
               <TextInput
-                placeholder="Search Library..."
+                placeholder={t('library.search_placeholder') || "Search Library..."}
                 placeholderTextColor={muted}
                 value={librarySearch}
                 onChangeText={setLibrarySearch}
@@ -6106,10 +6201,10 @@ export default function HomeScreen() {
                 <View style={{ alignItems: "center", paddingTop: 64, gap: 14 }}>
                   <Ionicons name={isCoursesTab ? "flash-outline" : "copy-outline"} size={40} color={muted} />
                   <Text style={{ fontSize: 16, fontWeight: "600", color: txt }}>
-                    {librarySearch ? "No results found" : isCoursesTab ? "No courses yet" : "No uploads yet"}
+                    {librarySearch ? (t('library.no_results') || "No results found") : isCoursesTab ? (t('library.no_quizzes') || "No quizzes yet") : (t('library.no_flashcards') || "No flashcards yet")}
                   </Text>
                   <Text style={{ fontSize: 13, color: muted, textAlign: "center" }}>
-                    {isCoursesTab ? "Create a quiz from any PDF or text" : "Create a flashcard deck to get started"}
+                    {isCoursesTab ? (t('library.create_first_quiz') || "Create a quiz from any PDF or text") : (t('library.create_first_quiz') || "Create a flashcard deck to get started")}
                   </Text>
                   <Pressable
                     onPress={() => setShowAddMenu(true)}
@@ -6119,7 +6214,7 @@ export default function HomeScreen() {
                       opacity: pressed ? 0.8 : 1,
                     })}
                   >
-                    <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>+ Create new</Text>
+                    <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>{t('library.create_new') || "+ Create new"}</Text>
                   </Pressable>
                 </View>
               ) : isCoursesTab
@@ -8082,7 +8177,7 @@ export default function HomeScreen() {
                 <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 999,
                   backgroundColor: "rgba(10,10,15,0.92)", alignItems: "center", justifyContent: "center" }}>
                   <ActivityIndicator size="large" color="#6366f1" />
-                  <Text style={{ marginTop: 14, fontSize: 14, color: muted }}>Signing out…</Text>
+                  <Text style={{ marginTop: 14, fontSize: 14, color: muted }}>{t('profile.signing_out') || "Signing out…"}</Text>
                 </View>
               )}
 
@@ -8093,7 +8188,7 @@ export default function HomeScreen() {
                 {/* ── Top bar ── */}
                 <View style={{ paddingHorizontal: 20, paddingTop: 16 }}>
                   <Text style={{ fontSize: 18, fontWeight: "600", color: txt, letterSpacing: -0.3 }}>
-                    Profile
+                    {t('profile.title') || "Profile"}
                   </Text>
                 </View>
 
@@ -8121,10 +8216,10 @@ export default function HomeScreen() {
                   {/* Info */}
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontSize: 15, fontWeight: "500", color: txt }} numberOfLines={1}>
-                      {firebaseUser ? getUserFullName(firebaseUser) : "Guest"}
+                      {firebaseUser ? getUserFullName(firebaseUser) : (t('profile.guest') || "Guest")}
                     </Text>
                     <Text style={{ fontSize: 11, color: muted, marginTop: 3, fontWeight: "300" }} numberOfLines={1}>
-                      {firebaseUser ? firebaseUser.email ?? "" : "// sign in to sync your data"}
+                      {firebaseUser ? firebaseUser.email ?? "" : (t('profile.guest_sub') || "// sign in to sync your data")}
                     </Text>
                   </View>
 
@@ -8132,13 +8227,13 @@ export default function HomeScreen() {
                   {firebaseUser ? (
                     <View style={{ backgroundColor: "rgba(99,102,241,0.1)", borderRadius: 8,
                       paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: "rgba(99,102,241,0.2)" }}>
-                      <Text style={{ fontSize: 10, color: "#6366f1", fontWeight: "600", letterSpacing: 0.5 }}>SYNCED</Text>
+                      <Text style={{ fontSize: 10, color: "#6366f1", fontWeight: "600", letterSpacing: 0.5 }}>{t('profile.synced') || "SYNCED"}</Text>
                     </View>
                   ) : (
                     <Pressable onPress={openAuthScreen}
                       style={({ pressed }) => [{ backgroundColor: "#6366f1", borderRadius: 10,
                         paddingHorizontal: 14, paddingVertical: 8 }, pressed && styles.pressedScale]}>
-                      <Text style={{ fontSize: 11, fontWeight: "500", color: "#fff" }}>Sign in</Text>
+                      <Text style={{ fontSize: 11, fontWeight: "500", color: "#fff" }}>{t('profile.signin') || "Sign in"}</Text>
                     </Pressable>
                   )}
                 </View>
@@ -8193,10 +8288,10 @@ export default function HomeScreen() {
 
                 <View style={{ paddingHorizontal: 20, gap: 6 }}>
                   <Row icon="lock-closed-outline" iconBg="rgba(99,102,241,0.1)" iconColor="#6366f1"
-                    title={"Privacy policy"} 
+                    title={t('profile.privacy_policy') || "Privacy policy"} 
                     onPress={() => setShowPrivacyPolicy(true)} right={<Chevron />} />
                   <Row icon="document-text-outline" iconBg="rgba(99,102,241,0.1)" iconColor="#6366f1"
-                    title={"Terms of service"} 
+                    title={t('profile.terms_of_service') || "Terms of service"} 
                     onPress={() => setShowTermsOfService(true)} right={<Chevron />} />
                 </View>
 
@@ -8214,7 +8309,7 @@ export default function HomeScreen() {
                         <Ionicons name="log-out-outline" size={16} color={txt} />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 13, fontWeight: "500", color: txt }}>Logout</Text>
+                        <Text style={{ fontSize: 13, fontWeight: "500", color: txt }}>{t('profile.logout') || "Logout"}</Text>
                       </View>
                     </AnimatedPressable>
                   )}
@@ -8230,7 +8325,7 @@ export default function HomeScreen() {
                         <Ionicons name="trash-bin-outline" size={16} color="#e24b4a" />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 13, fontWeight: "500", color: "#e24b4a" }}>Delete account</Text>
+                        <Text style={{ fontSize: 13, fontWeight: "500", color: "#e24b4a" }}>{t('profile.delete_account') || "Delete account"}</Text>
                       </View>
                     </AnimatedPressable>
                   )}
@@ -8280,7 +8375,7 @@ export default function HomeScreen() {
               const isNew = (q.attempts || []).length === 0;
               const ts = isNew ? -i : (q.attempts[0]?.timestamp || q.attempts[0]?.date || 0);
               return { id: q.id, title: q.title, type: "quiz", progress: done / total,
-                label: isNew ? "Not started" : `${Math.round((done / total) * 100)}% complete`, raw: q, ts, isNew };
+                label: isNew ? (t('home.not_started') || "Not started") : (t('home.pct_complete', { pct: Math.round((done / total) * 100) }) || `${Math.round((done / total) * 100)}% complete`), raw: q, ts, isNew };
             }),
             ...inProgressDecks.map((d: any, i: number): JumpItem => {
               const cards = d.cards || [];
@@ -8288,7 +8383,7 @@ export default function HomeScreen() {
               const isNew = studied === 0;
               const ts = isNew ? -i : (d.attempts?.[d.attempts.length - 1]?.date || 0);
               return { id: d.id, title: d.title, type: "flashcard", progress: cards.length > 0 ? studied / cards.length : 0,
-                label: isNew ? "Not started" : `${studied}/${cards.length} cards sorted`, raw: d, ts, isNew };
+                label: isNew ? (t('home.not_started') || "Not started") : (t('home.cards_sorted', { studied, total: cards.length }) || `${studied}/${cards.length} cards sorted`), raw: d, ts, isNew };
             }),
           ];
           const jumpItems: JumpItem[] = allJumpCandidates.filter((q: any) => {
@@ -8321,7 +8416,7 @@ export default function HomeScreen() {
               const due = fcCardsWithState.filter((c: any) => !c.sm2_nextReviewDate || c.sm2_nextReviewDate <= Date.now()).length;
               return {
                 id: q.id, title: q.title, type: "quiz",
-                sub: `${q.questions || 0} questions  ·  ${cardCount} cards  ·  ${due} due`, raw: q,
+                sub: `${q.questions || 0} ${t('actions.questions') || "questions"}  ·  ${cardCount} ${t('create_pick.flashcard_title') || "cards"}  ·  ${due} ${t('library.due') || "due"}`, raw: q,
                 ts: (q.attempts || []).length > 0 ? (q.attempts[0].timestamp || q.attempts[0].date || 0) : 0,
               };
             }),
@@ -8358,7 +8453,7 @@ export default function HomeScreen() {
                   }}>
                     <Ionicons name="search-outline" size={17} color={muted} />
                     <TextInput
-                      placeholder="Search"
+                      placeholder={t('home.search_placeholder') || "Search"}
                       placeholderTextColor={muted}
                       value={homeSearch}
                       onChangeText={setHomeSearch}
@@ -8397,9 +8492,9 @@ export default function HomeScreen() {
                   <View style={{ marginTop: 24, marginBottom: 8 }}>
                     <View style={{ paddingHorizontal: 20, marginBottom: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                       <Text style={{ fontSize: 18, fontWeight: "700", color: txt }}>
-                        {sampleDismissed ? "Your library is empty" : "Try your first quiz 👋"}
+                        {sampleDismissed ? (t('home.library_empty') || "Your library is empty") : (t('home.try_first_quiz') || "Try your first quiz 👋")}
                       </Text>
-                      <Text style={{ fontSize: 13, color: muted }}>{sampleDismissed ? "Sample" : "New user"}</Text>
+                      <Text style={{ fontSize: 13, color: muted }}>{sampleDismissed ? (t('home.sample') || "Sample") : (t('home.new_user') || "New user")}</Text>
                     </View>
 
                     <View
@@ -8413,7 +8508,7 @@ export default function HomeScreen() {
                       <View style={{ marginBottom: 16 }}>
                         <Text style={{ fontSize: 16, fontWeight: "700", color: txt }} numberOfLines={1}>{sampleQuiz.title}</Text>
                         <Text style={{ fontSize: 13, color: muted, marginTop: 4 }}>
-                          {sampleQuiz.questions} questions  ·  {(sampleQuiz.flashcards || []).length} flashcards
+                          {sampleQuiz.questions} {t('actions.questions') || "questions"}  ·  {(sampleQuiz.flashcards || []).length} {t('create_pick.flashcard_title') || "flashcards"}
                         </Text>
                       </View>
                       <AnimatedPressable
@@ -8425,7 +8520,7 @@ export default function HomeScreen() {
                         }}
                       >
                         <Text style={{ fontSize: 15, fontWeight: "700", color: "#ffffff" }}>
-                          Study Set
+                          {t('home.study_set') || "Study Set"}
                         </Text>
                       </AnimatedPressable>
                     </View>
@@ -8437,7 +8532,7 @@ export default function HomeScreen() {
                   <View style={{ marginTop: 20, marginBottom: 8 }}>
                     <View style={{ paddingHorizontal: 20, marginBottom: 14 }}>
                       <Text style={{ fontSize: 18, fontWeight: "700", color: txt, marginBottom: 2 }}>
-                        Continue learning
+                        {t('home.continue_learning') || "Continue learning"}
                       </Text>
                     </View>
 
@@ -8503,7 +8598,7 @@ export default function HomeScreen() {
                                 opacity: pressed ? 0.85 : 1,
                               })}
                             >
-                              <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>Continue</Text>
+                              <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>{t('home.continue_btn') || "Continue"}</Text>
                             </Pressable>
                           </View>
                         );
@@ -8532,14 +8627,14 @@ export default function HomeScreen() {
                 {/* ── Battle Arena Banner ── */}
                 {!homeSearch && (
                   <View style={{ marginTop: jumpItems.length > 0 || !hasContent ? 28 : 20, paddingHorizontal: 20 }}>
-                    <Text style={{ fontSize: 18, fontWeight: "700", color: txt, marginBottom: 14 }}>Multiplayer</Text>
+                    <Text style={{ fontSize: 18, fontWeight: "700", color: txt, marginBottom: 14 }}>{t('home.multiplayer') || "Multiplayer"}</Text>
                     
                     <Pressable
                       onPress={() => {
                         if (appConfig?.featureFlags?.disableBattles) {
                           Alert.alert(
-                            "Battles Temporarily Unavailable",
-                            "Battle Arena is currently disabled while we perform maintenance. Please try again shortly."
+                            t('battle.cant_join') || "Battles Temporarily Unavailable",
+                            t('battle.battles_disabled') || "Battle Arena is currently disabled while we perform maintenance. Please try again shortly."
                           );
                           return;
                         }
@@ -8558,8 +8653,8 @@ export default function HomeScreen() {
                         <Ionicons name="flame" size={24} color="#FB7185" />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 16, fontWeight: "700", color: txt, marginBottom: 4 }}>Battle Arena</Text>
-                        <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.65)" }}>Challenge friends in real-time matches</Text>
+                        <Text style={{ fontSize: 16, fontWeight: "700", color: txt, marginBottom: 4 }}>{t('battle.title') || "Battle Arena"}</Text>
+                        <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.65)" }}>{t('battle.subtitle') || "Challenge friends in real-time matches"}</Text>
                       </View>
                       <Feather name="chevron-right" size={20} color={muted} />
                     </Pressable>
@@ -8569,7 +8664,7 @@ export default function HomeScreen() {
                 {/* ── Create Flashcards Banner ── */}
                 {!homeSearch && (
                   <View style={{ marginTop: 28, paddingHorizontal: 20 }}>
-                    <Text style={{ fontSize: 15, fontWeight: "600", color: txt, marginBottom: 14 }}>Study exactly what you need</Text>
+                    <Text style={{ fontSize: 15, fontWeight: "600", color: txt, marginBottom: 14 }}>{t('home.study_need_title') || "Study exactly what you need"}</Text>
                     
                     <View style={{
                         backgroundColor: cardBg,
@@ -8580,8 +8675,8 @@ export default function HomeScreen() {
                       <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
                         <Ionicons name="albums" size={32} color="#4F46E5" />
                       </View>
-                      <Text style={{ fontSize: 18, fontWeight: "700", color: txt, marginBottom: 4 }}>Create your own flashcards</Text>
-                      <Text style={{ fontSize: 14, color: "#FFFFFF", marginBottom: 20 }}>Study exactly what's on your test</Text>
+                      <Text style={{ fontSize: 18, fontWeight: "700", color: txt, marginBottom: 4 }}>{t('home.create_flashcards_title') || "Create your own flashcards"}</Text>
+                      <Text style={{ fontSize: 14, color: "#FFFFFF", marginBottom: 20 }}>{t('home.study_need_sub') || "Study exactly what's on your test"}</Text>
                       
                       {/* Image placeholder */}
                       <View style={{ height: 120, backgroundColor: "#E0F2FE", borderRadius: 12, marginBottom: 20, alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
@@ -8597,7 +8692,7 @@ export default function HomeScreen() {
                           opacity: pressed ? 0.8 : 1,
                         })}
                       >
-                        <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>Create flashcards</Text>
+                        <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>{t('home.create_flashcards_btn') || "Create flashcards"}</Text>
                       </Pressable>
                     </View>
                   </View>
@@ -8606,7 +8701,7 @@ export default function HomeScreen() {
                 {/* ── More Options ── */}
                 {!homeSearch && (
                   <View style={{ marginTop: 28, paddingHorizontal: 20 }}>
-                    <Text style={{ fontSize: 18, fontWeight: "700", color: txt, marginBottom: 14 }}>More</Text>
+                    <Text style={{ fontSize: 18, fontWeight: "700", color: txt, marginBottom: 14 }}>{t('home.more') || "More"}</Text>
                     
                     <Pressable
                       onPress={async () => {
@@ -8628,8 +8723,8 @@ export default function HomeScreen() {
                       })}
                     >
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 16, fontWeight: "700", color: txt, marginBottom: 4 }}>Invite your friends</Text>
-                        <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.65)" }}>Learn together and grow faster</Text>
+                        <Text style={{ fontSize: 16, fontWeight: "700", color: txt, marginBottom: 4 }}>{t('home.invite_friends') || "Invite your friends"}</Text>
+                        <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.65)" }}>{t('home.invite_sub') || "Learn together and grow faster"}</Text>
                       </View>
                       <View style={{ width: 48, height: 48, alignItems: "center", justifyContent: "center" }}>
                         <Text style={{ fontSize: 32 }}>💌</Text>
@@ -8649,8 +8744,8 @@ export default function HomeScreen() {
                       })}
                     >
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 16, fontWeight: "700", color: txt, marginBottom: 4 }}>Feedback</Text>
-                        <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.65)" }}>Help us improve</Text>
+                        <Text style={{ fontSize: 16, fontWeight: "700", color: txt, marginBottom: 4 }}>{t('profile.feedback') || "Feedback"}</Text>
+                        <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.65)" }}>{t('home.feedback_sub') || "Help us improve"}</Text>
                       </View>
                       <View style={{ width: 48, height: 48, alignItems: "center", justifyContent: "center" }}>
                         <Text style={{ fontSize: 32 }}>💡</Text>

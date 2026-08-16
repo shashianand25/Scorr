@@ -582,18 +582,18 @@ const GEMINI_MCQ_PROMPT_TEMPLATE_RU = process.env.GEMINI_MCQ_PROMPT_TEMPLATE_RU 
 // Gemini reads the visual content directly — no [PASTE YOUR TEXT HERE] replacement.
 const GEMINI_MCQ_PROMPT_TEMPLATE_VISUAL = process.env.GEMINI_MCQ_PROMPT_TEMPLATE_VISUAL || `You are an expert tutor. Carefully read and analyse all visual content in the provided file (slides, diagrams, images, charts, tables and any text visible in the document).
 
+Generate as many flashcards and quiz questions as possible from the content.
+
 First output all flashcards under the ===FLASHCARDS=== header.
 Then output all quiz questions under the ===MCQS=== header.
 
 ===FLASHCARDS===
-Generate at least {{MIN_FLASHCARDS}} flashcards covering the key concepts visible in the document.
 Flashcards are TERM → DEFINITION, NOT question → answer.
 Example:
 # SI unit of force
 = Newton
 
 ===MCQS===
-Generate at least {{MIN_MCQS}} multiple-choice questions covering the key concepts visible in the document.
 Example:
 ? What is the SI unit of force?
 + Newton

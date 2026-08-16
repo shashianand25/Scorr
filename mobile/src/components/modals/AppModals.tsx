@@ -130,7 +130,7 @@ export function AppModals({ p }: { p: any }) {
             >
               <Ionicons name="eye-outline" size={22} color={p.settingsDarkMode ? "#ffffff" : "#0d0f14"} />
               <Text style={{ fontSize: 15, fontWeight: "500", flex: 1,
-                color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>View</Text>
+                color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('actions.view') || "View"}</Text>
             </AnimatedPressable>
 
             {/* Rename */}
@@ -167,7 +167,7 @@ export function AppModals({ p }: { p: any }) {
             >
               <Ionicons name="share-social-outline" size={22} color={p.settingsDarkMode ? "#ffffff" : "#0d0f14"} />
               <Text style={{ fontSize: 15, fontWeight: "500", flex: 1, color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>
-                Share
+                {t('actions.share') || "Share"}
               </Text>
             </AnimatedPressable>
             
@@ -182,7 +182,7 @@ export function AppModals({ p }: { p: any }) {
                   }
                 } else {
                   Alert.alert("Reset", "Reset history for this quiz?", [
-                    { text: "Cancel", style: "cancel" },
+                    { text: t('common.cancel') || "Cancel", style: "cancel" },
                     { text: "Reset", style: "destructive", onPress: () => (p.handleClearHistoryOnMobile || (() => {}))(quiz.id) }
                   ]);
                 }
@@ -195,7 +195,7 @@ export function AppModals({ p }: { p: any }) {
             >
               <Ionicons name="refresh-outline" size={22} color={p.settingsDarkMode ? "#ffffff" : "#0d0f14"} />
               <Text style={{ fontSize: 15, fontWeight: "500", flex: 1, color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>
-                Clear attempts
+                {t('actions.clear_attempts') || "Clear attempts"}
               </Text>
             </AnimatedPressable>
 
@@ -243,16 +243,16 @@ export function AppModals({ p }: { p: any }) {
                 <Ionicons name="create-outline" size={28} color="#6366f1" />
               </View>
               <Text style={[styles.dialogTitle, !p.settingsDarkMode && styles.lightText]}>
-                Rename Quiz
+                {t('actions.rename_quiz') || "Rename Quiz"}
               </Text>
               <Text style={[styles.dialogDescription, !p.settingsDarkMode && styles.lightTextSub, { textAlign: "center", marginBottom: 16 }]}>
-                Enter a new title for "{p.renamingQuiz?.title}"
+                {t('actions.enter_new_title') || "Enter a new title"}
               </Text>
 
               <Pressable style={[styles.webInputDummy, { width: "100%", marginBottom: 20 }, !p.settingsDarkMode && styles.lightInput]}>
                 <TextInput
                   autoFocus
-                  placeholder="Quiz Title"
+                  placeholder={t('actions.rename_quiz') || "Quiz Title"}
                   placeholderTextColor="#666"
                   style={[styles.formInput, !p.settingsDarkMode && styles.lightText]}
                   value={p.renameTitle}
@@ -265,7 +265,7 @@ export function AppModals({ p }: { p: any }) {
                   onPress={() => (p.setRenamingQuiz || (() => {}))(null)}
                   style={({ pressed }) => [styles.dialogCancel, !p.settingsDarkMode && { borderColor: "rgba(0, 0, 0, 0.15)" }, pressed && styles.pressedScale]}
                 >
-                  <Text style={[styles.dialogCancelText, !p.settingsDarkMode && styles.lightText]}>Cancel</Text>
+                  <Text style={[styles.dialogCancelText, !p.settingsDarkMode && styles.lightText]}>{t('common.cancel') || "Cancel"}</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => {
@@ -296,7 +296,7 @@ export function AppModals({ p }: { p: any }) {
                   }}
                   style={({ pressed }) => [styles.dialogConfirm, { backgroundColor: "#00e5a0" }, pressed && styles.pressedScale]}
                 >
-                  <Text style={styles.dialogConfirmText}>Save</Text>
+                  <Text style={styles.dialogConfirmText}>{t('common.save') || "Save"}</Text>
                 </Pressable>
               </View>
             </View>
@@ -1074,7 +1074,7 @@ export function AppModals({ p }: { p: any }) {
               <Text style={{ fontSize: 26, fontWeight: "900", color: p.settingsDarkMode ? "#fff" : "#0d0f14",
                 letterSpacing: -0.5, textAlign: "center", marginBottom: 10 }}>Privacy Policy</Text>
               <Text style={{ fontSize: 13, color: p.settingsDarkMode ? "#818cf8" : "#6366f1", fontWeight: "600",
-                textAlign: "center", marginBottom: 12 }}>Scorr App · Last updated June 2025</Text>
+                textAlign: "center", marginBottom: 12 }}>Scorr App · Last updated August 2026</Text>
               <Text style={{ fontSize: 14, color: p.settingsDarkMode ? "#94a3b8" : "#555577",
                 textAlign: "center", lineHeight: 22, maxWidth: 300 }}>
                 We believe your data belongs to you. Here's exactly what we collect, why, and how we keep it safe.
@@ -1084,19 +1084,23 @@ export function AppModals({ p }: { p: any }) {
             <View style={{ paddingHorizontal: 20, paddingTop: 28 }}>
               {[
                 { num: "01", icon: "person-outline" as const, accent: "#6366f1", title: "Information We Collect",
-                  body: "When you sign in with Google or Email, we collect your name, email address, and profile photo solely to create your Scorr account. If you use the app without signing in, we collect no personal data whatsoever." },
+                  body: "When you sign in with Google or Email, we collect your name, email address, and profile photo solely to create and authenticate your Scorr account. If you use the app without signing in, we collect no personal data whatsoever." },
                 { num: "02", icon: "school-outline" as const, accent: "#8b5cf6", title: "Quiz & Flashcard Data",
-                  body: "Your p.quizzes, flashcard decks, attempt history, correct/wrong answers, and study streaks are stored in our secure Neon (PostgreSQL) database and linked to your account. This enables your progress to sync seamlessly across devices." },
-                { num: "03", icon: "phone-portrait-outline" as const, accent: "#06b6d4", title: "Local Storage",
-                  body: "Your device uses AsyncStorage to cache p.quizzes and session data for offline access. This data lives only on your device and is never transmitted to or shared with any third party." },
-                { num: "04", icon: "analytics-outline" as const, accent: "#10b981", title: "How We Use Your Data",
-                  body: "Your data is used exclusively to power the Scorr experience — syncing your progress, displaying your stats, and personalising your study sessions. We do not sell, rent, or share your data with advertisers or any third parties, ever." },
-                { num: "05", icon: "shield-checkmark-outline" as const, accent: "#f59e0b", title: "Data Security",
-                  body: "All data in transit is protected by HTTPS/TLS encryption. Our Neon database sits behind authenticated API endpoints. Firebase Authentication handles all sign-in security. We never store raw passwords." },
-                { num: "06", icon: "trash-outline" as const, accent: "#ef4444", title: "Deleting Your Data",
-                  body: "You can permanently delete your account and all associated data at any time from Settings → Reset Statistics or by contacting us. Deletion removes your profile, p.quizzes, flashcards, and full attempt history from our servers immediately." },
-                { num: "07", icon: "mail-outline" as const, accent: "#6366f1", title: "Contact Us",
-                  body: "Questions about this policy or requests for data deletion? Reach us at recall.support@example.com and we'll respond within 48 hours." },
+                  body: "Your quizzes, flashcard decks, attempt history, correct/wrong answers, and study streaks are stored in our secure database and linked to your account. This enables your study progress to sync seamlessly across your devices." },
+                { num: "03", icon: "sparkles-outline" as const, accent: "#ec4899", title: "AI Processing (Google Gemini)",
+                  body: "When you use AI Quiz Generation from text, PDFs, or PPTs, the content is securely processed via Google Gemini APIs exclusively to extract questions and flashcards. We do not sell or use your uploaded study materials to train public AI models." },
+                { num: "04", icon: "people-outline" as const, accent: "#a855f7", title: "Multiplayer Battles & Sharing",
+                  body: "When you participate in multiplayer Battle Mode or share a quiz, your public display name and in-game match scores are visible to other participants in that battle room or to anyone with your shared quiz link." },
+                { num: "05", icon: "phone-portrait-outline" as const, accent: "#06b6d4", title: "Local Storage",
+                  body: "Your device uses secure local storage to cache quizzes, settings, and session data for quick access. This data lives only on your device and is never shared with third parties." },
+                { num: "06", icon: "analytics-outline" as const, accent: "#10b981", title: "How We Use Your Data",
+                  body: "Your data is used exclusively to power the Scorr experience — syncing your progress, generating study stats, and personalizing your review sessions. We do not sell, rent, or monetize your data with advertisers, ever." },
+                { num: "07", icon: "shield-checkmark-outline" as const, accent: "#f59e0b", title: "Data Security",
+                  body: "All data in transit is protected by industry-standard HTTPS/TLS encryption. Authentication is managed securely by Firebase. We never store or have access to raw user passwords." },
+                { num: "08", icon: "trash-outline" as const, accent: "#ef4444", title: "Deleting Your Data",
+                  body: "You can permanently delete your account and all associated data at any time from Profile → Delete account, or via our web deletion portal. Deletion immediately removes your profile, quizzes, flashcards, and history from our servers." },
+                { num: "09", icon: "mail-outline" as const, accent: "#6366f1", title: "Contact Us",
+                  body: "Questions about this policy or requests for data deletion? Reach us at shashianand2005@gmail.com and we will respond promptly." },
               ].map((s, i, arr) => (
                 <View key={i}>
                   <View style={{ flexDirection: "row", gap: 14, paddingVertical: 20 }}>
@@ -1174,7 +1178,7 @@ export function AppModals({ p }: { p: any }) {
               <Text style={{ fontSize: 26, fontWeight: "900", color: p.settingsDarkMode ? "#fff" : "#0d0f14",
                 letterSpacing: -0.5, textAlign: "center", marginBottom: 10 }}>Terms of Service</Text>
               <Text style={{ fontSize: 13, color: p.settingsDarkMode ? "#34d399" : "#059669", fontWeight: "600",
-                textAlign: "center", marginBottom: 12 }}>Scorr App · Last updated June 2025</Text>
+                textAlign: "center", marginBottom: 12 }}>Scorr App · Last updated August 2026</Text>
               <Text style={{ fontSize: 14, color: p.settingsDarkMode ? "#94a3b8" : "#555577",
                 textAlign: "center", lineHeight: 22, maxWidth: 300 }}>
                 Simple, fair terms for using Scorr. By using the app, you agree to these.
@@ -1184,23 +1188,23 @@ export function AppModals({ p }: { p: any }) {
             <View style={{ paddingHorizontal: 20, paddingTop: 28 }}>
               {[
                 { num: "01", icon: "checkmark-circle-outline" as const, accent: "#00e5a0", title: "Acceptance of Terms",
-                  body: "By downloading or using Scorr, you agree to be bound by these Terms of Service. If you do not agree with any part of these terms, please uninstall the app and discontinue use." },
+                  body: "By downloading or using Scorr, you agree to be bound by these Terms of Service. If you do not agree with any part of these terms, please discontinue using the app." },
                 { num: "02", icon: "phone-portrait-outline" as const, accent: "#06b6d4", title: "Use of the App",
-                  body: "Scorr is a personal study tool for creating p.quizzes, studying flashcards, and tracking learning progress. You may not use Scorr for any unlawful purpose or to distribute harmful, abusive, or infringing content." },
-                { num: "03", icon: "person-outline" as const, accent: "#6366f1", title: "User Accounts",
-                  body: "You are responsible for maintaining the security of your account credentials. Notify us immediately of any unauthorised use. We are not liable for losses resulting from unauthorised access due to your negligence." },
-                { num: "04", icon: "document-outline" as const, accent: "#8b5cf6", title: "Your Content",
-                  body: "You own all quiz content, notes, and flashcards you create in Scorr. By using the app, you grant us a limited licence to store and process your content solely to provide the Scorr service back to you." },
-                { num: "05", icon: "cloud-outline" as const, accent: "#3b82f6", title: "Cloud Sync & Data",
-                  body: "When signed in, your p.quizzes and progress sync to our servers on a best-effort basis. While we work hard to ensure reliability, we cannot guarantee 100% uninterrupted access to cloud-synced data." },
-                { num: "06", icon: "ban-outline" as const, accent: "#ef4444", title: "Prohibited Activities",
-                  body: "You agree not to: reverse-engineer or decompile the app, attempt to gain unauthorised access to our servers or databases, use automated tools to scrape or abuse the service, or impersonate other users or Scorr staff." },
-                { num: "07", icon: "construct-outline" as const, accent: "#f59e0b", title: "Modifications & Availability",
-                  body: "We reserve the right to update, modify, or discontinue any features of Scorr at any time. We will notify users of significant changes where possible. Continued use after changes constitutes acceptance of the new terms." },
-                { num: "08", icon: "shield-outline" as const, accent: "#94a3b8", title: "Disclaimer of Warranties",
-                  body: "Scorr is provided \"as is\" without warranties of any kind. We do not guarantee that the app will be error-free or that AI-generated quiz content will always be 100% accurate. Always verify critical information from authoritative sources." },
-                { num: "09", icon: "mail-outline" as const, accent: "#00e5a0", title: "Contact",
-                  body: "Questions about these terms? Contact us at recall.support@example.com and we will respond within 48 hours." },
+                  body: "Scorr is a study platform for creating quizzes, studying flashcards, and participating in learning battles. You may not use Scorr for any unlawful purpose or to distribute abusive, harmful, or infringing material." },
+                { num: "03", icon: "sparkles-outline" as const, accent: "#ec4899", title: "AI-Generated Content",
+                  body: "Scorr utilizes AI to generate quizzes and flashcards from your provided materials. While we strive for high educational accuracy, AI outputs may occasionally contain errors. Always verify critical facts with official study materials." },
+                { num: "04", icon: "document-outline" as const, accent: "#8b5cf6", title: "Your Content & Ownership",
+                  body: "You retain full ownership of all notes, quizzes, and flashcards you create or upload. You grant Scorr a limited license solely to store, process, and display your content to provide the service to you." },
+                { num: "05", icon: "people-outline" as const, accent: "#6366f1", title: "Multiplayer & Fair Play",
+                  body: "When using Battle Mode, you agree to play fairly, avoid offensive display names, and respect other players. We reserve the right to restrict access for users who harass or disrupt the community." },
+                { num: "06", icon: "cloud-outline" as const, accent: "#3b82f6", title: "Cloud Sync & Service Availability",
+                  body: "Your study data syncs to our cloud infrastructure when online. While we aim for maximum uptime, Scorr is provided on a best-effort basis and we cannot guarantee 100% uninterrupted access." },
+                { num: "07", icon: "ban-outline" as const, accent: "#ef4444", title: "Prohibited Activities",
+                  body: "You agree not to: reverse-engineer or attempt to decompile the app, abuse or spam API endpoints, exploit automated bots, or attempt unauthorized access to our servers or other users' data." },
+                { num: "08", icon: "construct-outline" as const, accent: "#f59e0b", title: "Modifications to Service",
+                  body: "We may update features, policies, or system requirements from time to time to improve Scorr. Continued use of Scorr following any updates constitutes acceptance of the revised terms." },
+                { num: "09", icon: "mail-outline" as const, accent: "#00e5a0", title: "Contact Us",
+                  body: "Have questions about these terms? Contact our team at shashianand2005@gmail.com and we will assist you." },
               ].map((s, i, arr) => (
                 <View key={i}>
                   <View style={{ flexDirection: "row", gap: 14, paddingVertical: 20 }}>
@@ -1744,9 +1748,11 @@ export function AppModals({ p }: { p: any }) {
                       setTimeout(async () => {
                         try {
                           let text = "";
+                          let isVisual = false;
                           if (ext === "pdf") {
                             const pr = await (p.parsePdfFromBackend || (() => {}))(fileUri, fileName, fileSize);
                             if (pr.error) throw new Error(pr.error);
+                            isVisual = !!pr.isVisual;
                             text = pr.text;
                           } else if (ext === "ppt" || ext === "pptx") {
                             const pptMaxMB = p.appConfig?.fileLimits?.pptMaxMB || 4.5;
@@ -1764,6 +1770,7 @@ export function AppModals({ p }: { p: any }) {
                               }
                               throw new Error(pr.error);
                             }
+                            isVisual = !!pr.isVisual;
                             text = pr.text;
                           } else if (ext === "docx" || ext === "doc") {
                             const b64 = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.Base64 });
@@ -1786,7 +1793,12 @@ export function AppModals({ p }: { p: any }) {
                             text = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.UTF8 });
                           }
                           (p.setShowAddMenu || (() => {}))(false);
-                          setTimeout(() => (p.handleGenerateWithAI || (() => {}))(text, fileName), 150);
+                          if (isVisual) {
+                            console.log("[AI] Visual file detected — sending directly to Gemini");
+                            setTimeout(() => (p.handleGenerateWithAI || (() => {}))("__VISUAL__", fileName, fileUri, fileSize, ext), 150);
+                          } else {
+                            setTimeout(() => (p.handleGenerateWithAI || (() => {}))(text, fileName), 150);
+                          }
                         } catch (err: any) {
                           (p.setAiGenPhase || (() => {}))(null);
                           const errMsg = err?.message || String(err);
@@ -1822,8 +1834,8 @@ export function AppModals({ p }: { p: any }) {
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
                   <Ionicons name="color-wand-outline" size={24} color="#B9A3FF" />
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 17, fontWeight: "700", color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>Generate Quiz & Flashcards</Text>
-                    <Text style={{ fontSize: 12, color: "#B9A3FF", fontWeight: "600", marginTop: 2 }}>Powered by AI</Text>
+                    <Text style={{ fontSize: 17, fontWeight: "700", color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('create_menu.ai_generate') || "Generate Quiz & Flashcards"}</Text>
+                    <Text style={{ fontSize: 12, color: "#B9A3FF", fontWeight: "600", marginTop: 2 }}>{t('create_menu.powered_by_ai') || "Powered by AI"}</Text>
                   </View>
                 </View>
 
@@ -1893,12 +1905,14 @@ export function AppModals({ p }: { p: any }) {
                         setTimeout(async () => {
                           try {
                             let text = "";
+                            let isVisual = false;
                             const pdfThreshold = p.appConfig?.fileLimits?.pdfExtractThresholdMB || 4.2;
                             if (ext === "pdf") {
                               const pdfResult = await (p.parsePdfFromBackend || (() => {}))(fileUri, fileName, fileSize, pdfThreshold);
                               if (pdfResult.error) {
                                 throw new Error(`Backend PDF parsing failed: ${pdfResult.error}`);
                               }
+                              isVisual = !!pdfResult.isVisual;
                               text = pdfResult.text;
                             } else if (ext === "ppt" || ext === "pptx") {
                               const pptMaxMB = p.appConfig?.fileLimits?.pptMaxMB || 4.5;
@@ -1916,6 +1930,7 @@ export function AppModals({ p }: { p: any }) {
                                 }
                                 throw new Error(`Backend PPT parsing failed: ${pptResult.error}`);
                               }
+                              isVisual = !!pptResult.isVisual;
                               text = pptResult.text;
                             } else if (ext === "docx" || ext === "doc") {
                               const b64 = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.Base64 });
@@ -1948,7 +1963,13 @@ export function AppModals({ p }: { p: any }) {
                             // THEN show the quiz — otherwise the quiz options panel
                             // gets swallowed by the still-animating loading Modal on Android.
                             (p.setIsImporting || (() => {}))(false);
-                            setTimeout(() => (p.handleImportQst || (() => {}))(text, fileName, fileUri), 150);
+                            if (isVisual) {
+                              console.log("[Import] Visual file detected — redirecting to AI generation");
+                              (p.setAiGenPhase || (() => {}))("generating");
+                              setTimeout(() => (p.handleGenerateWithAI || (() => {}))("__VISUAL__", fileName, fileUri, fileSize, ext), 150);
+                            } else {
+                              setTimeout(() => (p.handleImportQst || (() => {}))(text, fileName, fileUri), 150);
+                            }
                           } catch (err: any) {
                             (p.setIsImporting || (() => {}))(false);
                             const errMsg = err?.message || String(err);
@@ -1985,7 +2006,7 @@ export function AppModals({ p }: { p: any }) {
                   <Ionicons name="folder-open-outline" size={26} color="#94A3B8" />
                   <View style={{ flexDirection: "column", flex: 1 }}>
                     <Text style={{ fontSize: 16, fontWeight: "600",
-                      color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>Import Existing Quiz</Text>
+                      color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('create_menu.import_txt') || "Import Existing Quiz"}</Text>
                     <Text style={{ fontSize: 11, color: "#ffffff", marginTop: 2 }}>(Use .docx to preserve images)</Text>
                   </View>
                 </View>
@@ -2137,7 +2158,7 @@ export function AppModals({ p }: { p: any }) {
           <SafeAreaView style={{ flex: 1 }}>
             {/* Header */}
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16 }}>
-              <Text style={{ fontSize: 24, fontWeight: "600", color: p.settingsDarkMode ? "#fff" : "#111" }}>Language</Text>
+              <Text style={{ fontSize: 24, fontWeight: "600", color: p.settingsDarkMode ? "#fff" : "#111" }}>{t('profile.language') || "Language"}</Text>
               <Pressable onPress={() => (p.setShowLanguageModal || (() => {}))(false)} style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)", alignItems: "center", justifyContent: "center" }}>
                 <Ionicons name="close" size={20} color={p.settingsDarkMode ? "#fff" : "#111"} />
               </Pressable>
@@ -2147,7 +2168,7 @@ export function AppModals({ p }: { p: any }) {
             <View style={{ paddingHorizontal: 20, paddingBottom: 16 }}>
               <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: p.settingsDarkMode ? "#141930" : "#ffffff", borderRadius: 8, paddingHorizontal: 12, height: 44, borderWidth: 1, borderColor: p.settingsDarkMode ? "rgba(99,102,241,0.3)" : "rgba(99,102,241,0.2)" }}>
                 <TextInput
-                  placeholder="Search"
+                  placeholder={t('common.search') || "Search"}
                   placeholderTextColor={p.settingsDarkMode ? "#64748b" : "#94a3b8"}
                   style={{ flex: 1, color: p.settingsDarkMode ? "#fff" : "#000", fontSize: 15 }}
                   value={p.languageSearch}

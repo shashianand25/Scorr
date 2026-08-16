@@ -345,9 +345,10 @@ export async function deleteMobileQuiz(
 /**
  * Fetches the gemini key directly (deprecated/legacy).
  */
-export async function fetchGeminiKey(): Promise<{ key: string | null; prompt: string | null; error: string | null }> {
-  const { data, error } = await apiFetch<{ key: string; prompt: string }>("/api/gemini-config");
-  return { key: data?.key ?? null, prompt: data?.prompt ?? null, error };
+export async function fetchGeminiKey(lang?: string): Promise<{ key: string | null; prompt: string | null; promptRu?: string | null; error: string | null }> {
+  const query = lang ? `?lang=${encodeURIComponent(lang)}` : "";
+  const { data, error } = await apiFetch<{ key: string; prompt: string; promptRu?: string }>("/api/gemini-config" + query);
+  return { key: data?.key ?? null, prompt: data?.prompt ?? null, promptRu: data?.promptRu ?? null, error };
 }
 
 export interface AppConfig {
@@ -360,6 +361,7 @@ export interface AppConfig {
     geminiKey: string;
     modelUrl: string;
     promptTemplate: string;
+    promptTemplateRu?: string;
     chunkSize: number;
     maxChunks: number;
     maxOutputTokens: number;
@@ -403,7 +405,7 @@ export async function fetchVersionConfig(): Promise<{ config: VersionConfig | nu
 
 import * as FileSystem from "expo-file-system/legacy";
 
-export async function parsePdfFromBackend(fileUri: string, fileName: string, fileSize: number = 0, extractThresholdMB: number): Promise<{ text: string; error?: string }> {
+export async function parsePdfFromBackend(fileUri: string, fileName: string, fileSize: number = 0, extractThresholdMB: number): Promise<{ text: string; isVisual?: boolean; error?: string }> {
   try {
     if (fileSize > 0 && fileSize < extractThresholdMB * 1024 * 1024) {
       try {
@@ -426,7 +428,10 @@ export async function parsePdfFromBackend(fileUri: string, fileName: string, fil
 
     const text = await extractText(fileUri);
     if (!text || text.trim() === "") {
-      return { text: "", error: "Couldn't open this PDF. It may be corrupted, unsupported, or contain scanned/image-only pages." };
+      // No text extracted — likely a scanned/image-only PDF.
+      // Signal the caller to use visual mode (send file directly to Gemini).
+      console.log("[parsePdfFromBackend] No text extracted — flagging as visual PDF");
+      return { text: "", isVisual: true };
     }
     return { text };
   } catch (err: any) {
@@ -463,7 +468,10 @@ export async function parsePptFromBackend(fileUri: string, fileName: string): Pr
     
     const textString = typeof data.text === 'string' ? data.text : String(data.text || "");
     if (!textString || textString.trim() === "") {
-      return { text: "", error: "Could not extract text from this file. It might be a document containing only images." };
+      // No text extracted — likely an image-only PPTX.
+      // Signal the caller to use visual mode (send file directly to Gemini).
+      console.log("[parsePptFromBackend] No text extracted — flagging as visual PPTX");
+      return { text: "", isVisual: true };
     }
     
     return { text: textString };
