@@ -80,7 +80,6 @@ const deleteFlashcardDeck = async (..._args: any[]) => ({ error: null });
 // Get screen width/height for layout sizing
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const KeyboardWrapper = Platform.OS === "ios" ? KeyboardAvoidingView : View;
-export let globalBgGenStartTime: number | null = null;
 
 // NOTE: The prompt template is loaded exclusively from the backend via /api/app-config.
 // If the config fetch fails, AI generation will throw a clear error rather than
@@ -101,7 +100,7 @@ const STEPS = [
   { icon: "shuffle-outline",       label: "Shuffling answers" },
 ] as const;
 
-function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true, generationTimeoutMs = 60000, connectionLost = false }: { onCancel?: () => void; documentCharCount?: number; isDark?: boolean; generationTimeoutMs?: number; connectionLost?: boolean }) {
+function AIGeneratingScreen({ documentCharCount = 0, isDark = true, generationTimeoutMs = 60000, connectionLost = false }: { documentCharCount?: number; isDark?: boolean; generationTimeoutMs?: number; connectionLost?: boolean }) {
   const sway = React.useRef(new Animated.Value(0)).current;
   const blink = React.useRef(new Animated.Value(0.3)).current; // Start at 0.3
   const progress = React.useRef(new Animated.Value(0)).current;
@@ -178,13 +177,6 @@ function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true, ge
       <View style={{ position: 'absolute', top: '62%', left: '25%', width: 2, height: 2, borderRadius: 1, backgroundColor: isDark ? '#6C7491' : '#cbd5e1', opacity: 0.2 }} />
       <View style={{ position: 'absolute', bottom: '26%', right: '35%', width: 2, height: 2, borderRadius: 1, backgroundColor: isDark ? '#6C7491' : '#cbd5e1', opacity: 0.3 }} />
       <View style={{ position: 'absolute', bottom: '24%', left: '35%', width: 3, height: 3, borderRadius: 1.5, backgroundColor: isDark ? '#6C7491' : '#cbd5e1', opacity: 0.4 }} />
-
-      {/* Back button */}
-      <SafeAreaView style={{ position: "absolute", top: 0, left: 0, right: 0 }}>
-        <Pressable onPress={onCancel} style={{ padding: 24, paddingTop: Platform.OS === 'android' ? 40 : 24, alignSelf: 'flex-start' }}>
-          <Ionicons name="chevron-back" size={32} color={isDark ? "#FFFFFF" : "#0f172a"} />
-        </Pressable>
-      </SafeAreaView>
 
       <View style={{ alignItems: "center", marginTop: -60, width: "100%" }}>
         
@@ -336,55 +328,6 @@ function FullscreenBattleCountdown({ count, isDark = true }: { count: number; is
   );
 }
 
-function BackgroundProgressCard({ isDark, generationTimeoutMs = 60000 }: { isDark: boolean; generationTimeoutMs?: number }) {
-  const [pct, setPct] = useState(() => {
-    if (!globalBgGenStartTime) return 0;
-    const elapsed = Date.now() - globalBgGenStartTime;
-    return Math.min(Math.floor((elapsed / generationTimeoutMs) * 100), 99);
-  });
-  const progress = React.useRef(new Animated.Value(pct / 100)).current;
-
-  React.useEffect(() => {
-    if (!globalBgGenStartTime) {
-      globalBgGenStartTime = Date.now();
-    }
-    
-    const elapsed = Date.now() - globalBgGenStartTime;
-    const remaining = Math.max(0, generationTimeoutMs - elapsed);
-    
-    Animated.timing(progress, {
-      toValue: 1,
-      duration: remaining,
-      easing: Easing.out(Easing.linear),
-      useNativeDriver: false
-    }).start();
-    
-    const interval = setInterval(() => {
-      if (!globalBgGenStartTime) return;
-      const elap = Date.now() - globalBgGenStartTime;
-      setPct(Math.min(Math.floor((elap / generationTimeoutMs) * 100), 99));
-    }, 500);
-    return () => clearInterval(interval);
-  }, []);
-
-  const barWidth = progress.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] });
-
-  return (
-    <View style={{ marginHorizontal: 20, marginTop: 10, marginBottom: 10, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12, backgroundColor: isDark ? "#20253B" : "#ffffff", borderWidth: 1, borderColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flex: 1 }}>
-        <ActivityIndicator color="#8b5cf6" size="small" />
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 13, fontWeight: "600", color: isDark ? "#ffffff" : "#000000" }}>Generating quiz and flashcards...</Text>
-          <View style={{ height: 4, width: '100%', backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)", borderRadius: 2, overflow: 'hidden', marginTop: 6 }}>
-            <Animated.View style={{ width: barWidth, height: '100%', backgroundColor: "#8b5cf6", borderRadius: 2 }} />
-          </View>
-        </View>
-      </View>
-      <Text style={{ fontSize: 13, fontWeight: "600", color: "#a855f7", marginLeft: 16, width: 36, textAlign: "right" }}>{pct}%</Text>
-    </View>
-  );
-}
-
 export default function HomeScreen() {
   const { t, i18n } = useTranslation();
 
@@ -401,9 +344,6 @@ export default function HomeScreen() {
   const [flashcardFilter, setFlashcardFilter] = useState<"all"|"due"|"progress"|"mastered">("all");
   const [showFlashcardOptions, setShowFlashcardOptions] = useState<any>(null);
   const [dataLoaded, setDataLoaded] = useState(false);
-  const [backgroundQuizReady, setBackgroundQuizReady] = useState<any>(null);
-  const isBackgroundGen = React.useRef(false);
-  const [isGeneratingInBackground, setIsGeneratingInBackground] = useState(false);
 
   // Track which uid slot is currently loaded so we know when to switch
   const loadedUidRef = React.useRef<string | null | undefined>(undefined); // undefined = not loaded yet
@@ -989,6 +929,7 @@ export default function HomeScreen() {
   const [activeSession, setActiveSession] = useState<any | null>(null);
   const [isConnected, setIsConnected] = useState<boolean>(true);
   const [studyQueue, setStudyQueue] = useState<string[]>([]);
+  const [aiGenPhase, setAiGenPhase] = useState<null | "select" | "generating">(null);
 
   const reportCardQs = useMemo(() => {
     const rcq: any[] = [];
@@ -1316,6 +1257,9 @@ export default function HomeScreen() {
   // ── Hardware Back Button Handling ──
   useEffect(() => {
     const onBackPress = () => {
+      if (aiGenPhase === "generating") {
+        return true; // Prevent back press while generating
+      }
       if (activeSession) {
         if (activeSession.isFinished) {
           // Results page — back saves progress and goes straight to home
@@ -1360,7 +1304,7 @@ export default function HomeScreen() {
 
     const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => subscription.remove();
-  }, [activeSession, studyingDeck, activeTab, viewingInsightsQuizFromTab]);
+  }, [activeSession, studyingDeck, activeTab, viewingInsightsQuizFromTab, aiGenPhase]);
 
 
   // Confetti celebration physics loop (Confetti Cannon / Party Popper)
@@ -3282,7 +3226,6 @@ export default function HomeScreen() {
   const [newQuizLanguage, setNewQuizLanguage] = useState("English");
   const [creationStep, setCreationStep] = useState<"setup" | "drafting">("setup");
   const [creationMode, setCreationMode] = useState<"pick" | "quiz">("pick");
-  const [aiGenPhase, setAiGenPhase] = useState<null | "select" | "generating">(null);
   const [aiGenConnectionLost, setAiGenConnectionLost] = useState(false);
   const [aiGenCharCount, setAiGenCharCount] = useState(0);
   const [pendingAiFile, setPendingAiFile] = useState<{ text: string; fileName: string } | null>(null);
@@ -3608,8 +3551,6 @@ export default function HomeScreen() {
   };
 
   const handleGenerateWithAI = async (text: string, fileName: string) => {
-    isBackgroundGen.current = false;
-
     // ── Require sign-in ────────────────────────────────────────────────────
     if (!firebaseUser) {
       Alert.alert(
@@ -3911,19 +3852,12 @@ export default function HomeScreen() {
       }
 
       // ── Dismiss generation screen & navigate ───────────────────────────
-      if (isBackgroundGen.current) {
-        setBackgroundQuizReady(newQuiz);
-        isBackgroundGen.current = false;
-        globalBgGenStartTime = null;
-        setIsGeneratingInBackground(false);
-      } else {
-        setAiGenPhase(null);
-        setTimeout(() => {
-          setActiveTab("insights");
-          setViewingInsightsQuiz(newQuiz);
-          setViewingInsightsQuizFromTab("home");
-        }, 300);
-      }
+      setAiGenPhase(null);
+      setTimeout(() => {
+        setActiveTab("insights");
+        setViewingInsightsQuiz(newQuiz);
+        setViewingInsightsQuizFromTab("home");
+      }, 300);
 
       // ── Phase 2: Kick off remaining chunks in background ───────────────
       const remainingChunks = timedOutEarly ? chunks.slice(nextChunkIndex) : [];
@@ -4021,13 +3955,7 @@ export default function HomeScreen() {
       }
 
     } catch (err: any) {
-      if (!isBackgroundGen.current) {
-        setAiGenPhase(null);
-      } else {
-        isBackgroundGen.current = false;
-        globalBgGenStartTime = null;
-        setIsGeneratingInBackground(false);
-      }
+      setAiGenPhase(null);
       let errMsg = err.message || "Unknown error";
       // Classify for analytics — no raw message (could contain user content)
       const _analyticsErrType: "network" | "limit_reached" | "no_questions" | "disabled" | "unknown" =
@@ -8385,11 +8313,6 @@ export default function HomeScreen() {
                   </AnimatedPressable>
                 </View>
 
-                {/* ── Background Progress Card ── */}
-                {isGeneratingInBackground && !homeSearch && (
-                  <BackgroundProgressCard isDark={settingsDarkMode} generationTimeoutMs={appConfig?.aiConfig?.generationTimeoutMs ?? 60000} />
-                )}
-
                 {/* ── New user or Signed Out: sample try-it-out card ── */}
                 {((!firebaseUser) || (!hasContent && !sampleDismissed)) && !homeSearch && sampleQuiz && (
                   <View style={{ marginTop: 24, marginBottom: 8 }}>
@@ -9110,31 +9033,6 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {/* Background Quiz Ready Toast */}
-      {!!backgroundQuizReady && (
-        <View style={{ position: "absolute", top: Platform.OS === "ios" ? 52 : 24, left: 20, right: 20, zIndex: 1000, backgroundColor: "#48CAE4", padding: 16, borderRadius: 12, flexDirection: "row", alignItems: "center", gap: 12, elevation: 6, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 }}>
-          <Ionicons name="checkmark-circle" size={24} color="#0A0B14" />
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: "#0A0B14", fontSize: 16, fontWeight: "800" }}>Quiz Ready!</Text>
-            <Text style={{ color: "rgba(10,11,20,0.8)", fontSize: 13, fontWeight: "500", marginTop: 2 }} numberOfLines={1}>{backgroundQuizReady.title}</Text>
-          </View>
-          <Pressable 
-            style={{ backgroundColor: "#0A0B14", paddingHorizontal: 16, paddingVertical: 8, borderRadius: 16 }}
-            onPress={() => {
-              const quiz = backgroundQuizReady;
-              setBackgroundQuizReady(null);
-              setActiveTab("insights");
-              setViewingInsightsQuiz(quiz);
-              setViewingInsightsQuizFromTab("home");
-            }}
-          >
-            <Text style={{ color: "#48CAE4", fontWeight: "800", fontSize: 13 }}>View</Text>
-          </Pressable>
-          <Pressable onPress={() => setBackgroundQuizReady(null)} style={{ padding: 4 }}>
-            <Ionicons name="close" size={20} color="rgba(10,11,20,0.5)" />
-          </Pressable>
-        </View>
-      )}
     <SafeAreaView style={[styles.rootContainer, !settingsDarkMode && styles.lightRootContainer]} edges={["top", "left", "right"]}>
       {activeSession ? (
         renderActiveSessionView()
@@ -9374,7 +9272,7 @@ export default function HomeScreen() {
       {battleCountdown !== null && <FullscreenBattleCountdown count={battleCountdown} isDark={settingsDarkMode} />}
 
       {/* ── AI Generation Screen ── */}
-      {aiGenPhase === "generating" && <AIGeneratingScreen isDark={settingsDarkMode} documentCharCount={aiGenCharCount} generationTimeoutMs={appConfig?.aiConfig?.generationTimeoutMs ?? 60000} connectionLost={aiGenConnectionLost} onCancel={() => { setIsGeneratingInBackground(true); isBackgroundGen.current = true; setAiGenPhase(null); setAiGenConnectionLost(false); }} />}
+      {aiGenPhase === "generating" && <AIGeneratingScreen isDark={settingsDarkMode} documentCharCount={aiGenCharCount} generationTimeoutMs={appConfig?.aiConfig?.generationTimeoutMs ?? 60000} connectionLost={aiGenConnectionLost} />}
 
       {/* ── Battle Modals ── */}
       {(() => {
