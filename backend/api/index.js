@@ -524,7 +524,7 @@ app.post('/api/parse-ppt', upload.single('file'), async (req, res) => {
   }
 });
 
-const GEMINI_MCQ_PROMPT_TEMPLATE = `You are an expert tutor and you need to get me full marks.
+const GEMINI_MCQ_PROMPT_TEMPLATE = process.env.GEMINI_MCQ_PROMPT_TEMPLATE || `You are an expert tutor and you need to get me full marks.
 
 First output all flashcards under the ===FLASHCARDS=== header.
 Then output all quiz questions under the ===MCQS=== header.
@@ -550,6 +550,57 @@ If this is a list of questions generate exactly that many questions and flashcar
 Text:
 [PASTE YOUR TEXT HERE]`;
 
+const GEMINI_MCQ_PROMPT_TEMPLATE_RU = process.env.GEMINI_MCQ_PROMPT_TEMPLATE_RU || `Вы — опытный преподаватель, и ваша цель — помочь мне сдать тест на высший балл.
+
+Сначала выведите все карточки для запоминания под заголовком ===FLASHCARDS===.
+Затем выведите все тестовые вопросы с вариантами ответов под заголовком ===MCQS===.
+Все карточки, вопросы и варианты ответов должны быть строго на русском языке.
+
+===FLASHCARDS===
+Создайте не менее {{MIN_FLASHCARDS}} карточек, охватывающих весь предоставленный текст.
+Карточки должны быть в формате ТЕРМИН → ОПРЕДЕЛЕНИЕ, а НЕ вопрос → ответ.
+Пример:
+# Единица измерения силы в СИ
+= Ньютон
+
+===MCQS===
+Создайте тест минимум из {{MIN_MCQS}} вопросов с вариантами ответов, охватывающих весь предоставленный текст.
+Каждый вопрос должен начинаться со знака ?, правильный ответ со знака +, а неправильные со знака -.
+Пример:
+? Какова единица измерения силы в Международной системе единиц (СИ)?
++ Ньютон
+- Джоуль
+- Паскаль
+- Ватт
+
+Если предоставлен список вопросов, создайте ровно столько вопросов и карточек, сколько дано в тексте.
+
+Текст:
+[PASTE YOUR TEXT HERE]`;
+
+// Prompt for image-heavy PDFs and PPTX files where text extraction is poor.
+// Gemini reads the visual content directly — no [PASTE YOUR TEXT HERE] replacement.
+const GEMINI_MCQ_PROMPT_TEMPLATE_VISUAL = process.env.GEMINI_MCQ_PROMPT_TEMPLATE_VISUAL || `You are an expert tutor. Carefully read and analyse all visual content in the provided file (slides, diagrams, images, charts, tables and any text visible in the document).
+
+First output all flashcards under the ===FLASHCARDS=== header.
+Then output all quiz questions under the ===MCQS=== header.
+
+===FLASHCARDS===
+Generate at least {{MIN_FLASHCARDS}} flashcards covering the key concepts visible in the document.
+Flashcards are TERM → DEFINITION, NOT question → answer.
+Example:
+# SI unit of force
+= Newton
+
+===MCQS===
+Generate at least {{MIN_MCQS}} multiple-choice questions covering the key concepts visible in the document.
+Example:
+? What is the SI unit of force?
++ Newton
+- Joule
+- Pascal
+- Watt`;
+
 // ── Gemini Config ───────────────────────────────────────────────────────────
 app.get('/api/gemini-config', (req, res) => {
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
@@ -557,7 +608,23 @@ app.get('/api/gemini-config', (req, res) => {
     console.error("[Backend] Missing GEMINI_API_KEY environment variable.");
     return res.status(500).json({ error: "Server is missing AI configuration.", devError: "Missing GEMINI_API_KEY" });
   }
-  res.json({ key: GEMINI_API_KEY, prompt: GEMINI_MCQ_PROMPT_TEMPLATE });
+  const lang = (req.query.lang || '').toLowerCase();
+  const activePrompt = (lang === 'ru' || lang === 'kk') ? GEMINI_MCQ_PROMPT_TEMPLATE_RU : GEMINI_MCQ_PROMPT_TEMPLATE;
+  res.json({
+    key: GEMINI_API_KEY,
+    prompt: activePrompt,
+    promptEn: GEMINI_MCQ_PROMPT_TEMPLATE,
+    promptRu: GEMINI_MCQ_PROMPT_TEMPLATE_RU,
+  });
+});
+
+app.get('/api/gemini-config-ru', (req, res) => {
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+  if (!GEMINI_API_KEY) {
+    console.error("[Backend] Missing GEMINI_API_KEY environment variable.");
+    return res.status(500).json({ error: "Server is missing AI configuration.", devError: "Missing GEMINI_API_KEY" });
+  }
+  res.json({ key: GEMINI_API_KEY, prompt: GEMINI_MCQ_PROMPT_TEMPLATE_RU });
 });
 
 // ── App Config ──────────────────────────────────────────────────────────────
@@ -584,6 +651,8 @@ app.get('/api/app-config', (req, res) => {
       geminiKey: GEMINI_API_KEY,
       modelUrl: GEMINI_MODEL_URL,
       promptTemplate: GEMINI_MCQ_PROMPT_TEMPLATE,
+      promptTemplateRu: GEMINI_MCQ_PROMPT_TEMPLATE_RU,
+      promptTemplateVisual: GEMINI_MCQ_PROMPT_TEMPLATE_VISUAL,
       chunkSize: 10000,
       maxChunks: 10,
       concurrencyLimit: parseInt(process.env.GEMINI_CONCURRENCY_LIMIT || '10', 10),
