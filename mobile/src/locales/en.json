@@ -15,7 +15,8 @@
     "yes": "Yes",
     "no": "No",
     "minutes": "min",
-    "view": "View"
+    "view": "View",
+    "press_back_again": "Press back again to exit"
   },
   "tabs": {
     "home": "Home",

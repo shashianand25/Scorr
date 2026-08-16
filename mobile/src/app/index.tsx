@@ -1181,14 +1181,20 @@ export default function HomeScreen() {
   }, [pendingSharedQuizId, firebaseUser, isConnected]);
 
   // ── Bottom Capsule Toast (Pill) ──
-  const [bottomToastMessage, setBottomToastMessage] = useState<string | null>(null);
+  const [bottomToast, setBottomToast] = useState<{ message: string; icon?: any; color?: string } | null>(null);
   const bottomToastOpacity = useRef(new Animated.Value(0)).current;
   const bottomToastTranslateY = useRef(new Animated.Value(20)).current;
   const bottomToastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastBackPressTimeRef = useRef<number>(0);
 
-  const showBottomPillToast = React.useCallback((message: string, durationMs = 1800) => {
+  const showBottomPillToast = React.useCallback((message: string, options?: { icon?: any; color?: string; durationMs?: number }) => {
+    const durationMs = options?.durationMs ?? 1800;
     if (bottomToastTimeoutRef.current) clearTimeout(bottomToastTimeoutRef.current);
-    setBottomToastMessage(message);
+    setBottomToast({
+      message,
+      icon: options?.icon ?? "sparkles",
+      color: options?.color ?? "#38bdf8",
+    });
     bottomToastOpacity.setValue(0);
     bottomToastTranslateY.setValue(20);
 
@@ -1201,7 +1207,7 @@ export default function HomeScreen() {
       Animated.parallel([
         Animated.timing(bottomToastOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
         Animated.timing(bottomToastTranslateY, { toValue: 12, duration: 200, useNativeDriver: true }),
-      ]).start(() => setBottomToastMessage(null));
+      ]).start(() => setBottomToast(null));
     }, durationMs);
   }, []);
 
@@ -1488,7 +1494,18 @@ export default function HomeScreen() {
         return true;
       }
       if (activeTab === "home") {
-        return false; // Yield to OS default behavior
+        const now = Date.now();
+        if (now - lastBackPressTimeRef.current < 2000) {
+          BackHandler.exitApp();
+          return true;
+        }
+        lastBackPressTimeRef.current = now;
+        showBottomPillToast(t('common.press_back_again') || "Press back again to exit", {
+          icon: "log-out-outline",
+          color: "#94a3b8",
+          durationMs: 2000,
+        });
+        return true;
       }
       // On any other tab/page
       setActiveTab("home");
@@ -1497,7 +1514,7 @@ export default function HomeScreen() {
 
     const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => subscription.remove();
-  }, [activeSession, studyingDeck, activeTab, viewingInsightsQuizFromTab, aiGenPhase]);
+  }, [activeSession, studyingDeck, activeTab, viewingInsightsQuizFromTab, aiGenPhase, showBottomPillToast]);
 
 
   // Confetti celebration physics loop (Confetti Cannon / Party Popper)
@@ -9404,7 +9421,7 @@ export default function HomeScreen() {
       )}
 
       {/* ── Floating Bottom Pill Toast (Capsule) ── */}
-      {!!bottomToastMessage && (
+      {!!bottomToast && (
         <Animated.View
           pointerEvents="none"
           style={{
@@ -9430,9 +9447,11 @@ export default function HomeScreen() {
             gap: 8,
           }}
         >
-          <Ionicons name="sparkles" size={14} color="#38bdf8" />
+          {!!bottomToast.icon && (
+            <Ionicons name={bottomToast.icon} size={14} color={bottomToast.color || "#38bdf8"} />
+          )}
           <Text style={{ color: "#ffffff", fontSize: 13, fontWeight: "600", letterSpacing: 0.2 }}>
-            {bottomToastMessage}
+            {bottomToast.message}
           </Text>
         </Animated.View>
       )}
