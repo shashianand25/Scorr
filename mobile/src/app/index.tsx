@@ -3392,13 +3392,18 @@ export default function HomeScreen() {
           Animated.timing(insightsSwipeY, { toValue: 0, duration: 120, easing: Easing.in(Easing.quad), useNativeDriver: true }),
         ]).start(() => {
           if (dir === 'left') {
+            // Reset flip synchronously BEFORE advancing the index so the
+            // incoming card never flashes its answer side on first render.
+            insightsFlipAnim.stopAnimation();
+            insightsFlipAnim.setValue(0);
+            setFcFlipped(false);
             setFcIndex(idx + 1);
           } else {
+            insightsFlipAnim.stopAnimation();
+            insightsFlipAnim.setValue(0);
+            setFcFlipped(false);
             setFcIndex(idx - 1);
           }
-          insightsFlipAnim.stopAnimation();
-          insightsFlipAnim.setValue(0);
-          setFcFlipped(false);
           
           insightsSwipeX.setValue(dir === 'left' ? W : -W);
           insightsSwipeY.setValue(0);
@@ -5147,12 +5152,15 @@ export default function HomeScreen() {
           .catch(err => console.error("Failed to sync SM-2 progress", err));
       }
 
-      setStudyQueue(newQueue);
+      // Reset flip state immediately — before any React state updates — so
+      // the incoming card never renders with the previous card's flip state.
       flipAnim.stopAnimation();
       flipAnim.setValue(0);
       setStudyFlipped(false);
       setStudyTypedAnswer("");
       setStudyChecked(false);
+
+      setStudyQueue(newQueue);
       setSelectedRating(null);
 
       if (newQueue.length > 0) {
