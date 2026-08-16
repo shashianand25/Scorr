@@ -125,18 +125,18 @@ function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true, ge
       ])
     ).start();
 
-    // Fake progress bar filling over exactly generationTimeoutMs
+    // Progress bar fills over 40 seconds
     Animated.timing(progress, {
       toValue: 1,
-      duration: generationTimeoutMs,
+      duration: 40000,
       easing: Easing.out(Easing.ease),
       useNativeDriver: false 
     }).start();
 
-    // Show long wait text after generationTimeoutMs
+    // Show "Still generating questions..." text after 50 seconds
     const timer = setTimeout(() => {
       setShowLongWait(true);
-    }, generationTimeoutMs);
+    }, 50000);
 
     return () => clearTimeout(timer);
   }, []);
@@ -150,7 +150,7 @@ function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true, ge
       });
     } else if (progressPausedAt.current !== null) {
       // Resume from where we paused
-      const remaining = Math.max(0, (1 - progressPausedAt.current) * generationTimeoutMs);
+      const remaining = Math.max(0, (1 - progressPausedAt.current) * 40000);
       Animated.timing(progress, {
         toValue: 1,
         duration: remaining,
@@ -2521,8 +2521,8 @@ export default function HomeScreen() {
             <Ionicons name="flame" size={18} color={isDark ? "#FB7185" : "#e11d48"} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 16, fontWeight: "700", color: textMain, marginBottom: 4 }} numberOfLines={1}>Multiplayer Battle</Text>
-            <Text style={{ fontSize: 12, color: isDark ? "rgba(255,255,255,0.8)" : textSub }} numberOfLines={1}>Challenge a friend in real-time</Text>
+            <Text style={{ fontSize: 16, fontWeight: "700", color: textMain, marginBottom: 4 }} numberOfLines={1}>Challenge a Friend</Text>
+            <Text style={{ fontSize: 12, color: isDark ? "rgba(255,255,255,0.8)" : textSub }} numberOfLines={1}>Battle using this quiz in real-time</Text>
           </View>
           <Feather name="chevron-right" size={16} color={isDark ? "#FFFFFF" : "#9ca3af"} style={{ opacity: isDark ? 0.8 : 1 }} />
         </Pressable>
