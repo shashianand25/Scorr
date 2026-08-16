@@ -1106,7 +1106,7 @@ export default function HomeScreen() {
           setIsImporting(true);
           const { quiz, error } = await fetchSharedQuiz(id);
           if (error || !quiz) {
-            throw new Error(error || "Course not found or no longer available.");
+            throw new Error(error || t('share.quiz_deleted') || "This quiz was deleted or is no longer available.");
           }
           
           const parsed = parseQstText(quiz.sourceText);
@@ -3437,19 +3437,23 @@ export default function HomeScreen() {
       
       const targetId = quiz.neonId || quiz.id;
       // Ensure the quiz is synced to Neon under targetId so anyone with the link can access it
-      if (firebaseUser && targetId) {
+      if (targetId) {
         const sourceText = quiz.sourceText || questionsToSourceText(quiz.title, quiz.category || "General", quiz.questionsList || [], quiz.flashcards || []);
-        createMobileQuiz({
-          id: targetId,
-          userId: firebaseUser.uid,
-          title: quiz.title,
-          category: quiz.category || "General",
-          questionCount: quiz.questionsList?.length ?? quiz.questions ?? 0,
-          sourceText,
-          attempts: quiz.attempts || [],
-          wrongQuestions: quiz.wrongQuestions || [],
-          uniqueCorrectIds: quiz.uniqueCorrectIds || [],
-        }).catch(err => console.warn("[ShareSync] ensure sync failed:", err));
+        try {
+          await createMobileQuiz({
+            id: targetId,
+            userId: firebaseUser ? firebaseUser.uid : "guest_shared",
+            title: quiz.title,
+            category: quiz.category || "General",
+            questionCount: quiz.questionsList?.length ?? quiz.questions ?? 0,
+            sourceText,
+            attempts: quiz.attempts || [],
+            wrongQuestions: quiz.wrongQuestions || [],
+            uniqueCorrectIds: quiz.uniqueCorrectIds || [],
+          });
+        } catch (syncErr) {
+          console.warn("[ShareSync] ensure sync failed:", syncErr);
+        }
       }
 
       const shareBase = appConfig?.appLinks?.shareBaseUrl || "https://scorrapp.com/share/quiz/";

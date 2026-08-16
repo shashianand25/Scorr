@@ -375,8 +375,10 @@ app.get('/api/battle-history', async (req, res) => {
 app.get('/api/share/quiz/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const result = await pool.query(`SELECT id, title, category, question_count, source_text FROM mobile_quizzes WHERE id = $1 AND deleted_at IS NULL`, [id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Quiz not found' });
+    const result = await pool.query(`SELECT id, title, category, question_count, source_text, deleted_at FROM mobile_quizzes WHERE id = $1`, [id]);
+    if (result.rows.length === 0 || result.rows[0].deleted_at) {
+      return res.status(404).json({ error: 'This quiz was deleted or is no longer available.' });
+    }
     const r = result.rows[0];
     res.json({ quiz: { ...r, questionCount: r.question_count, sourceText: r.source_text } });
   } catch (err) {

@@ -340,5 +340,8 @@
     "re_attempt_wrong": "Re-attempt Incorrect",
     "missed_questions": "missed questions",
     "delete_attempt": "Delete Attempt"
+  },
+  "share": {
+    "quiz_deleted": "This quiz was deleted or is no longer available."
   }
 }
