@@ -1287,7 +1287,7 @@ export function AppModals({ p }: { p: any }) {
               <View style={{ flex: 1 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 12, paddingBottom: 16 }}>
                   <View style={{ flex: 1, marginRight: 12 }}>
-                    <Text style={{ fontSize: 24, fontWeight: "600", color: p.settingsDarkMode ? "#ffffff" : "#0d0f14", fontFamily: "serif" }}>How would you like to study?</Text>
+                    <Text style={{ fontSize: 24, fontWeight: "600", color: p.settingsDarkMode ? "#ffffff" : "#0d0f14", fontFamily: "serif" }}>{t('study_modes.how_to_study') || "How would you like to study?"}</Text>
                   </View>
                   <Pressable onPress={() => closeOrDismiss(() => { (p.setSelectedQuiz || (() => {}))(null); setQuizSetupStep("presets"); })} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 6 })}>
                     <Feather name="x" size={24} color={p.settingsDarkMode ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.6)"} />
@@ -1296,12 +1296,12 @@ export function AppModals({ p }: { p: any }) {
 
                 <ScrollView ref={optionsScrollRef} style={{ flex: 1, paddingHorizontal: 20 }} contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 140 }} showsVerticalScrollIndicator={true} bounces={true}>
                   {[
-                    { id: "marathon", title: "Marathon", sub: "All questions, no timer", icon: "help-circle", color: "#3b82f6" },
-                    { id: "unanswered", title: "Unanswered", sub: "Questions you haven't answered yet", icon: "layers-outline", color: "#f59e0b" },
-                    { id: "pop", title: "Pop Quiz", sub: "10 random questions", icon: "flash", color: "#ef4444" },
-                    { id: "mistakes", title: "Mistakes", sub: "Review incorrect answers", icon: "bandage", color: "#f97316" },
-                    { id: "exam", title: "Exam", sub: "All questions, no feedback, no timer", icon: "document-text", color: "#eab308" },
-                    { id: "custom", title: "Custom", sub: "Configure your own settings", icon: "build", color: "#6366f1" },
+                    { id: "marathon", title: t('study_modes.marathon_title') || "Marathon", sub: t('study_modes.marathon_sub') || "All questions, no timer", icon: "help-circle", color: "#3b82f6" },
+                    { id: "unanswered", title: t('study_modes.unanswered_title') || "Unanswered", sub: t('study_modes.unanswered_sub') || "Questions you haven't answered yet", icon: "layers-outline", color: "#f59e0b" },
+                    { id: "pop", title: t('study_modes.pop_title') || "Pop Quiz", sub: t('study_modes.pop_sub') || "10 random questions", icon: "flash", color: "#ef4444" },
+                    { id: "mistakes", title: t('study_modes.mistakes_title') || "Mistakes", sub: t('study_modes.mistakes_sub') || "Review incorrect answers", icon: "bandage", color: "#f97316" },
+                    { id: "exam", title: t('study_modes.exam_title') || "Exam", sub: t('study_modes.exam_sub') || "All questions, no feedback, no timer", icon: "document-text", color: "#eab308" },
+                    { id: "custom", title: t('study_modes.custom_title') || "Custom", sub: t('study_modes.custom_sub') || "Configure your own settings", icon: "build", color: "#6366f1" },
                   ].map((preset) => {
                     const isActive = quizPreset === preset.id;
                     return (
@@ -1385,16 +1385,16 @@ export function AppModals({ p }: { p: any }) {
                         {isActive && preset.id === "custom" && (
                           <View style={{ marginTop: 4, marginBottom: 24, paddingHorizontal: 4 }}>
                             <Text style={{ fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, color: p.settingsDarkMode ? "#64748b" : "#64748b", marginBottom: 16 }}>
-                              Question Selection
+                              {t('study_modes.question_selection') || "Question Selection"}
                             </Text>
 
                             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
                               {[
-                                { value: "all" as const, label: "All" },
-                                { value: "wrong" as const, label: "Wrong", disabled: wrongCount === 0 },
-                                { value: "range" as const, label: "Range" },
-                                { value: "unanswered" as const, label: "Unanswered", disabled: unansweredCount === 0 },
-                                { value: "random" as const, label: "Random" },
+                                { value: "all" as const, label: t('study_modes.sel_all') || "All" },
+                                { value: "wrong" as const, label: t('study_modes.sel_wrong') || "Wrong", disabled: wrongCount === 0 },
+                                { value: "range" as const, label: t('study_modes.sel_range') || "Range" },
+                                { value: "unanswered" as const, label: t('study_modes.sel_unanswered') || "Unanswered", disabled: unansweredCount === 0 },
+                                { value: "random" as const, label: t('study_modes.sel_random') || "Random" },
                               ].map(({ value, label, disabled }) => {
                                 const isActiveSel = p.selectionMode === value;
                                 return (
@@ -1424,22 +1424,22 @@ export function AppModals({ p }: { p: any }) {
                             <View style={{ paddingHorizontal: 14, paddingVertical: 14, borderRadius: 16, marginBottom: 32, backgroundColor: p.settingsDarkMode ? "#171f33" : "#ffffff", borderWidth: 1, borderColor: p.settingsDarkMode ? "rgba(255,255,255,0.05)" : "#e5e7eb", minHeight: 56, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                               {p.selectionMode === "random" ? (
                                 <>
-                                  <Text style={{ fontSize: 15, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#334155" }}>Random Count</Text>
+                                  <Text style={{ fontSize: 15, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#334155" }}>{t('study_modes.random_count') || "Random Count"}</Text>
                                   <Stepper value={p.randomCount} min={1} max={totalQuestions} onChange={(v) => (p.setRandomCount || (()=>{ }))(v)} darkMode={p.settingsDarkMode} />
                                 </>
                               ) : p.selectionMode === "range" ? (
                                 <>
-                                  <Text style={{ fontSize: 15, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#334155", marginRight: 6 }}>Set Range</Text>
+                                  <Text style={{ fontSize: 15, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#334155", marginRight: 6 }}>{t('study_modes.set_range') || "Set Range"}</Text>
                                   <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 }}>
                                     <Stepper value={p.rangeStart} min={1} max={p.rangeEnd} onChange={(v) => (p.setRangeStart || (()=>{ }))(v)} darkMode={p.settingsDarkMode} compact={true} />
-                                    <Text style={{ fontSize: 13, fontWeight: "600", color: p.settingsDarkMode ? "#94a3b8" : "#64748b" }}>to</Text>
+                                    <Text style={{ fontSize: 13, fontWeight: "600", color: p.settingsDarkMode ? "#94a3b8" : "#64748b" }}>{t('study_modes.to') || "to"}</Text>
                                     <Stepper value={p.rangeEnd} min={p.rangeStart} max={totalQuestions} onChange={(v) => (p.setRangeEnd || (()=>{ }))(v)} darkMode={p.settingsDarkMode} compact={true} />
                                   </View>
                                 </>
                               ) : (
                                 <>
                                   <Text style={{ fontSize: 15, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#334155" }}>
-                                    {p.selectionMode === "all" ? "Total Questions" : p.selectionMode === "wrong" ? "Wrong Answers" : "Unanswered"}
+                                    {p.selectionMode === "all" ? (t('study_modes.total_questions') || "Total Questions") : p.selectionMode === "wrong" ? (t('study_modes.wrong_answers') || "Wrong Answers") : (t('study_modes.sel_unanswered') || "Unanswered")}
                                   </Text>
                                   <Stepper value={p.selectionMode === "all" ? totalQuestions : p.selectionMode === "wrong" ? wrongCount : unansweredCount} min={1} max={totalQuestions} onChange={() => {}} darkMode={p.settingsDarkMode} disabled={true} />
                                 </>
@@ -1447,15 +1447,15 @@ export function AppModals({ p }: { p: any }) {
                             </View>
 
                             <Text style={{ fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, color: p.settingsDarkMode ? "#64748b" : "#64748b", marginBottom: 16 }}>
-                              Gameplay Configurations
+                              {t('study_modes.gameplay_config') || "Gameplay Configurations"}
                             </Text>
 
                             <View style={{ borderRadius: 20, backgroundColor: p.settingsDarkMode ? "#171f33" : "#ffffff", borderWidth: 1, borderColor: p.settingsDarkMode ? "rgba(255,255,255,0.05)" : "#e5e7eb", paddingVertical: 8 }}>
                               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, zIndex: 10 }}>
                                 <View style={{ flex: 1 }}>
-                                  <Text style={{ fontSize: 16, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#1e293b", marginBottom: 2 }}>Quiz time limit</Text>
+                                  <Text style={{ fontSize: 16, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#1e293b", marginBottom: 2 }}>{t('study_modes.time_limit') || "Quiz time limit"}</Text>
                                   <Text style={{ fontSize: 13, color: p.settingsDarkMode ? "#64748b" : "#64748b" }}>
-                                    {p.timeLimitText ? `${p.timeLimitText} min` : (p.quizTimeLimit !== null ? `${p.quizTimeLimit} min` : "No time limit")}
+                                    {p.timeLimitText ? `${p.timeLimitText} ${t('study_modes.min_unit') || "min"}` : (p.quizTimeLimit !== null ? `${p.quizTimeLimit} ${t('study_modes.min_unit') || "min"}` : (t('study_modes.no_time_limit') || "No time limit"))}
                                   </Text>
                                 </View>
                                 <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
@@ -1484,7 +1484,7 @@ export function AppModals({ p }: { p: any }) {
                                       maxLength={3}
                                       style={{ color: p.settingsDarkMode ? "#e2e8f0" : "#334155", fontSize: 15, fontWeight: "600", width: 30, textAlign: "center", padding: 0, margin: 0 }}
                                     />
-                                    <Text style={{ color: p.settingsDarkMode ? "#475569" : "#64748b", fontSize: 13, fontWeight: "600" }}>min</Text>
+                                    <Text style={{ color: p.settingsDarkMode ? "#475569" : "#64748b", fontSize: 13, fontWeight: "600" }}>{t('study_modes.min_unit') || "min"}</Text>
                                   </View>
                                   <Pressable onPress={() => (p.setShowTimeLimitDropdown || (()=>{}))((v: any) => !v)} style={({ pressed }) => ({ padding: 4, opacity: pressed ? 0.6 : 1 })}>
                                     <Feather name={p.showTimeLimitDropdown ? "chevron-up" : "chevron-down"} size={20} color={p.settingsDarkMode ? "#64748b" : "#64748b"} />
@@ -1497,7 +1497,7 @@ export function AppModals({ p }: { p: any }) {
                                       <ScrollView showsVerticalScrollIndicator={true} contentContainerStyle={{ padding: 6 }} nestedScrollEnabled={true} scrollEnabled={true}>
                                         {[null, 5, 10, 15, 30, 60].map((presetTime) => {
                                           const isTimeActive = p.quizTimeLimit === presetTime;
-                                          const label = presetTime === null ? "No limit" : `${presetTime} min`;
+                                          const label = presetTime === null ? (t('study_modes.no_time_limit') || "No limit") : `${presetTime} ${t('study_modes.min_unit') || "min"}`;
                                           return (
                                             <Pressable key={String(presetTime)} onPress={() => { (p.setQuizTimeLimit || (()=>{}))(presetTime); (p.setTimeLimitText || (()=>{}))(presetTime !== null ? String(presetTime) : ""); (p.setShowTimeLimitDropdown || (()=>{}))(false); }} style={({ pressed }) => ({ paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8, backgroundColor: isTimeActive ? (p.settingsDarkMode ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.08)") : (pressed ? (p.settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)") : "transparent"), flexDirection: "row", alignItems: "center", justifyContent: "space-between" })}>
                                               <Text style={{ fontSize: 14, fontWeight: isTimeActive ? "700" : "500", color: isTimeActive ? (p.settingsDarkMode ? "#818cf8" : "#4f46e5") : (p.settingsDarkMode ? "#cbd5e1" : "#475569") }}>{label}</Text>
@@ -1513,19 +1513,19 @@ export function AppModals({ p }: { p: any }) {
                               
                               <View style={{ height: 1, backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.05)" : "#e5e7eb", marginHorizontal: 16 }} />
                               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 14 }}>
-                                <Text style={{ fontSize: 16, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#1e293b" }}>Shuffle question order</Text>
+                                <Text style={{ fontSize: 16, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#1e293b" }}>{t('study_modes.shuffle_questions') || "Shuffle question order"}</Text>
                                 <ToggleSwitch checked={p.shuffleQuestions} onChange={p.setShuffleQuestions} darkMode={p.settingsDarkMode} />
                               </View>
                               
                               <View style={{ height: 1, backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.05)" : "#e5e7eb", marginHorizontal: 16 }} />
                               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 14 }}>
-                                <Text style={{ fontSize: 16, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#1e293b" }}>Shuffle answer options</Text>
+                                <Text style={{ fontSize: 16, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#1e293b" }}>{t('study_modes.shuffle_answers') || "Shuffle answer options"}</Text>
                                 <ToggleSwitch checked={p.shuffleAnswers} onChange={p.setShuffleAnswers} darkMode={p.settingsDarkMode} />
                               </View>
                               
                               <View style={{ height: 1, backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.05)" : "#e5e7eb", marginHorizontal: 16 }} />
                               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 14 }}>
-                                <Text style={{ fontSize: 16, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#1e293b" }}>Show answer after submit</Text>
+                                <Text style={{ fontSize: 16, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#1e293b" }}>{t('study_modes.show_answer') || "Show answer after submit"}</Text>
                                 <ToggleSwitch checked={p.showAnswerOnSubmit} onChange={p.setShowAnswerOnSubmit} darkMode={p.settingsDarkMode} />
                               </View>
                             </View>
@@ -1547,11 +1547,11 @@ export function AppModals({ p }: { p: any }) {
                     ]}
                   >
                     <Ionicons name="play" size={18} color={(questionCount === 0 || (quizPreset === "mistakes" && wrongCount === 0)) ? (p.settingsDarkMode ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.3)") : "#000000"} />
-                    <Text style={{ fontSize: 16, fontWeight: "700", color: (questionCount === 0 || (quizPreset === "mistakes" && wrongCount === 0)) ? (p.settingsDarkMode ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.3)") : "#000000" }}>Start Quiz ({questionCount} Qs)</Text>
+                    <Text style={{ fontSize: 16, fontWeight: "700", color: (questionCount === 0 || (quizPreset === "mistakes" && wrongCount === 0)) ? (p.settingsDarkMode ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.3)") : "#000000" }}>{t('study_modes.start_quiz_btn') || "Start Quiz"} ({questionCount} Qs)</Text>
                   </Pressable>
                   {p.selectedQuiz?.category === "AI Generated" && (
                     <Text style={{ textAlign: "center", fontSize: 11, color: p.settingsDarkMode ? "rgba(255,255,255,0.38)" : "rgba(0,0,0,0.4)", marginTop: 8 }}>
-                      AI-generated content may contain errors. Please verify important information.
+                      {t('study_modes.ai_disclaimer') || "AI-generated content may contain errors. Please verify important information."}
                     </Text>
                   )}
                 </View>

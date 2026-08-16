@@ -32,5 +32,6 @@ export const SAMPLE_QUIZ = {
 export const APP_LANGUAGES = [
   { id: "system", name: "System language", code: "en", nativeName: "", flag: "A文" },
   { id: "en", name: "English", code: "en", nativeName: "English", flag: "🇺🇸" },
+  { id: "ru", name: "Russian", code: "ru", nativeName: "Русский", flag: "🇷🇺" },
   { id: "kk", name: "Kazakh", code: "kk", nativeName: "Қазақ тілі", flag: "🇰🇿" },
 ];
