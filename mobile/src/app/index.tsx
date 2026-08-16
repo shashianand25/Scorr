@@ -9307,9 +9307,9 @@ export default function HomeScreen() {
     </SafeAreaView>
 
       {/* ── Report Card Modal ── */}
-      <Modal visible={showWrongReview || !!viewingReportCardData} animationType="slide" transparent={false} onRequestClose={() => { setShowWrongReview(false); setViewingReportCardData(null); setSnapshotReviewData([]); }}>
+      <Modal visible={showWrongReview || !!viewingReportCardData} animationType="slide" transparent={true} statusBarTranslucent={true} onRequestClose={() => { setShowWrongReview(false); setViewingReportCardData(null); setSnapshotReviewData([]); }}>
         <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#0b1021" : "#f8fafc" }}>
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 24, paddingTop: 60, paddingBottom: 20, borderBottomWidth: 1, borderBottomColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 24, paddingTop: Math.max(insets.top, 16) + 12, paddingBottom: 20, borderBottomWidth: 1, borderBottomColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
             <View style={{ flex: 1, marginRight: 12 }}>
               <Text style={{ fontSize: 20, fontWeight: "600", color: settingsDarkMode ? "#ffffff" : "#111827" }} numberOfLines={1}>
                 {viewingReportCardData?.quiz?.title ? viewingReportCardData.quiz.title : "Review Answers"}
@@ -10006,11 +10006,12 @@ export default function HomeScreen() {
           <Modal
             visible={studyModeModalVisible}
             animationType="fade"
-            transparent={false}
+            transparent={true}
+            statusBarTranslucent={true}
             onRequestClose={() => setStudyModeModalVisible(false)}
           >
             <KeyboardAvoidingView style={{ flex: 1, backgroundColor: isDark ? "#0f172a" : "#f4f4f8" }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-              <View style={{ flex: 1, paddingTop: Platform.OS === "ios" ? 60 : 64 }}>
+              <View style={{ flex: 1, paddingTop: Math.max(insets.top, 16) + 12 }}>
 
 
                   {/* Header */}

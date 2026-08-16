@@ -949,14 +949,14 @@ export function AppModals({ p }: { p: any }) {
 
       {/* ── Feedback — full-screen slide-up page ── */}
       {!!p.showFeedbackPage && (
-      <Modal visible={true} animationType="slide" transparent={false} onRequestClose={() => closeOrDismiss(() => (p.setShowFeedbackPage || (() => {}))(false))}>
+      <Modal visible={true} animationType="slide" transparent={true} statusBarTranslucent={true} onRequestClose={() => closeOrDismiss(() => (p.setShowFeedbackPage || (() => {}))(false))}>
         <KeyboardWrapper
           style={{ flex: 1, backgroundColor: p.settingsDarkMode ? "#0B0F1E" : "#f4f4f8" }}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
           keyboardVerticalOffset={0}
         >
           {/* Header */}
-          <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingTop: 56, paddingBottom: 20 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingTop: Math.max(insets.top, 16) + 12, paddingBottom: 20 }}>
             <Pressable
               onPress={() => { (p.setShowFeedbackPage || (() => {}))(false); (p.setFeedbackText || (() => {}))(""); }}
               style={({ pressed }) => [{ padding: 8, borderRadius: 12,
@@ -1043,11 +1043,11 @@ export function AppModals({ p }: { p: any }) {
 
       {/* ── Privacy Policy Modal ── */}
       {!!p.showPrivacyPolicy && (
-      <Modal visible={true} animationType="slide" transparent={false} onRequestClose={() => (p.setShowPrivacyPolicy || (() => {}))(false)}>
+      <Modal visible={true} animationType="slide" transparent={true} statusBarTranslucent={true} onRequestClose={() => (p.setShowPrivacyPolicy || (() => {}))(false)}>
         <View style={{ flex: 1, backgroundColor: p.settingsDarkMode ? "#0a0f1e" : "#f6f7fb" }}>
 
           {/* Sticky header */}
-          <View style={{ paddingTop: 56, paddingBottom: 16, paddingHorizontal: 20,
+          <View style={{ paddingTop: Math.max(insets.top, 16) + 12, paddingBottom: 16, paddingHorizontal: 20,
             backgroundColor: p.settingsDarkMode ? "#0a0f1e" : "#f6f7fb",
             borderBottomWidth: 1, borderBottomColor: p.settingsDarkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)",
             flexDirection: "row", alignItems: "center", gap: 14 }}>
@@ -1147,11 +1147,11 @@ export function AppModals({ p }: { p: any }) {
 
       {/* ── Terms of Service Modal ── */}
       {!!p.showTermsOfService && (
-      <Modal visible={true} animationType="slide" transparent={false} onRequestClose={() => (p.setShowTermsOfService || (() => {}))(false)}>
+      <Modal visible={true} animationType="slide" transparent={true} statusBarTranslucent={true} onRequestClose={() => (p.setShowTermsOfService || (() => {}))(false)}>
         <View style={{ flex: 1, backgroundColor: p.settingsDarkMode ? "#0a0f1e" : "#f6f7fb" }}>
 
           {/* Sticky header */}
-          <View style={{ paddingTop: 56, paddingBottom: 16, paddingHorizontal: 20,
+          <View style={{ paddingTop: Math.max(insets.top, 16) + 12, paddingBottom: 16, paddingHorizontal: 20,
             backgroundColor: p.settingsDarkMode ? "#0a0f1e" : "#f6f7fb",
             borderBottomWidth: 1, borderBottomColor: p.settingsDarkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)",
             flexDirection: "row", alignItems: "center", gap: 14 }}>
@@ -1281,7 +1281,8 @@ export function AppModals({ p }: { p: any }) {
         <Modal
           visible={true}
           animationType="fade"
-          transparent={false}
+          transparent={true}
+          statusBarTranslucent={true}
           onRequestClose={() => closeOrDismiss(() => { (p.setSelectedQuiz || (() => {}))(null); setQuizSetupStep("presets"); })}
         >
           <KeyboardWrapper style={{ flex: 1, backgroundColor: p.settingsDarkMode ? "#0f172a" : "#f4f4f8" }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
@@ -1567,9 +1568,9 @@ export function AppModals({ p }: { p: any }) {
 
 {/* ── View Mode Modal ── */}
       {!!p.pdfViewQuiz && (
-      <Modal visible={true} animationType="slide" transparent={false} onRequestClose={() => (p.setPdfViewQuiz || (() => {}))(null)}>
+      <Modal visible={true} animationType="slide" transparent={true} statusBarTranslucent={true} onRequestClose={() => (p.setPdfViewQuiz || (() => {}))(null)}>
         <View style={{ flex: 1, backgroundColor: p.settingsDarkMode ? "#0f172a" : "#f4f4f8" }}>
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingTop: 52, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: p.settingsDarkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)", backgroundColor: p.settingsDarkMode ? "#0f172a" : "#ffffff" }}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingTop: Math.max(insets.top, 16) + 10, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: p.settingsDarkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)", backgroundColor: p.settingsDarkMode ? "#0f172a" : "#ffffff" }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flex: 1 }}>
               <Pressable onPress={() => (p.setPdfViewQuiz || (() => {}))(null)} style={({ pressed }) => [{ padding: 8, borderRadius: 10, backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)" }, pressed && styles.opacityPress]}>
                 <Ionicons name="arrow-back" size={20} color={p.settingsDarkMode ? "#ffffff" : "#0d0f14"} />

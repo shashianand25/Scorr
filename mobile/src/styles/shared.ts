@@ -1011,7 +1011,7 @@ export const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   dialogCard: {
-    backgroundColor: "#16181f",
+    backgroundColor: "#252836",
     borderRadius: 24,
     paddingVertical: 20,
     paddingHorizontal: 22,
@@ -1019,7 +1019,7 @@ export const styles = StyleSheet.create({
     alignSelf: "center",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.12)",
+    borderColor: "rgba(255, 255, 255, 0.10)",
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.5,

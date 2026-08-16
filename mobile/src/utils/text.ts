@@ -191,6 +191,9 @@ export function parseQstText(text: string): { title: string; category: string; q
   for (let q of questions) {
     const correctCount = q.answers.filter((a: any) => a.isCorrect).length;
     q.type = correctCount > 1 ? "multiple_choice" : "single_choice";
+    if (q.answers && q.answers.length > 1) {
+      q.answers = [...q.answers].sort(() => Math.random() - 0.5);
+    }
   }
 
   return { title, category, questions, flashcards };

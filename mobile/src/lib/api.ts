@@ -362,6 +362,7 @@ export interface AppConfig {
     modelUrl: string;
     promptTemplate: string;
     promptTemplateRu?: string;
+    promptTemplateVisual?: string;
     chunkSize: number;
     maxChunks: number;
     maxOutputTokens: number;
@@ -440,7 +441,7 @@ export async function parsePdfFromBackend(fileUri: string, fileName: string, fil
   }
 }
 
-export async function parsePptFromBackend(fileUri: string, fileName: string): Promise<{ text: string; error?: string }> {
+export async function parsePptFromBackend(fileUri: string, fileName: string): Promise<{ text: string; isVisual?: boolean; error?: string }> {
   try {
     const uploadResult = await FileSystem.uploadAsync(`${BASE_URL}/api/parse-ppt`, fileUri, {
       httpMethod: 'POST',

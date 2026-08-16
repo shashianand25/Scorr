@@ -19,34 +19,59 @@ import { PostHog } from "posthog-react-native";
 // Dashboard: https://eu.posthog.com  (EU-hosted, GDPR-friendly)
 // Key comes from EXPO_PUBLIC_POSTHOG_KEY in .env / eas.json
 const POSTHOG_KEY = process.env.EXPO_PUBLIC_POSTHOG_KEY || "";
+const isPostHogDisabled = !POSTHOG_KEY || POSTHOG_KEY.includes("PASTE_YOUR_KEY");
 
 export const posthog = new PostHog(
   POSTHOG_KEY,
-  { host: "https://eu.i.posthog.com" }
+  {
+    host: "https://eu.i.posthog.com",
+    disabled: isPostHogDisabled,
+  }
 );
 
 // ── Identify a user (call after login, clear on logout) ──────────────────────
 // Only pass the Firebase UID — no emails.
 export function identifyUser(uid: string) {
-  posthog.identify(uid);
+  try {
+    if (!isPostHogDisabled && uid) {
+      posthog.identify(uid);
+    }
+  } catch (e) {
+    // Gracefully handle any identification errors
+  }
 }
 
 export function clearUser() {
-  posthog.reset();
+  try {
+    if (!isPostHogDisabled) {
+      posthog.reset();
+    }
+  } catch (e) {
+    // Gracefully handle any reset errors
+  }
 }
 
 // ── Internal helper ───────────────────────────────────────────────────────────
 function send(event: string, props: Record<string, string | number | boolean>) {
-  // PostHog: persistent analytics dashboard
-  posthog.capture(event, props);
+  try {
+    if (!isPostHogDisabled) {
+      posthog.capture(event, props);
+    }
+  } catch (e) {
+    // Gracefully handle any network/capture errors
+  }
 
-  // Sentry: breadcrumb for crash context
-  Sentry.addBreadcrumb({
-    category: "analytics",
-    message: event,
-    data: props,
-    level: "info",
-  });
+  try {
+    // Sentry: breadcrumb for crash context
+    Sentry.addBreadcrumb({
+      category: "analytics",
+      message: event,
+      data: props,
+      level: "info",
+    });
+  } catch (e) {
+    // Ignore breadcrumb errors
+  }
 }
 
 // ── Events ────────────────────────────────────────────────────────────────────

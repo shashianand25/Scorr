@@ -10,6 +10,10 @@ export function getUserErrorMessage(error: any): string {
     return "Permission denied. Please allow access and try again.";
   }
 
+  if (lowerMsg.includes("pdf") || lowerMsg.includes("scanned") || lowerMsg.includes("extract text")) {
+    return "Couldn't open this PDF. It may be corrupted, unsupported, or contain scanned/image-only pages.";
+  }
+
   if (lowerMsg.includes("document") || lowerMsg.includes("file picker") || lowerMsg.includes("file not found")) {
     return "Couldn't open the selected file. It might be corrupted or missing.";
   }
@@ -19,7 +23,7 @@ export function getUserErrorMessage(error: any): string {
   }
 
   if (lowerMsg.includes("ppt upload limit") || lowerMsg.includes("payload_too_large") || lowerMsg.includes("413")) {
-    return "PPT upload limit 4.5 mb, try uploading pdf for a larger size";
+    return "PPT upload limit is 4.5 MB. Try uploading as a PDF for larger files.";
   }
 
   return `Something went wrong. Please try again. (${msg})`;
