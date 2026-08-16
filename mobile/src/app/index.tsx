@@ -6417,7 +6417,7 @@ export default function HomeScreen() {
                 <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }}
                   onPress={() => setShowDeckPicker(false)}>
                   <View style={{ backgroundColor: settingsDarkMode ? "#1e293b" : "#ffffff",
-                    borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 8, paddingBottom: Math.max(insets.bottom, 16) + 16, maxHeight: "75%",
+                    borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 8, paddingBottom: Platform.OS === "ios" ? 36 : Math.max(insets.bottom, 16), maxHeight: "75%",
                     shadowColor: "#000", shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 20 }}
                     onStartShouldSetResponder={() => true}>
                     <View style={{ width: 36, height: 4, borderRadius: 2,
@@ -6575,7 +6575,7 @@ export default function HomeScreen() {
                 <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }}
                   onPress={() => setShowEllipsisMenu(false)}>
                   <View style={{ backgroundColor: settingsDarkMode ? "#1e293b" : "#ffffff",
-                    borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 8, paddingBottom: Math.max(insets.bottom, 16) + 16,
+                    borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 8, paddingBottom: Platform.OS === "ios" ? 36 : Math.max(insets.bottom, 16),
                     shadowColor: "#000", shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 20 }}
                     onStartShouldSetResponder={() => true}>
                     <View style={{ width: 36, height: 4, borderRadius: 2,

@@ -819,25 +819,25 @@ export function AppModals({ p }: { p: any }) {
       <Modal visible={true} animationType="slide" transparent onRequestClose={() => (p.setSelectedAttemptForModal || (() => {}))(null)}>
         <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }} onPress={() => (p.setSelectedAttemptForModal || (() => {}))(null)}>
           {p.selectedAttemptForModal && (
-            <View style={{ backgroundColor: p.settingsDarkMode ? "#16162a" : "#ffffff", borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: Math.max(insets.bottom, 16) + 20 }} onStartShouldSetResponder={() => true}>
+            <View style={{ backgroundColor: p.settingsDarkMode ? "#16162a" : "#ffffff", borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 20, paddingTop: 12, paddingBottom: Platform.OS === "ios" ? 36 : Math.max(insets.bottom, 16) }} onStartShouldSetResponder={() => true}>
               {/* Drag Handle */}
-              <View style={{ width: 40, height: 4, backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)", borderRadius: 2, alignSelf: "center", marginBottom: 24 }} />
+              <View style={{ width: 40, height: 4, backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)", borderRadius: 2, alignSelf: "center", marginBottom: 16 }} />
               
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 16, marginBottom: 32 }}>
-                <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: p.settingsDarkMode ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.1)", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "rgba(99,102,241,0.3)", shadowColor: "#6366f1", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12 }}>
-                  <Text style={{ fontSize: 28 }}>🎯</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 16, marginBottom: 20 }}>
+                <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: p.settingsDarkMode ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.1)", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "rgba(99,102,241,0.3)", shadowColor: "#6366f1", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12 }}>
+                  <Text style={{ fontSize: 26 }}>🎯</Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 24, fontWeight: "800", color: p.settingsDarkMode ? "#ffffff" : "#0d0f14", letterSpacing: -0.5 }}>
+                  <Text style={{ fontSize: 22, fontWeight: "800", color: p.settingsDarkMode ? "#ffffff" : "#0d0f14", letterSpacing: -0.5 }}>
                     Attempt #{p.selectedAttemptForModal.attemptNum}
                   </Text>
-                  <Text style={{ fontSize: 14, fontWeight: "600", color: p.settingsDarkMode ? "#94a3b8" : "#64748b", marginTop: 4 }}>
+                  <Text style={{ fontSize: 13, fontWeight: "600", color: p.settingsDarkMode ? "#94a3b8" : "#64748b", marginTop: 3 }}>
                     Score: {p.selectedAttemptForModal.attempt.score}% • {p.selectedAttemptForModal.attempt.correct} correct
                   </Text>
                 </View>
               </View>
               
-              <View style={{ gap: 12, width: "100%" }}>
+              <View style={{ gap: 10, width: "100%" }}>
                 {/* Re-attempt Incorrect Action */}
                 {(p.selectedAttemptForModal.attempt.wrongQuestionIds || []).length > 0 && (
                   <Pressable
@@ -876,7 +876,6 @@ export function AppModals({ p }: { p: any }) {
                       backgroundColor: p.settingsDarkMode ? "#172033" : "#ffffff",
                       borderRadius: 16, padding: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between",
                       borderWidth: 1, borderColor: p.settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)",
-                      marginBottom: 12,
                       opacity: pressed ? 0.8 : 1
                     })}
                   >
@@ -904,7 +903,6 @@ export function AppModals({ p }: { p: any }) {
                     backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.03)" : "#ffffff",
                     borderRadius: 16, padding: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between",
                     borderWidth: 1, borderColor: p.settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)",
-                    marginBottom: 12,
                     opacity: pressed ? 0.8 : 1
                   })}
                 >
@@ -1697,7 +1695,7 @@ export function AppModals({ p }: { p: any }) {
           <View style={{
             backgroundColor: p.settingsDarkMode ? "#090A0F" : "#F4F4F8",
             borderTopLeftRadius: 28, borderTopRightRadius: 28,
-            paddingBottom: Math.max(insets.bottom, 16) + 16,
+            paddingBottom: Platform.OS === "ios" ? 36 : Math.max(insets.bottom, 16),
             paddingHorizontal: 16,
             overflow: "hidden",
           }} onStartShouldSetResponder={() => true}>
@@ -2081,7 +2079,7 @@ export function AppModals({ p }: { p: any }) {
       {p.showFlashcardOptions != null && (
       <Modal visible={true} transparent animationType="slide" onRequestClose={() => (p.setShowFlashcardOptions || (() => {}))(null)}>
         <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }} onPress={() => (p.setShowFlashcardOptions || (() => {}))(null)}>
-          <View style={{ backgroundColor: p.settingsDarkMode ? "#1e293b" : "#ffffff", borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 8, paddingBottom: Math.max(insets.bottom, 16) + 16 }} onStartShouldSetResponder={() => true}>
+          <View style={{ backgroundColor: p.settingsDarkMode ? "#1e293b" : "#ffffff", borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 8, paddingBottom: Platform.OS === "ios" ? 36 : Math.max(insets.bottom, 16) }} onStartShouldSetResponder={() => true}>
             <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.12)", alignSelf: "center", marginBottom: 16 }} />
             <Text style={{ fontSize: 17, fontWeight: "700", color: p.settingsDarkMode ? "#ffffff" : "#0d0f14", paddingHorizontal: 20, marginBottom: 12 }}>
               {p.showFlashcardOptions?.title}
