@@ -440,24 +440,26 @@ export default function HomeScreen() {
         identifyUser(user.uid);
       } else {
         AsyncStorage.removeItem("cachedFirebaseUser");
+        AsyncStorage.removeItem("quizforge_synced_uid"); // next login will re-sync from Neon
         Sentry.setUser(null);
         clearUser();
       }
 
       if (user) {
-        // ── Determine if this is a genuine new login vs a token refresh ──────
-        // Firebase re-emits onAuthStateChanged every time the token is refreshed
-        // (every hour, on network reconnect, on R-reload, etc.). We must NOT do a
-        // full Neon re-sync on token refreshes — that is what causes deleted quizzes
-        // to come back. Only sync when the user actually switches accounts or logs in
-        // for the first time in this app session.
-        const isNewLogin = loadedUidRef.current !== user.uid;
-        loadedUidRef.current = user.uid;
+        // ── Determine if this is a genuine new login vs an app-restart / token refresh ──
+        // loadedUidRef is a useRef — it resets to undefined on every cold open / R press.
+        // That caused a full Neon fetch on every single app start, which is exactly what
+        // resurrects deleted quizzes. Instead, persist the synced UID to AsyncStorage:
+        //   • first login / account switch  → uid not in storage → full sync
+        //   • every other open / reconnect  → uid already in storage → skip fetch
+        const syncedUid = await AsyncStorage.getItem("quizforge_synced_uid");
+        const isNewLogin = syncedUid !== user.uid;
+        loadedUidRef.current = user.uid; // keep ref in sync for starred-questions effect
 
         if (!isNewLogin) {
-          // Token refresh / reconnect — just flush pending deletes in the background.
-          // Local state is already correct. No need to re-fetch from Neon.
-          console.log("[NeonSync] Token refresh — skipping re-fetch, flushing pending deletes only");
+          // Same user, already synced — just flush pending deletes silently.
+          // Local state loaded from AsyncStorage is already correct.
+          console.log("[NeonSync] Already synced for this user — skipping fetch, flushing pending deletes only");
           AsyncStorage.getItem("quizforge_pending_deletions").then(async (val) => {
             const pending: string[] = val ? JSON.parse(val) : [];
             const combined = Array.from(new Set([...pending, ...pendingDeleteIdsRef.current]));
@@ -653,6 +655,10 @@ export default function HomeScreen() {
             // Persist only unresolved tombstones (after merge is complete)
             await AsyncStorage.setItem("quizforge_pending_deletions", JSON.stringify(remainingTombstones));
             pendingDeleteIdsRef.current = new Set(remainingTombstones);
+
+            // Mark this UID as fully synced — future app opens will skip the Neon fetch
+            // and load from AsyncStorage only. Cleared on logout / account switch.
+            await AsyncStorage.setItem("quizforge_synced_uid", user.uid);
 
             // Fetch battle history from Neon and merge
             const battleHistoryRes = await fetchBattleHistory(user.uid);
