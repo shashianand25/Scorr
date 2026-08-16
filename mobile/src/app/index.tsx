@@ -8303,7 +8303,13 @@ export default function HomeScreen() {
           const iconBg     = "#1C2448";
 
           // ── Jump Back In data ─────────────────────────────────────
-          const inProgressQuizzes = quizzes.filter((q: any) => {
+          // Filter tombstoned IDs at the source so deleted quizzes never appear in
+          // Continue Learning, even if stale AsyncStorage data briefly re-hydrates them.
+          const liveQuizzes = quizzes.filter((q: any) =>
+            !pendingDeleteIdsRef.current.has(q.id) &&
+            !pendingDeleteIdsRef.current.has(q.neonId)
+          );
+          const inProgressQuizzes = liveQuizzes.filter((q: any) => {
             const uniqueCount = (q.uniqueCorrectIds || []).length;
             const qCount = q.questions || 1;
             return uniqueCount < qCount;
@@ -8345,7 +8351,7 @@ export default function HomeScreen() {
 
           type RecentItem = { id: string; title: string; type: "quiz"|"flashcard"; sub: string; raw: any; ts: number; };
           const allRecents: RecentItem[] = [
-            ...quizzes.map((q: any): RecentItem => {
+            ...liveQuizzes.map((q: any): RecentItem => {
               const linkedDeck = flashcardDecks.find((d: any) => d.id === `temp-${q.id}`);
               const allFlashcards = q.flashcards || [];
               const cardCount = allFlashcards.length;
