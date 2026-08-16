@@ -4,31 +4,47 @@ import { Feather } from "@expo/vector-icons";
 import { styles } from "../../styles/shared";
 
 export function Stepper({
-  value, min, max, step = 1, onChange, suffix = "", darkMode = true, disabled = false,
+  value, min, max, step = 1, onChange, suffix = "", darkMode = true, disabled = false, compact = false,
 }: {
   value: number; min: number; max: number; step?: number;
-  onChange: (v: number) => void; suffix?: string; darkMode?: boolean; disabled?: boolean;
+  onChange: (v: number) => void; suffix?: string; darkMode?: boolean; disabled?: boolean; compact?: boolean;
 }) {
   const [localText, setLocalText] = useState(value.toString());
 
   useEffect(() => { setLocalText(value.toString()); }, [value]);
 
   return (
-    <View style={[styles.stepperContainer, !darkMode && styles.lightCard]}>
+    <View style={[
+      styles.stepperContainer,
+      !darkMode && styles.lightCard,
+      compact && { height: 32 }
+    ]}>
       <Pressable
         onPress={() => onChange(Math.max(min, value - step))}
         disabled={value <= min}
-        style={({ pressed }) => [styles.stepperBtn, value <= min && styles.stepperBtnDisabled, pressed && styles.opacityPress]}
+        style={({ pressed }) => [
+          styles.stepperBtn,
+          compact && { width: 28 },
+          value <= min && styles.stepperBtnDisabled,
+          pressed && styles.opacityPress
+        ]}
       >
-        <Feather name="minus" size={14} color={value <= min ? (darkMode ? "#444" : "#ccc") : (darkMode ? "#FFFFFF" : "#0d0f14")} />
+        <Feather name="minus" size={compact ? 12 : 14} color={value <= min ? (darkMode ? "#444" : "#ccc") : (darkMode ? "#FFFFFF" : "#0d0f14")} />
       </Pressable>
 
-      <View style={[styles.stepperValueContainer, !darkMode && styles.lightBorder]}>
+      <View style={[
+        styles.stepperValueContainer,
+        !darkMode && styles.lightBorder,
+        compact && { width: 38, minWidth: 32 }
+      ]}>
         {disabled ? (
-          <Text style={[styles.stepperValueText, { color: darkMode ? "#FFFFFF" : "#000000" }]}>{value}{suffix}</Text>
+          <Text style={[styles.stepperValueText, { color: darkMode ? "#FFFFFF" : "#000000", fontSize: compact ? 12 : 13 }]}>{value}{suffix}</Text>
         ) : (
           <TextInput
-            style={[styles.stepperValueText, { color: darkMode ? "#FFFFFF" : "#000000", minWidth: 40, textAlign: "center", padding: 0 }]}
+            style={[
+              styles.stepperValueText,
+              { color: darkMode ? "#FFFFFF" : "#000000", minWidth: compact ? 32 : 40, textAlign: "center", padding: 0, fontSize: compact ? 12 : 13 }
+            ]}
             value={localText}
             keyboardType="number-pad"
             onChangeText={(text) => {
@@ -52,9 +68,14 @@ export function Stepper({
         onLongPress={() => onChange(Math.min(max, value + (step * 10)))}
         delayLongPress={300}
         disabled={value >= max || disabled}
-        style={({ pressed }) => [styles.stepperBtn, (value >= max || disabled) && styles.stepperBtnDisabled, pressed && styles.opacityPress]}
+        style={({ pressed }) => [
+          styles.stepperBtn,
+          compact && { width: 28 },
+          (value >= max || disabled) && styles.stepperBtnDisabled,
+          pressed && styles.opacityPress
+        ]}
       >
-        <Feather name="plus" size={14} color={value >= max ? (darkMode ? "#444" : "#ccc") : (darkMode ? "#FFFFFF" : "#0d0f14")} />
+        <Feather name="plus" size={compact ? 12 : 14} color={value >= max ? (darkMode ? "#444" : "#ccc") : (darkMode ? "#FFFFFF" : "#0d0f14")} />
       </Pressable>
     </View>
   );

@@ -819,7 +819,7 @@ export function AppModals({ p }: { p: any }) {
       <Modal visible={true} animationType="slide" transparent onRequestClose={() => (p.setSelectedAttemptForModal || (() => {}))(null)}>
         <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }} onPress={() => (p.setSelectedAttemptForModal || (() => {}))(null)}>
           {p.selectedAttemptForModal && (
-            <View style={{ backgroundColor: p.settingsDarkMode ? "#16162a" : "#ffffff", borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 20, paddingTop: 12, paddingBottom: Platform.OS === "ios" ? 36 : Math.max(insets.bottom, 16) }} onStartShouldSetResponder={() => true}>
+            <View style={{ backgroundColor: p.settingsDarkMode ? "#16162a" : "#ffffff", borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 20, paddingTop: 12, paddingBottom: Math.max(insets.bottom, Platform.OS === "android" ? 36 : 24) + 16 }} onStartShouldSetResponder={() => true}>
               {/* Drag Handle */}
               <View style={{ width: 40, height: 4, backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)", borderRadius: 2, alignSelf: "center", marginBottom: 16 }} />
               
@@ -1281,21 +1281,20 @@ export function AppModals({ p }: { p: any }) {
           onRequestClose={() => closeOrDismiss(() => { (p.setSelectedQuiz || (() => {}))(null); setQuizSetupStep("presets"); })}
         >
           <KeyboardWrapper style={{ flex: 1, backgroundColor: p.settingsDarkMode ? "#0f172a" : "#f4f4f8" }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-            <View style={{ flex: 1, paddingTop: Platform.OS === "ios" ? 60 : 64 }}>
-              
+            <SafeAreaView style={{ flex: 1, backgroundColor: p.settingsDarkMode ? "#0f172a" : "#f4f4f8" }} edges={["top", "left", "right"]}>
               
               {/* ── UNIFIED OPTIONS SCREEN ── */}
-              <>
-                <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 40 }}>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 12, paddingBottom: 16 }}>
                   <View style={{ flex: 1, marginRight: 12 }}>
-                    <Text style={{ fontSize: 24, fontWeight: "500", color: p.settingsDarkMode ? "#ffffff" : "#0d0f14", fontFamily: "serif" }}>How would you like to study?</Text>
+                    <Text style={{ fontSize: 24, fontWeight: "600", color: p.settingsDarkMode ? "#ffffff" : "#0d0f14", fontFamily: "serif" }}>How would you like to study?</Text>
                   </View>
                   <Pressable onPress={() => closeOrDismiss(() => { (p.setSelectedQuiz || (() => {}))(null); setQuizSetupStep("presets"); })} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 6 })}>
                     <Feather name="x" size={24} color={p.settingsDarkMode ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.6)"} />
                   </Pressable>
                 </View>
 
-                <ScrollView ref={optionsScrollRef} style={{ paddingHorizontal: 20 }} contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 120 }}>
+                <ScrollView ref={optionsScrollRef} style={{ flex: 1, paddingHorizontal: 20 }} contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 140 }} showsVerticalScrollIndicator={true} bounces={true}>
                   {[
                     { id: "marathon", title: "Marathon", sub: "All questions, no timer", icon: "help-circle", color: "#3b82f6" },
                     { id: "unanswered", title: "Unanswered", sub: "Questions you haven't answered yet", icon: "layers-outline", color: "#f59e0b" },
@@ -1422,7 +1421,7 @@ export function AppModals({ p }: { p: any }) {
                               })}
                             </View>
 
-                            <View style={{ padding: 16, borderRadius: 16, marginBottom: 32, backgroundColor: p.settingsDarkMode ? "#171f33" : "#ffffff", borderWidth: 1, borderColor: p.settingsDarkMode ? "rgba(255,255,255,0.05)" : "#e5e7eb", minHeight: 60, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                            <View style={{ paddingHorizontal: 14, paddingVertical: 14, borderRadius: 16, marginBottom: 32, backgroundColor: p.settingsDarkMode ? "#171f33" : "#ffffff", borderWidth: 1, borderColor: p.settingsDarkMode ? "rgba(255,255,255,0.05)" : "#e5e7eb", minHeight: 56, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                               {p.selectionMode === "random" ? (
                                 <>
                                   <Text style={{ fontSize: 15, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#334155" }}>Random Count</Text>
@@ -1430,11 +1429,11 @@ export function AppModals({ p }: { p: any }) {
                                 </>
                               ) : p.selectionMode === "range" ? (
                                 <>
-                                  <Text style={{ fontSize: 15, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#334155" }}>Set Range</Text>
-                                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                                    <Stepper value={p.rangeStart} min={1} max={p.rangeEnd} onChange={(v) => (p.setRangeStart || (()=>{ }))(v)} darkMode={p.settingsDarkMode} />
+                                  <Text style={{ fontSize: 15, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#334155", marginRight: 6 }}>Set Range</Text>
+                                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                                    <Stepper value={p.rangeStart} min={1} max={p.rangeEnd} onChange={(v) => (p.setRangeStart || (()=>{ }))(v)} darkMode={p.settingsDarkMode} compact={true} />
                                     <Text style={{ fontSize: 13, fontWeight: "600", color: p.settingsDarkMode ? "#94a3b8" : "#64748b" }}>to</Text>
-                                    <Stepper value={p.rangeEnd} min={p.rangeStart} max={totalQuestions} onChange={(v) => (p.setRangeEnd || (()=>{ }))(v)} darkMode={p.settingsDarkMode} />
+                                    <Stepper value={p.rangeEnd} min={p.rangeStart} max={totalQuestions} onChange={(v) => (p.setRangeEnd || (()=>{ }))(v)} darkMode={p.settingsDarkMode} compact={true} />
                                   </View>
                                 </>
                               ) : (
@@ -1537,7 +1536,7 @@ export function AppModals({ p }: { p: any }) {
                   })}
                 </ScrollView>
 
-                <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 16) + (p.selectedQuiz?.category === "AI Generated" ? 12 : 16), paddingTop: 16, backgroundColor: p.settingsDarkMode ? "#0f172a" : "#f4f4f8" }}>
+                <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 16) + (p.selectedQuiz?.category === "AI Generated" ? 10 : 14), paddingTop: 14, backgroundColor: p.settingsDarkMode ? "#0f172a" : "#f4f4f8" }}>
                   <Pressable
                     disabled={questionCount === 0 || (quizPreset === "mistakes" && wrongCount === 0)}
                     onPress={() => { (p.handleStartQuiz || (() => {}))(); setQuizSetupStep("presets"); }}
@@ -1556,8 +1555,8 @@ export function AppModals({ p }: { p: any }) {
                     </Text>
                   )}
                 </View>
-              </>
-            </View>
+              </View>
+            </SafeAreaView>
           </KeyboardWrapper>
       </Modal>
       )}
@@ -1695,7 +1694,7 @@ export function AppModals({ p }: { p: any }) {
           <View style={{
             backgroundColor: p.settingsDarkMode ? "#090A0F" : "#F4F4F8",
             borderTopLeftRadius: 28, borderTopRightRadius: 28,
-            paddingBottom: Platform.OS === "ios" ? 36 : Math.max(insets.bottom, 16),
+            paddingBottom: Math.max(insets.bottom, Platform.OS === "android" ? 36 : 24) + 16,
             paddingHorizontal: 16,
             overflow: "hidden",
           }} onStartShouldSetResponder={() => true}>
@@ -2079,7 +2078,7 @@ export function AppModals({ p }: { p: any }) {
       {p.showFlashcardOptions != null && (
       <Modal visible={true} transparent animationType="slide" onRequestClose={() => (p.setShowFlashcardOptions || (() => {}))(null)}>
         <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }} onPress={() => (p.setShowFlashcardOptions || (() => {}))(null)}>
-          <View style={{ backgroundColor: p.settingsDarkMode ? "#1e293b" : "#ffffff", borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 8, paddingBottom: Platform.OS === "ios" ? 36 : Math.max(insets.bottom, 16) }} onStartShouldSetResponder={() => true}>
+          <View style={{ backgroundColor: p.settingsDarkMode ? "#1e293b" : "#ffffff", borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 8, paddingBottom: Math.max(insets.bottom, Platform.OS === "android" ? 36 : 24) + 16 }} onStartShouldSetResponder={() => true}>
             <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.12)", alignSelf: "center", marginBottom: 16 }} />
             <Text style={{ fontSize: 17, fontWeight: "700", color: p.settingsDarkMode ? "#ffffff" : "#0d0f14", paddingHorizontal: 20, marginBottom: 12 }}>
               {p.showFlashcardOptions?.title}
