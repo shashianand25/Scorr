@@ -614,8 +614,8 @@ app.get('/.well-known/assetlinks.json', (req, res) => {
         "namespace": "android_app",
         "package_name": "com.radium230sorganization.quizforge",
         "sha256_cert_fingerprints": [
-          "B9:EA:79:75:64:39:B4:77:63:2F:97:BE:0C:D2:57:D4:81:B2:63:44:B7:86:D1:A0:70:AF:85:13:F0:28",
-          "B2:8B:64:5B:AB:95:20:D5:EE:7E:53:03:1F:DE:AB:5C:F9:8A:59:E5:F2:4B:EA:F4:37:AD:E8:44:80:4A"
+          "B9:EA:79:75:64:39:B4:77:63:2F:97:BE:0C:D2:57:D4:81:B2:63:44:B7:86:D1:A0:70:AF:85:13:F0:28:84:96",
+          "B2:8B:64:5B:AB:95:20:D5:EE:7E:53:03:1F:DE:AB:5C:F9:8A:59:E5:F2:4B:EA:F4:37:AD:E8:44:80:4A:E7:55"
         ]
       }
     }
