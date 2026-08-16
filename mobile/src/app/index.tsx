@@ -5112,6 +5112,16 @@ export default function HomeScreen() {
   const handleSM2Rating = (rating: "again" | "hard" | "good" | "easy" | "perfect") => {
     if (!studyingDeck || studyQueue.length === 0 || selectedRating !== null) return;
     
+    // Reset the flip the instant the user taps a rating button — BEFORE the
+    // swipe-out animation starts. This gives the native animation thread the
+    // full 150 ms of the swipe-out to propagate the setValue(0), so the
+    // incoming card is guaranteed to render face-up (no answer-side flash).
+    flipAnim.stopAnimation();
+    flipAnim.setValue(0);
+    setStudyFlipped(false);
+    setStudyTypedAnswer("");
+    setStudyChecked(false);
+
     // Convert "easy" to "perfect" for our tracking
     const trackingRating = rating === "easy" ? "perfect" : rating;
     setSessionRatings(prev => ({ ...prev, [trackingRating]: prev[trackingRating] + 1 }));
@@ -5151,14 +5161,6 @@ export default function HomeScreen() {
         updateFlashcardDeck({ userId: firebaseUser.uid, deckId: updatedDeck.neonId, cards: updatedDeck.cards })
           .catch(err => console.error("Failed to sync SM-2 progress", err));
       }
-
-      // Reset flip state immediately — before any React state updates — so
-      // the incoming card never renders with the previous card's flip state.
-      flipAnim.stopAnimation();
-      flipAnim.setValue(0);
-      setStudyFlipped(false);
-      setStudyTypedAnswer("");
-      setStudyChecked(false);
 
       setStudyQueue(newQueue);
       setSelectedRating(null);
