@@ -3392,18 +3392,13 @@ export default function HomeScreen() {
           Animated.timing(insightsSwipeY, { toValue: 0, duration: 120, easing: Easing.in(Easing.quad), useNativeDriver: true }),
         ]).start(() => {
           if (dir === 'left') {
-            // Reset flip synchronously BEFORE advancing the index so the
-            // incoming card never flashes its answer side on first render.
-            insightsFlipAnim.stopAnimation();
-            insightsFlipAnim.setValue(0);
-            setFcFlipped(false);
             setFcIndex(idx + 1);
           } else {
-            insightsFlipAnim.stopAnimation();
-            insightsFlipAnim.setValue(0);
-            setFcFlipped(false);
             setFcIndex(idx - 1);
           }
+          insightsFlipAnim.stopAnimation();
+          insightsFlipAnim.setValue(0);
+          setFcFlipped(false);
           
           insightsSwipeX.setValue(dir === 'left' ? W : -W);
           insightsSwipeY.setValue(0);
@@ -5112,16 +5107,6 @@ export default function HomeScreen() {
   const handleSM2Rating = (rating: "again" | "hard" | "good" | "easy" | "perfect") => {
     if (!studyingDeck || studyQueue.length === 0 || selectedRating !== null) return;
     
-    // Reset the flip the instant the user taps a rating button — BEFORE the
-    // swipe-out animation starts. This gives the native animation thread the
-    // full 150 ms of the swipe-out to propagate the setValue(0), so the
-    // incoming card is guaranteed to render face-up (no answer-side flash).
-    flipAnim.stopAnimation();
-    flipAnim.setValue(0);
-    setStudyFlipped(false);
-    setStudyTypedAnswer("");
-    setStudyChecked(false);
-
     // Convert "easy" to "perfect" for our tracking
     const trackingRating = rating === "easy" ? "perfect" : rating;
     setSessionRatings(prev => ({ ...prev, [trackingRating]: prev[trackingRating] + 1 }));
@@ -5163,6 +5148,11 @@ export default function HomeScreen() {
       }
 
       setStudyQueue(newQueue);
+      flipAnim.stopAnimation();
+      flipAnim.setValue(0);
+      setStudyFlipped(false);
+      setStudyTypedAnswer("");
+      setStudyChecked(false);
       setSelectedRating(null);
 
       if (newQueue.length > 0) {
