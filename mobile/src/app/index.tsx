@@ -445,9 +445,41 @@ export default function HomeScreen() {
       }
 
       if (user) {
+        // ── Determine if this is a genuine new login vs a token refresh ──────
+        // Firebase re-emits onAuthStateChanged every time the token is refreshed
+        // (every hour, on network reconnect, on R-reload, etc.). We must NOT do a
+        // full Neon re-sync on token refreshes — that is what causes deleted quizzes
+        // to come back. Only sync when the user actually switches accounts or logs in
+        // for the first time in this app session.
+        const isNewLogin = loadedUidRef.current !== user.uid;
+        loadedUidRef.current = user.uid;
+
+        if (!isNewLogin) {
+          // Token refresh / reconnect — just flush pending deletes in the background.
+          // Local state is already correct. No need to re-fetch from Neon.
+          console.log("[NeonSync] Token refresh — skipping re-fetch, flushing pending deletes only");
+          AsyncStorage.getItem("quizforge_pending_deletions").then(async (val) => {
+            const pending: string[] = val ? JSON.parse(val) : [];
+            const combined = Array.from(new Set([...pending, ...pendingDeleteIdsRef.current]));
+            if (combined.length === 0) return;
+            const remaining: string[] = [];
+            for (const pid of combined) {
+              try {
+                const res = await deleteMobileQuiz(user.uid, pid);
+                if (res.error) remaining.push(pid);
+                else pendingDeleteIdsRef.current.delete(pid);
+              } catch { remaining.push(pid); }
+            }
+            await AsyncStorage.setItem("quizforge_pending_deletions", JSON.stringify(remaining));
+            pendingDeleteIdsRef.current = new Set(remaining);
+          }).catch(() => {});
+          return; // ← skip the full sync below
+        }
+
+        // ── Full sync — only runs on actual login / account switch ────────────
         setIsSyncingData(true);
         try {
-          // 3. Sync user profile to Neon FIRST to guarantee user exists
+          // Sync user profile to Neon FIRST to guarantee user exists
           const { error: syncErr } = await syncUserToNeon({
             uid: user.uid,
             email: user.email,
@@ -461,19 +493,13 @@ export default function HomeScreen() {
           } else {
             neonUserReadyRef.current = true;
 
-            // 4. Flush any offline-queued deletions to Neon FIRST, before fetching.
-            //    This guarantees that fetchMobileQuizzes never returns quizzes the user
-            //    already deleted — even when the delete happened while offline.
+            // Flush any offline-queued deletions FIRST, before fetching.
             const pendingValPre = await AsyncStorage.getItem("quizforge_pending_deletions");
             const pendingIdsPre: string[] = pendingValPre ? JSON.parse(pendingValPre) : [];
-            // Merge persisted tombstones + in-memory tombstones (added synchronously at delete time)
             const allTombstoneIds = new Set([...pendingIdsPre, ...pendingDeleteIdsRef.current]);
-            // Ensure the in-memory ref is fully populated
             allTombstoneIds.forEach(id => pendingDeleteIdsRef.current.add(id));
 
-            // Track which tombstones still couldn't be flushed (stay pending)
             let remainingTombstones: string[] = [];
-
             if (allTombstoneIds.size > 0) {
               console.log(`[NeonSync] Flushing ${allTombstoneIds.size} pending deletion(s) before fetch…`);
               for (const pid of allTombstoneIds) {
@@ -483,29 +509,25 @@ export default function HomeScreen() {
                     console.warn("[NeonSync] pending delete failed:", res.error);
                     remainingTombstones.push(pid);
                   }
-                  // Successfully deleted — do NOT remove from allTombstoneIds yet.
-                  // We keep it in the set so the merge below can filter stale local data.
                 } catch (err) {
                   remainingTombstones.push(pid);
                 }
               }
             }
 
-            // 5. Fetch quizzes from Neon (deleted quizzes are now gone from the DB)
+            // Fetch quizzes from Neon (deleted quizzes are now gone from the DB)
             const quizzesRes = await fetchMobileQuizzes(user.uid);
-
             if (quizzesRes.error) {
               console.warn("[NeonSync] fetch failed:", quizzesRes.error);
             }
 
-            // Pre-filter the Neon response — belt-and-suspenders guard for ID mismatches
+            // Pre-filter Neon response using tombstones (belt-and-suspenders)
             if (!quizzesRes.error && quizzesRes.quizzes) {
               quizzesRes.quizzes = quizzesRes.quizzes.filter((q: any) => !allTombstoneIds.has(q.id));
             }
 
             if (!quizzesRes.error && quizzesRes.quizzes.length > 0) {
               const normalizedQuizzes = quizzesRes.quizzes.map((q) => {
-                // Find the local copy so we can preserve its questionsList
                 const localCopy = quizzesRef.current.find((l: any) => l.id === q.id || l.neonId === q.id);
                 return {
                   id: q.id,
@@ -514,16 +536,12 @@ export default function HomeScreen() {
                   questions: q.questionCount,
                   category: q.category,
                   time: "Synced",
-                  // Parse questionsList: new quizzes store it as JSON in sourceText
                   questionsList: (() => {
-                    // 1. Prefer local copy (always most up to date)
                     if (localCopy?.questionsList?.length > 0) return localCopy.questionsList;
-                    // 2. Try new format: sourceText is JSON array of questions
                     try {
                       const parsed = JSON.parse(q.sourceText);
                       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
                     } catch {}
-                    // 3. Legacy fallback: reconstruct from raw sourceText
                     try { return parseQstText(q.sourceText).questions; } catch { return []; }
                   })(),
                   flashcards: (() => {
@@ -545,36 +563,27 @@ export default function HomeScreen() {
                     const wrongMap = new Map();
                     for (const w of (q.wrongQuestions ?? [])) wrongMap.set(w.id || w, w);
                     for (const w of (localCopy?.wrongQuestions ?? [])) wrongMap.set(w.id || w, w);
-                    
                     const combinedCorrect = new Set([...(q.uniqueCorrectIds ?? []), ...(localCopy?.uniqueCorrectIds ?? [])]);
                     return Array.from(wrongMap.values()).filter(w => !combinedCorrect.has(w.id || w));
                   })(),
                 };
               });
               setQuizzes((local: any[]) => {
-                // Exclude sample_quiz — it lives in its own sampleQuiz state, not the main quizzes array.
-                // ALSO exclude any quiz that is tombstoned — this catches the case where the quiz
-                // was reloaded from stale AsyncStorage data after a JS bundle reload (pressing R),
-                // but was already deleted. allTombstoneIds stays populated through the full merge.
+                // Strip tombstoned quizzes from local (catches stale AsyncStorage data after reload)
                 const cleanLocal = local.filter((l) =>
                   l.id !== "sample_quiz" &&
                   !allTombstoneIds.has(l.id) &&
                   !allTombstoneIds.has(l.neonId)
                 );
-                
-                // Preserve local ordering
                 const updatedLocal = cleanLocal.map(l => {
                   const synced = normalizedQuizzes.find((n) => n.id === l.id || n.id === l.neonId);
                   return synced || l;
                 });
-
-                // Append any completely new quizzes from the server — but never resurrect tombstoned quizzes
                 const newFromServer = normalizedQuizzes.filter(n =>
                   !cleanLocal.find(l => l.id === n.id || l.neonId === n.id) &&
                   !allTombstoneIds.has(n.id) &&
                   !allTombstoneIds.has(n.neonId)
                 );
-
                 const combined = [...updatedLocal, ...newFromServer];
                 return combined.filter((q: any) => {
                   const qc = typeof q.questions === "number" ? q.questions : (q.questionsList?.length || 0);
@@ -583,7 +592,7 @@ export default function HomeScreen() {
                 });
               });
 
-              // Backfill local-only quizzes that aren't in Neon yet (exclude sample_quiz and tombstoned quizzes)
+              // Backfill local-only quizzes to Neon
               const neonIds = new Set(normalizedQuizzes.map((q) => q.id));
               const unsynced = quizzesRef.current.filter((q) =>
                 !q.isSample &&
@@ -617,8 +626,8 @@ export default function HomeScreen() {
               // Neon is empty — upload all local quizzes (skip tombstoned ones)
               console.log(`[NeonSync] Neon empty, uploading ${quizzesRef.current.length} local quizzes`);
               for (const q of quizzesRef.current) {
-                if (q.neonId || q.isSample || q.id === "sample_quiz") continue; // already synced or is sample
-                if (allTombstoneIds.has(q.id)) continue; // deleted offline — never re-upload
+                if (q.neonId || q.isSample || q.id === "sample_quiz") continue;
+                if (allTombstoneIds.has(q.id)) continue;
                 createMobileQuiz({
                   id: q.id,
                   userId: user.uid,
@@ -641,14 +650,11 @@ export default function HomeScreen() {
               }
             }
 
-            // Now that the merge is complete, persist only the tombstones that still
-            // couldn't be deleted (e.g. still offline). Successfully deleted ones are gone
-            // from Neon so they no longer need to be in the pending list.
+            // Persist only unresolved tombstones (after merge is complete)
             await AsyncStorage.setItem("quizforge_pending_deletions", JSON.stringify(remainingTombstones));
-            // Update in-memory ref to match — only keep the ones still unresolved
             pendingDeleteIdsRef.current = new Set(remainingTombstones);
 
-            // 6. Fetch battle history from Neon and merge
+            // Fetch battle history from Neon and merge
             const battleHistoryRes = await fetchBattleHistory(user.uid);
             if (!battleHistoryRes.error && battleHistoryRes.history.length > 0) {
               AsyncStorage.getItem("battle_history").then(val => {
@@ -9196,7 +9202,7 @@ export default function HomeScreen() {
                 scaleTo={0.88}
               >
                 <FontAwesome6 name="plus" size={22} color={settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"} />
-                <Text style={[styles.tabLabel, { color: settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)", fontWeight: "500" }]}>Create</Text>
+                <Text style={[styles.tabLabel, { color: settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)", fontWeight: "500" }]}>{t('tabs.create')}</Text>
               </AnimatedPressable>
 
               {/* Library */}
@@ -9210,7 +9216,7 @@ export default function HomeScreen() {
                   size={23}
                   color={effectiveTab === "library" ? (settingsDarkMode ? "#FFFFFF" : "#000000") : (settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)")}
                 />
-                <Text style={[styles.tabLabel, { color: effectiveTab === "library" ? (settingsDarkMode ? "#FFFFFF" : "#000000") : (settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"), fontWeight: effectiveTab === "library" ? "800" : "500" }]}>Library</Text>
+                <Text style={[styles.tabLabel, { color: effectiveTab === "library" ? (settingsDarkMode ? "#FFFFFF" : "#000000") : (settingsDarkMode ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.5)"), fontWeight: effectiveTab === "library" ? "800" : "500" }]}>{t('tabs.library')}</Text>
               </AnimatedPressable>
 
               {/* Profile */}
