@@ -3825,8 +3825,9 @@ export default function HomeScreen() {
             generationConfig: { maxOutputTokens, temperature },
           }),
         });
-        if (!visualRes.ok) throw new Error((await visualRes.json())?.error?.message || visualRes.statusText);
-        const visualRaw = (await visualRes.json())?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        const visualJson = await visualRes.json();
+        if (!visualRes.ok) throw new Error(visualJson?.error?.message || visualRes.statusText);
+        const visualRaw = visualJson?.candidates?.[0]?.content?.parts?.[0]?.text || "";
         const parsed = parseQstText(visualRaw);
         if (!parsed || (parsed.questions.length === 0 && (!parsed.flashcards || parsed.flashcards.length === 0))) {
           throw new Error("Gemini couldn't generate questions from this file. The content may be too minimal or unclear.");
