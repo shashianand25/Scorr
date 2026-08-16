@@ -601,6 +601,27 @@ Example:
 - Pascal
 - Watt`;
 
+// ── Android App Links (.well-known) ──────────────────────────────────────────
+app.get('/.well-known/assetlinks.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.json([
+    {
+      "relation": [
+        "delegate_permission/common.handle_all_urls",
+        "delegate_permission/common.get_login_creds"
+      ],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "com.radium230sorganization.quizforge",
+        "sha256_cert_fingerprints": [
+          "B9:EA:79:75:64:39:B4:77:63:2F:97:BE:0C:D2:57:D4:81:B2:63:44:B7:86:D1:A0:70:AF:85:13:F0:28",
+          "B2:8B:64:5B:AB:95:20:D5:EE:7E:53:03:1F:DE:AB:5C:F9:8A:59:E5:F2:4B:EA:F4:37:AD:E8:44:80:4A"
+        ]
+      }
+    }
+  ]);
+});
+
 // ── Gemini Config ───────────────────────────────────────────────────────────
 app.get('/api/gemini-config', (req, res) => {
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
