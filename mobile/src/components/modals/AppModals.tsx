@@ -152,12 +152,19 @@ export function AppModals({ p }: { p: any }) {
                 color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>{t('actions.rename') || "Rename"}</Text>
             </AnimatedPressable>
 
-            {/* Share */}
+            {/* Challenge a friend */}
             <AnimatedPressable
               onPress={() => {
                 const quiz = p.showQuizActions;
                 (p.setShowQuizActions || (() => {}))(null);
-                (p.handleShareQuiz || (() => {}))(quiz);
+                if (p.appConfig?.featureFlags?.disableBattles) {
+                  Alert.alert(
+                    t('battle.cant_join') || "Battles Temporarily Unavailable",
+                    t('battle.battles_disabled') || "Battle Arena is currently disabled while we perform maintenance. Please try again shortly."
+                  );
+                  return;
+                }
+                (p.handleHostBattle || (() => {}))(quiz.id, "insights");
               }}
               style={{
                 flexDirection: "row", alignItems: "center", gap: 16,
@@ -165,9 +172,9 @@ export function AppModals({ p }: { p: any }) {
               }}
               scaleTo={0.97}
             >
-              <Ionicons name="share-social-outline" size={22} color={p.settingsDarkMode ? "#ffffff" : "#0d0f14"} />
+              <Ionicons name="flame-outline" size={22} color={p.settingsDarkMode ? "#ffffff" : "#0d0f14"} />
               <Text style={{ fontSize: 15, fontWeight: "500", flex: 1, color: p.settingsDarkMode ? "#ffffff" : "#0d0f14" }}>
-                {t('actions.share') || "Share"}
+                {t('battle.challenge_friend') || "Challenge a friend"}
               </Text>
             </AnimatedPressable>
             

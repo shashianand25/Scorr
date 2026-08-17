@@ -3,9 +3,10 @@
 import React, { useEffect, useState } from "react";
 
 export default function DownloadPage() {
-  const deepLinkUrl = "scorr://home";
   const playStoreUrl = "https://play.google.com/store/apps/details?id=com.radium230sorganization.quizforge";
   const appStoreUrl = "https://apps.apple.com/app/scorr/id6746505023";
+  const iosDeepLinkUrl = "scorr://";
+  const androidIntentUrl = `intent://#Intent;scheme=scorr;package=com.radium230sorganization.quizforge;S.browser_fallback_url=${encodeURIComponent(playStoreUrl)};end`;
 
   const [platform, setPlatform] = useState<"android" | "ios" | "desktop">("desktop");
   const [redirecting, setRedirecting] = useState(true);
@@ -15,56 +16,50 @@ export default function DownloadPage() {
     const isAndroid = /android/i.test(userAgent);
     const isIOS = /iPad|iPhone|iPod/.test(userAgent) && !(window as any).MSStream;
 
-    let targetStoreUrl = playStoreUrl;
-    if (isIOS) {
-      setPlatform("ios");
-      targetStoreUrl = appStoreUrl;
-    } else if (isAndroid) {
+    if (isAndroid) {
       setPlatform("android");
-      targetStoreUrl = playStoreUrl;
-    } else {
-      setPlatform("desktop");
-      setRedirecting(false);
+      // Android Intent scheme natively launches app if installed, or redirects directly to Play Store if not
+      window.location.href = androidIntentUrl;
       return;
     }
 
-    // ── Smart Deep Linking with Fallback ──
-    const now = Date.now();
-    let appOpened = false;
+    if (isIOS) {
+      setPlatform("ios");
+      const now = Date.now();
+      let appOpened = false;
 
-    const handleVisibilityChange = () => {
-      if (document.hidden || document.visibilityState === "hidden") {
-        appOpened = true;
-      }
-    };
+      const handleVisibilityChange = () => {
+        if (document.hidden || document.visibilityState === "hidden") {
+          appOpened = true;
+        }
+      };
 
-    const handlePageHide = () => {
-      appOpened = true;
-    };
+      window.addEventListener("visibilitychange", handleVisibilityChange);
+      window.addEventListener("pagehide", handleVisibilityChange);
+      window.addEventListener("blur", handleVisibilityChange);
 
-    window.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("pagehide", handlePageHide);
-    window.addEventListener("blur", handlePageHide);
+      // Attempt to launch app via custom scheme
+      window.location.href = iosDeepLinkUrl;
 
-    // Attempt to open the app via custom URI scheme
-    window.location.href = deepLinkUrl;
+      // Fallback to App Store if not installed
+      const fallbackTimer = setTimeout(() => {
+        const elapsed = Date.now() - now;
+        if (!appOpened && elapsed < 2500) {
+          window.location.href = appStoreUrl;
+        }
+      }, 1200);
 
-    // If app isn't installed, redirect to store after timeout
-    const fallbackTimer = setTimeout(() => {
-      const elapsed = Date.now() - now;
-      // If user remained on the page and tab did not lose focus
-      if (!appOpened && elapsed < 2500) {
-        window.location.href = targetStoreUrl;
-      }
-    }, 1400);
+      return () => {
+        clearTimeout(fallbackTimer);
+        window.removeEventListener("visibilitychange", handleVisibilityChange);
+        window.removeEventListener("pagehide", handleVisibilityChange);
+        window.removeEventListener("blur", handleVisibilityChange);
+      };
+    }
 
-    return () => {
-      clearTimeout(fallbackTimer);
-      window.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("pagehide", handlePageHide);
-      window.removeEventListener("blur", handlePageHide);
-    };
-  }, []);
+    setPlatform("desktop");
+    setRedirecting(false);
+  }, [androidIntentUrl]);
 
   return (
     <div style={{
@@ -174,13 +169,13 @@ export default function DownloadPage() {
           marginBottom: "32px",
         }}>
           {redirecting
-            ? "Opening Scorr on your device... If the app is not installed, you will be redirected to the store."
+            ? "Redirecting to Scorr... If the app is not installed, you'll be taken to the app store."
             : "Turn any notes, PDFs, or PPTs into active quizzes and flashcards in seconds with AI."}
         </p>
 
         {/* Open in App Button */}
         <a
-          href={deepLinkUrl}
+          href={platform === "android" ? androidIntentUrl : iosDeepLinkUrl}
           style={{
             display: "flex",
             alignItems: "center",

@@ -1555,11 +1555,52 @@ export default function HomeScreen() {
     }
   }, [activeSession?.isBattle, activeSession?.isFinished, activeSession?.isHost, battleRoomState?.id, battleRoomState?.hostFinished, battleRoomState?.guestFinished]);
 
+  // ── AI Generation Cancellation Controls ──
+  const aiGenAbortControllerRef = useRef<AbortController | null>(null);
+  const aiGenCancelledRef = useRef<boolean>(false);
+
+  const handleCancelAiGeneration = React.useCallback(() => {
+    aiGenCancelledRef.current = true;
+    if (aiGenAbortControllerRef.current) {
+      try {
+        aiGenAbortControllerRef.current.abort();
+      } catch {}
+      aiGenAbortControllerRef.current = null;
+    }
+    setAiGenPhase(null);
+    setAiGenConnectionLost(false);
+    showBottomPillToast(t('generation.generation_cancelled') || "Generation cancelled", {
+      icon: "close-circle",
+      color: "#ef4444",
+      durationMs: 2500,
+    });
+  }, [showBottomPillToast, t]);
+
+  const handleRequestCancelGeneration = React.useCallback(() => {
+    Alert.alert(
+      t('generation.cancel_title') || "Cancel Generation?",
+      t('generation.cancel_desc') || "Are you sure you want to stop generating questions?",
+      [
+        {
+          text: t('generation.keep_waiting') || "Keep Waiting",
+          style: "cancel",
+        },
+        {
+          text: t('generation.stop_generation') || "Cancel Generation",
+          style: "destructive",
+          onPress: () => {
+            handleCancelAiGeneration();
+          },
+        },
+      ]
+    );
+  }, [handleCancelAiGeneration, t]);
+
   // ── Hardware Back Button Handling ──
   useEffect(() => {
     const onBackPress = () => {
       if (aiGenPhase === "generating") {
-        setAiGenPhase(null);
+        handleRequestCancelGeneration();
         return true;
       }
       if (activeSession) {
@@ -1617,7 +1658,7 @@ export default function HomeScreen() {
 
     const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => subscription.remove();
-  }, [activeSession, studyingDeck, activeTab, viewingInsightsQuizFromTab, aiGenPhase, showBottomPillToast]);
+  }, [activeSession, studyingDeck, activeTab, viewingInsightsQuizFromTab, aiGenPhase, showBottomPillToast, handleRequestCancelGeneration, t]);
 
 
   // Confetti celebration physics loop (Confetti Cannon / Party Popper)
@@ -3869,6 +3910,11 @@ export default function HomeScreen() {
   };
 
   const handleGenerateWithAI = async (text: string, fileName: string, fileUri?: string, fileExt?: string) => {
+    // ── Reset cancellation and initialize master abort controller ───────────
+    aiGenCancelledRef.current = false;
+    const abortController = new AbortController();
+    aiGenAbortControllerRef.current = abortController;
+
     // ── Require sign-in ────────────────────────────────────────────────────
     if (!firebaseUser) {
       setAiGenPhase(null);
@@ -3926,8 +3972,10 @@ export default function HomeScreen() {
     if (text && text !== "__VISUAL__") {
       try {
         computedHash = await computeContentHash(text, activeLang);
+        if (aiGenCancelledRef.current) return;
         console.log(`[AI Generation] Computed content hash: ${computedHash}`);
         const { hit, masterQuiz } = await checkMasterQuizCache(computedHash, activeLang);
+        if (aiGenCancelledRef.current) return;
         if (hit && masterQuiz && masterQuiz.sourceText) {
           console.log(`[AI Generation] ⚡ Cache HIT for master quiz: ${masterQuiz.id}`);
           const parsed = parseQstText(masterQuiz.sourceText);
@@ -3987,11 +4035,12 @@ export default function HomeScreen() {
     }
 
     try {
-      // ── Helper: wait for connection to resume (max 30s) ─────────────────
+      if (aiGenCancelledRef.current) return;
+
+      // ── Helper: wait for connection to resume (max 25s) ─────────────────
       const waitForConnection = (): Promise<void> => {
         return new Promise((resolve, reject) => {
           let resolved = false;
-          // Use `let` so the callback can reference it even if NetInfo fires synchronously
           let unsubscribe: (() => void) | null = null;
 
           const cleanup = () => {
@@ -4004,7 +4053,7 @@ export default function HomeScreen() {
               resolved = true;
               reject(new Error("Connection lost during generation. Please check your internet and try again."));
             }
-          }, 30000);
+          }, 25000);
 
           unsubscribe = NetInfo.addEventListener(state => {
             const connected = state.isConnected && state.isInternetReachable !== false;
@@ -4012,20 +4061,24 @@ export default function HomeScreen() {
               resolved = true;
               clearTimeout(deadline);
               cleanup();
-              // Small delay to let connection stabilise
               setTimeout(resolve, 800);
             }
           });
         });
       };
 
-
       // ── Resilient fetchChunk: auto-pause and retry once on network drop ─
       const fetchChunkWithRetry = async (chunk: string, signal?: AbortSignal, isRetry = false): Promise<string> => {
         try {
+          if (aiGenCancelledRef.current || abortController.signal.aborted) {
+            throw new Error("GENERATION_CANCELLED");
+          }
           return await fetchChunk(chunk, signal);
         } catch (err: any) {
-          // Don't retry if this was already a retry attempt, or if it was an intentional cancel (user pressed back)
+          if (aiGenCancelledRef.current || abortController.signal.aborted || err?.message === "GENERATION_CANCELLED") {
+            throw new Error("GENERATION_CANCELLED");
+          }
+          // Don't retry if this was already a retry attempt
           if (isRetry) throw err;
           const msg = err?.message?.toLowerCase() ?? "";
           const isNetworkErr = (
@@ -4034,28 +4087,24 @@ export default function HomeScreen() {
             msg.includes("fetch failed") ||
             msg.includes("econnrefused") ||
             msg.includes("unknownhost") ||
-            msg.includes("cancel") ||
-            // AbortError from our fallbackTimer (25s) — treat as network drop, not user cancel
-            (err?.name === "AbortError" && !signal?.aborted)
+            msg.includes("timeout") ||
+            err?.name === "AbortError"
           );
           if (!isNetworkErr) throw err;
           // Show paused state in UI
           setAiGenConnectionLost(true);
-          console.log("[AI Generation] Network dropped — waiting for reconnect…");
+          console.log("[AI Generation] Network dropped / timeout — waiting for reconnect…");
           await waitForConnection();
+          if (aiGenCancelledRef.current) throw new Error("GENERATION_CANCELLED");
           setAiGenConnectionLost(false);
           console.log("[AI Generation] Reconnected — resuming chunk…");
-          // Retry once with a generous 60s timeout — isRetry=true prevents further loops
-          const retrySignal = typeof AbortSignal !== "undefined" && AbortSignal.timeout
-            ? AbortSignal.timeout(60000)
-            : undefined;
-          return await fetchChunkWithRetry(chunk, retrySignal, true);
+          return await fetchChunkWithRetry(chunk, undefined, true);
         }
       };
 
-      // Always fetch fresh config so feature flags reflect the live backend value,
-      // not a potentially stale cached copy from app open.
+      // Always fetch fresh config so feature flags reflect the live backend value
       const { config: fetchedConfig, error } = await fetchAppConfig();
+      if (aiGenCancelledRef.current) return;
       if (error || !fetchedConfig) {
         throw new Error(error || "Could not fetch App configuration from server.");
       }
@@ -4075,6 +4124,7 @@ export default function HomeScreen() {
       // ── Daily generation limit ──────────────────────────────────────────
       if (config.aiConfig?.maxDailyGenerations) {
         const { allowed, limit } = await checkAiDailyLimit(firebaseUser.uid);
+        if (aiGenCancelledRef.current) return;
         if (!allowed) {
           setAiGenPhase(null);
           Alert.alert(
@@ -4095,6 +4145,7 @@ export default function HomeScreen() {
         }
         console.log(`[AI Generation] Visual mode — reading ${fileExt?.toUpperCase() || "file"} as base64 and sending to Gemini`);
         const base64Data = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.Base64 });
+        if (aiGenCancelledRef.current) return;
         const mimeType = (fileExt === "pptx" || fileExt === "ppt")
           ? "application/vnd.openxmlformats-officedocument.presentationml.presentation"
           : "application/pdf";
@@ -4110,7 +4161,9 @@ export default function HomeScreen() {
             ]}],
             generationConfig: { maxOutputTokens, temperature },
           }),
+          signal: abortController.signal,
         });
+        if (aiGenCancelledRef.current) return;
         const visualJson = await visualRes.json();
         if (!visualRes.ok) throw new Error(visualJson?.error?.message || visualRes.statusText);
         const visualRaw = visualJson?.candidates?.[0]?.content?.parts?.[0]?.text || "";
@@ -4182,64 +4235,79 @@ export default function HomeScreen() {
         return prompt;
       };
 
-      // ── Fetch one chunk from Gemini (with optional signal) ─────────────
+      // ── Fetch one chunk from Gemini (with abort control & per-request timeout) ──
       const fetchChunk = (chunk: string, signal?: AbortSignal): Promise<string> => {
+        if (aiGenCancelledRef.current || abortController.signal.aborted) {
+          throw new Error("GENERATION_CANCELLED");
+        }
         const prompt = buildPromptForChunk(chunk);
         const maxOutputTokens = aiConfig.maxOutputTokens || 65536;
         const temperature = aiConfig.temperature ?? 0.2;
-        const fallbackCtrl = new AbortController();
-        const fallbackTimer = setTimeout(() => fallbackCtrl.abort(), 25000);
+        
+        const chunkAbortCtrl = new AbortController();
+        const chunkTimer = setTimeout(() => {
+          try { chunkAbortCtrl.abort(); } catch {}
+        }, 45000); // 45s per-chunk timeout ensures request never hangs indefinitely
+
+        const onMasterAbort = () => {
+          try { chunkAbortCtrl.abort(); } catch {}
+        };
+        abortController.signal.addEventListener("abort", onMasterAbort);
+
         return fetch(GEMINI_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens, temperature } }),
-          signal: signal || fallbackCtrl.signal,
+          signal: signal || chunkAbortCtrl.signal,
         }).then(async r => {
-          clearTimeout(fallbackTimer);
+          clearTimeout(chunkTimer);
+          abortController.signal.removeEventListener("abort", onMasterAbort);
+          if (aiGenCancelledRef.current || abortController.signal.aborted) throw new Error("GENERATION_CANCELLED");
           if (!r.ok) throw new Error((await r.json())?.error?.message || r.statusText);
           return (await r.json())?.candidates?.[0]?.content?.parts?.[0]?.text || "";
         }).catch(err => {
-          clearTimeout(fallbackTimer);
+          clearTimeout(chunkTimer);
+          abortController.signal.removeEventListener("abort", onMasterAbort);
+          if (aiGenCancelledRef.current || abortController.signal.aborted) {
+            throw new Error("GENERATION_CANCELLED");
+          }
           throw err;
         });
       };
 
-      const CHUNK_SIZE = aiConfig.chunkSize || 10000;
+      const CHUNK_SIZE = aiConfig.chunkSize || 12000;
       let chunks: string[] = [];
       for (let i = 0; i < text.length; i += CHUNK_SIZE) chunks.push(text.slice(i, i + CHUNK_SIZE));
       if (chunks.length > (aiConfig.maxChunks || 10)) chunks = chunks.slice(0, aiConfig.maxChunks || 10);
-      const CONCURRENCY = Math.min(chunks.length, aiConfig.concurrencyLimit || 10);
-      console.log(`[AI Generation] Document split into ${chunks.length} chunk(s) (Chunk size: ${CHUNK_SIZE} chars | Concurrency: sending ${CONCURRENCY} chunk(s) in parallel at once)`);
+      const CONCURRENCY = Math.min(chunks.length, Math.min(aiConfig.concurrencyLimit || 10, 2)); // mobile concurrency 2 prevents socket choking
+      console.log(`[AI Generation] Document split into ${chunks.length} chunk(s) (Chunk size: ${CHUNK_SIZE} chars | Concurrency: sending ${CONCURRENCY} chunk(s) in parallel)`);
       trackAiGenerationStarted({ charCount: text.length, chunkCount: chunks.length });
 
       const genStartTime = Date.now();
-      const HARD_TIMEOUT_MS = 70000;
+      const HARD_TIMEOUT_MS = 60000;
       let timedOutEarly = false;
       let nextChunkIndex = 0;
       const results: string[] = [];
 
-      // ── Phase 1: Process chunks until 70s hard cutoff ──────────────────
-      for (let i = 0; i < chunks.length; i += CONCURRENCY) {
-        if (Date.now() - genStartTime >= HARD_TIMEOUT_MS) {
+      // ── Phase 1: Process initial batch (up to 2 chunks) in foreground ──
+      const FOREGROUND_LIMIT = Math.min(chunks.length, 2);
+      for (let i = 0; i < FOREGROUND_LIMIT; i += CONCURRENCY) {
+        if (Date.now() - genStartTime >= HARD_TIMEOUT_MS || aiGenCancelledRef.current) {
           timedOutEarly = true;
           nextChunkIndex = i;
           break;
         }
         const batch = chunks.slice(i, i + CONCURRENCY);
-        console.log(`[AI Generation] Sending batch of ${batch.length} chunk(s) in parallel at once (chunks ${i + 1}–${i + batch.length} of ${chunks.length}, concurrency limit: ${CONCURRENCY})`);
+        console.log(`[AI Generation] Sending foreground batch of ${batch.length} chunk(s) in parallel (chunks ${i + 1}–${i + batch.length} of ${chunks.length})`);
         try {
-          const remainingMs = Math.max(8000, HARD_TIMEOUT_MS - (Date.now() - genStartTime));
           const batchResults = await Promise.all(
-            batch.map(chunk => {
-              const signal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout
-                ? AbortSignal.timeout(remainingMs)
-                : undefined;
-              return fetchChunkWithRetry(chunk, signal);
-            })
+            batch.map(chunk => fetchChunkWithRetry(chunk))
           );
+          if (aiGenCancelledRef.current) return;
           results.push(...batchResults);
-          nextChunkIndex = i + CONCURRENCY;
+          nextChunkIndex = i + batch.length;
         } catch (batchErr) {
+          if (aiGenCancelledRef.current) return;
           if (results.length > 0) {
             timedOutEarly = true;
             nextChunkIndex = i;
@@ -4250,13 +4318,16 @@ export default function HomeScreen() {
         }
       }
 
+      if (chunks.length > FOREGROUND_LIMIT && nextChunkIndex < chunks.length) {
+        timedOutEarly = true;
+      }
+
+      if (aiGenCancelledRef.current) return;
+
       const raw = results.join("\n");
       const parsed = parseQstText(raw);
 
       if (!parsed || (parsed.questions.length === 0 && (!parsed.flashcards || parsed.flashcards.length === 0))) {
-        throw new Error("We couldn't generate enough questions. Please try again.");
-      }
-      if (timedOutEarly && parsed.questions.length < 5) {
         throw new Error("We couldn't generate enough questions. Please try again.");
       }
 
@@ -4334,7 +4405,7 @@ export default function HomeScreen() {
       }, 300);
 
       // ── Phase 2: Kick off remaining chunks in background ───────────────
-      const remainingChunks = timedOutEarly ? chunks.slice(nextChunkIndex) : [];
+      const remainingChunks = chunks.slice(nextChunkIndex);
       if (remainingChunks.length > 0) {
         // Show toast: quiz is ready, more coming
         setCustomToast({
@@ -4347,12 +4418,11 @@ export default function HomeScreen() {
         // Detached background Promise — no await, never blocks UI
         (async () => {
           try {
-            console.log(`[AI Background] Continuing ${remainingChunks.length} remaining chunk(s) (sending in parallel batches of up to ${CONCURRENCY})…`);
+            console.log(`[AI Background] Continuing ${remainingChunks.length} remaining chunk(s) (sending in batches of ${CONCURRENCY})…`);
             const bgResults: string[] = [];
             for (let i = 0; i < remainingChunks.length; i += CONCURRENCY) {
               const batch = remainingChunks.slice(i, i + CONCURRENCY);
-              console.log(`[AI Background] Sending background batch of ${batch.length} chunk(s) in parallel at once`);
-              // Use fetchChunkWithRetry so network-drop pause/resume works in background too
+              console.log(`[AI Background] Sending background batch of ${batch.length} chunk(s) in parallel`);
               const batchResults = await Promise.all(batch.map(chunk => fetchChunkWithRetry(chunk)));
               bgResults.push(...batchResults);
             }
@@ -4423,15 +4493,21 @@ export default function HomeScreen() {
               console.log(`[AI Background] Appended ${extraQuestions.length} extra question(s) to quiz ${localId}`);
             }
           } catch (bgErr) {
-            // Silent failure — user already has a working quiz
             console.error("[AI Background] Background chunk generation failed:", bgErr);
           }
         })();
       }
 
     } catch (err: any) {
+      if (aiGenCancelledRef.current || err?.message === "GENERATION_CANCELLED" || err?.name === "AbortError") {
+        console.log("[AI Generation] Cancelled by user — cleaning up silently.");
+        setAiGenPhase(null);
+        setAiGenConnectionLost(false);
+        return;
+      }
       setAiGenPhase(null);
-      let errMsg = err.message || "Unknown error";
+      setAiGenConnectionLost(false);
+      let errMsg = err?.message || "Unknown error";
       // Classify for analytics — no raw message (could contain user content)
       const _analyticsErrType: "network" | "limit_reached" | "no_questions" | "disabled" | "unknown" =
         errMsg.includes("Daily Limit") ? "limit_reached" :
@@ -4443,7 +4519,7 @@ export default function HomeScreen() {
       if (errMsg.includes("couldn't generate enough questions")) {
         errMsg = "We couldn't generate enough questions. Please try again.";
       } else if (errMsg.includes("generativelanguage.googleapis.com") || errMsg.includes("UnknownHostException") || errMsg.includes("Network request failed") || errMsg.toLowerCase().includes("failed to fetch") || errMsg.includes("Failed to connect to server") || errMsg.toLowerCase().includes("network error") || errMsg.toLowerCase().includes("timeout")) {
-        errMsg = "Server or network connection was interrupted. Please check your connection and try again.";
+        errMsg = t('generation.taking_too_long') || "Generation timed out or connection was interrupted. Please check your connection and try again.";
       }
       const displayMsg = typeof __DEV__ !== 'undefined' && __DEV__ ? errMsg : getUserErrorMessage(errMsg);
       if (Platform.OS === "web") {
@@ -4455,7 +4531,7 @@ export default function HomeScreen() {
           "Generation Failed",
           displayMsg,
           [
-            { text: "Cancel", style: "cancel" },
+            { text: t('actions.cancel') || "Cancel", style: "cancel" },
             {
               text: "Try Again",
               onPress: () => {
@@ -9841,7 +9917,15 @@ export default function HomeScreen() {
       {battleCountdown !== null && <FullscreenBattleCountdown count={battleCountdown} isDark={settingsDarkMode} />}
 
       {/* ── AI Generation Screen ── */}
-      {aiGenPhase === "generating" && <AIGeneratingScreen onCancel={() => setAiGenPhase(null)} isDark={settingsDarkMode} documentCharCount={aiGenCharCount} generationTimeoutMs={appConfig?.aiConfig?.generationTimeoutMs ?? 60000} connectionLost={aiGenConnectionLost} />}
+      {aiGenPhase === "generating" && (
+        <AIGeneratingScreen 
+          onCancel={handleRequestCancelGeneration} 
+          isDark={settingsDarkMode} 
+          documentCharCount={aiGenCharCount} 
+          generationTimeoutMs={appConfig?.aiConfig?.generationTimeoutMs ?? 60000} 
+          connectionLost={aiGenConnectionLost} 
+        />
+      )}
 
       {/* ── Battle Modals ── */}
       {(() => {
