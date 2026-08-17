@@ -918,6 +918,19 @@ app.get('/api/app-config', (req, res) => {
 });
 
 
+// ── App Download & Store Redirect ──────────────────────────────────────────
+app.get(['/download', '/api/download'], (req, res) => {
+  const userAgent = req.headers['user-agent'] || '';
+  const isIOS = /iPad|iPhone|iPod/.test(userAgent);
+  const playStoreUrl = "https://play.google.com/store/apps/details?id=com.radium230sorganization.quizforge";
+  const appStoreUrl = "https://apps.apple.com/app/scorr/id6746505023";
+  
+  if (isIOS) {
+    return res.redirect(appStoreUrl);
+  }
+  return res.redirect(playStoreUrl);
+});
+
 // ── App Updates ────────────────────────────────────────────────────────────
 app.get('/api/version-config', (req, res) => {
   if (!process.env.APP_MINIMUM_VERSION) {
