@@ -97,7 +97,7 @@ const STEPS = [
   { icon: "shuffle-outline",       label: "Shuffling answers" },
 ] as const;
 
-function AIGeneratingScreen({ documentCharCount = 0, isDark = true, generationTimeoutMs = 60000, connectionLost = false }: { documentCharCount?: number; isDark?: boolean; generationTimeoutMs?: number; connectionLost?: boolean }) {
+function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true, generationTimeoutMs = 60000, connectionLost = false }: { onCancel?: () => void; documentCharCount?: number; isDark?: boolean; generationTimeoutMs?: number; connectionLost?: boolean }) {
   const sway = React.useRef(new Animated.Value(0)).current;
   const blink = React.useRef(new Animated.Value(0.3)).current; // Start at 0.3
   const progress = React.useRef(new Animated.Value(0)).current;
@@ -166,6 +166,15 @@ function AIGeneratingScreen({ documentCharCount = 0, isDark = true, generationTi
   return (
     <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
       backgroundColor: isDark ? "#0B0F1E" : "#f4f4f8", alignItems: "center", justifyContent: "center", zIndex: 99999 }}>
+
+      {/* Back / Close button */}
+      {!!onCancel && (
+        <SafeAreaView style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 10 }}>
+          <Pressable onPress={onCancel} style={{ padding: 24, paddingTop: Platform.OS === 'android' ? 36 : 20, alignSelf: 'flex-start' }}>
+            <Ionicons name="chevron-back" size={28} color={isDark ? "#FFFFFF" : "#0f172a"} />
+          </Pressable>
+        </SafeAreaView>
+      )}
       
       {/* Background Stars (fake) */}
       <View style={{ position: 'absolute', top: '20%', left: '25%', width: 3, height: 3, borderRadius: 1.5, backgroundColor: isDark ? '#6C7491' : '#cbd5e1', opacity: 0.4 }} />
@@ -1457,7 +1466,8 @@ export default function HomeScreen() {
   useEffect(() => {
     const onBackPress = () => {
       if (aiGenPhase === "generating") {
-        return true; // Prevent back press while generating
+        setAiGenPhase(null);
+        return true;
       }
       if (activeSession) {
         if (activeSession.isFinished) {
@@ -3750,6 +3760,7 @@ export default function HomeScreen() {
   const handleGenerateWithAI = async (text: string, fileName: string, fileUri?: string, fileExt?: string) => {
     // ── Require sign-in ────────────────────────────────────────────────────
     if (!firebaseUser) {
+      setAiGenPhase(null);
       Alert.alert(
         "Sign In Required",
         "Please sign in to generate quizzes with AI."
@@ -9606,7 +9617,7 @@ export default function HomeScreen() {
       {battleCountdown !== null && <FullscreenBattleCountdown count={battleCountdown} isDark={settingsDarkMode} />}
 
       {/* ── AI Generation Screen ── */}
-      {aiGenPhase === "generating" && <AIGeneratingScreen isDark={settingsDarkMode} documentCharCount={aiGenCharCount} generationTimeoutMs={appConfig?.aiConfig?.generationTimeoutMs ?? 60000} connectionLost={aiGenConnectionLost} />}
+      {aiGenPhase === "generating" && <AIGeneratingScreen onCancel={() => setAiGenPhase(null)} isDark={settingsDarkMode} documentCharCount={aiGenCharCount} generationTimeoutMs={appConfig?.aiConfig?.generationTimeoutMs ?? 60000} connectionLost={aiGenConnectionLost} />}
 
       {/* ── Battle Modals ── */}
       {(() => {

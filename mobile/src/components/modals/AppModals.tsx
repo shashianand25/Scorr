@@ -1721,6 +1721,14 @@ export function AppModals({ p }: { p: any }) {
                 (p.setShowAddMenu || (() => {}))(false);
                 return;
               }
+              if (!p.firebaseUser) {
+                Alert.alert(
+                  "Sign In Required",
+                  "Please sign in to generate quizzes with AI."
+                );
+                (p.setShowAddMenu || (() => {}))(false);
+                return;
+              }
               (p.setShowAddMenu || (() => {}))(false);
               if (Platform.OS === "web") {
                 const input = document.createElement("input");
@@ -1965,6 +1973,10 @@ export function AppModals({ p }: { p: any }) {
                             // gets swallowed by the still-animating loading Modal on Android.
                             (p.setIsImporting || (() => {}))(false);
                             if (isVisual) {
+                              if (!p.firebaseUser) {
+                                Alert.alert("Sign In Required", "Please sign in to generate quizzes with AI.");
+                                return;
+                              }
                               console.log("[Import] Visual file detected — redirecting to AI generation");
                               (p.setAiGenPhase || (() => {}))("generating");
                               setTimeout(() => (p.handleGenerateWithAI || (() => {}))("__VISUAL__", fileName, fileUri, fileSize, ext), 150);
