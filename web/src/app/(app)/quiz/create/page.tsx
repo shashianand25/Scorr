@@ -1,27 +1,32 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/auth";
 import { useToast } from "@/components/ui/ToastPill";
-import { useTranslation } from "@/lib/i18n";
-import AIGenerationModal from "@/components/ai/AIGenerationModal";
+import { useTranslation, SupportedLanguage } from "@/lib/i18n";
 import {
   fetchAppConfig,
   checkMasterQuizCache,
   saveMasterQuiz,
   createQuiz,
-  checkAiDailyLimit,
   recordAiGeneration,
-  Quiz,
+  checkAiDailyLimit,
+  AppConfig,
 } from "@/lib/api";
 import { computeContentHash } from "@/lib/contentHash";
 import { parseQstText, questionsToSourceText } from "@/lib/qstParser";
 import { getLocalItem, setLocalItem, SAMPLE_QUIZ } from "@/lib/storage";
-import { computeQuizFingerprint } from "@/lib/quizFingerprint";
-import { mergeQuizPersonalState, QuizRecord } from "@/lib/quizDeduplication";
+import { QuizRecord } from "@/lib/quizDeduplication";
+import AIGenerationModal from "@/components/ai/AIGenerationModal";
 
-const QUESTION_PRESETS = [10, 20, 30, 50];
+type CreateTab = "ai" | "manual" | "import";
+
+interface DraftQuestion {
+  id: string;
+  prompt: string;
+  answers: Array<{ id: string; text: string; isCorrect: boolean }>;
+}
 
 export default function CreateQuizPage() {
   const { user } = useAuthStore();
@@ -29,28 +34,42 @@ export default function CreateQuizPage() {
   const { showToast } = useToast();
   const { t, language } = useTranslation();
 
-  const [title, setTitle] = useState("");
+  const [activeTab, setActiveTab] = useState<CreateTab>("ai");
+
+  // ── AI Generation State ────────────────────────────────────────────────
   const [sourceText, setSourceText] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileBase64, setFileBase64] = useState<string | null>(null);
-  const [questionCount, setQuestionCount] = useState(10);
-  const [customCount, setCustomCount] = useState("");
-  const [useCustomCount, setUseCustomCount] = useState(false);
-  const [includeFlashcards, setIncludeFlashcards] = useState(true);
+  const [title, setTitle] = useState("");
   const [category, setCategory] = useState("General");
-  const [activeLang, setActiveLang] = useState(language || "en");
-
-  // Loading and Generation State
+  const [questionCount, setQuestionCount] = useState<number>(10);
+  const [useCustomCount, setUseCustomCount] = useState(false);
+  const [customCount, setCustomCount] = useState("10");
+  const [includeFlashcards, setIncludeFlashcards] = useState(true);
+  const [activeLang, setActiveLang] = useState<SupportedLanguage>(language || "en");
   const [isGenerating, setIsGenerating] = useState(false);
   const [charCount, setCharCount] = useState(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
+  const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Manual Creation State ──────────────────────────────────────────────
+  const [manualStep, setManualStep] = useState<"setup" | "drafting">("setup");
+  const [manualTitle, setManualTitle] = useState("");
+  const [manualCount, setManualCount] = useState("5");
+  const [manualLanguage, setManualLanguage] = useState("English");
+  const [draftIndex, setDraftIndex] = useState(0);
+  const [draftQuestions, setDraftQuestions] = useState<DraftQuestion[]>([]);
+
+  useEffect(() => {
+    fetchAppConfig().then(({ config }) => {
+      if (config) setAppConfig(config);
+    });
+  }, []);
 
   const effectiveCount = useCustomCount ? parseInt(customCount) || 10 : questionCount;
 
-  // ── Handle File Selection ──────────────────────────────────────────────
+  // ── Handle AI File Selection ───────────────────────────────────────────
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -69,7 +88,6 @@ export default function CreateQuizPage() {
       setCharCount(text.length);
       setFileBase64(null);
     } else {
-      // PDF, Images, PPT, DOCX -> convert to base64 for Gemini inlineData
       const reader = new FileReader();
       reader.onload = () => {
         const b64 = reader.result as string;
@@ -81,7 +99,7 @@ export default function CreateQuizPage() {
     }
   };
 
-  // ── Cancel Generation Handler ─────────────────────────────────────────
+  // ── Cancel AI Generation Handler ───────────────────────────────────────
   const handleCancelGeneration = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -103,39 +121,32 @@ export default function CreateQuizPage() {
     }
 
     setErrorMsg(null);
-    setIsGenerating(true);
-    setCharCount(textContent.length || selectedFile?.size || 0);
 
-    const abortController = new AbortController();
-    abortControllerRef.current = abortController;
+    if (user?.uid) {
+      const { allowed, error: limitErr } = await checkAiDailyLimit(user.uid);
+      if (!allowed) {
+        setErrorMsg(limitErr || "Daily AI generation limit reached (5/day). Try again tomorrow!");
+        return;
+      }
+    }
+
+    const computedHash = await computeContentHash(textContent || (selectedFile?.name || "doc"));
 
     try {
-      // 1. Compute deterministic content hash for cache check
-      const computedHash = await computeContentHash(textContent, activeLang);
-      console.log(`[AI Generation] Content Hash: ${computedHash}`);
-
-      // 2. Check Master Quiz Cache
       const { hit, masterQuiz } = await checkMasterQuizCache(computedHash, activeLang);
-
-      if (abortController.signal.aborted) return;
-
       if (hit && masterQuiz && masterQuiz.sourceText) {
-        console.log(`[AI Generation] ⚡ Cache HIT for master quiz: ${masterQuiz.id}`);
         const parsed = parseQstText(masterQuiz.sourceText);
-
-        if (parsed && (parsed.questions.length > 0 || parsed.flashcards.length > 0)) {
+        if (parsed.questions.length > 0) {
           const localId = `ai_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-          const quizTitle = title.trim() || masterQuiz.title || "Generated Quiz";
-
-          const newQuizRecord: QuizRecord = {
+          const cachedQuiz: QuizRecord = {
             id: localId,
             masterQuizId: masterQuiz.id,
             master_quiz_id: masterQuiz.id,
-            title: quizTitle,
-            category: masterQuiz.category || category || "AI Generated",
+            title: masterQuiz.title || title || "Instant Quiz",
+            category: masterQuiz.category || category,
             questions: parsed.questions.length,
             questionsList: parsed.questions,
-            flashcards: parsed.flashcards,
+            flashcards: parsed.flashcards || [],
             sourceText: masterQuiz.sourceText,
             attempts: [],
             wrongQuestions: [],
@@ -144,78 +155,48 @@ export default function CreateQuizPage() {
             updatedAt: Date.now(),
           };
 
-          // Check if already in user library
           const localQuizzes = getLocalItem<QuizRecord[]>("quizzes", [SAMPLE_QUIZ]);
-          let existingQuiz = localQuizzes.find(
-            (q) => q.masterQuizId === masterQuiz.id || q.master_quiz_id === masterQuiz.id
-          );
+          setLocalItem("quizzes", [cachedQuiz, ...localQuizzes.filter((q) => q.id !== localId)]);
 
-          if (!existingQuiz) {
-            const newFp = await computeQuizFingerprint(newQuizRecord);
-            for (const q of localQuizzes) {
-              const curFp = await computeQuizFingerprint(q);
-              if (curFp && curFp === newFp) {
-                existingQuiz = q;
-                break;
-              }
-            }
+          if (user?.uid) {
+            createQuiz({
+              id: localId,
+              userId: user.uid,
+              masterQuizId: masterQuiz.id,
+              title: cachedQuiz.title,
+              category: cachedQuiz.category || "General",
+              questionCount: cachedQuiz.questions || 10,
+              sourceText: masterQuiz.sourceText,
+              questionsList: parsed.questions,
+              flashcards: parsed.flashcards,
+            }).catch(() => {});
           }
 
-          let quizToOpenId = localId;
-
-          if (existingQuiz) {
-            const merged = mergeQuizPersonalState(existingQuiz, [newQuizRecord]);
-            quizToOpenId = existingQuiz.id;
-            const updated = localQuizzes.map((q) => (q.id === existingQuiz.id ? merged : q));
-            setLocalItem("quizzes", updated);
-          } else {
-            setLocalItem("quizzes", [newQuizRecord, ...localQuizzes.filter((q) => q.id !== localId)]);
-            if (user?.uid) {
-              createQuiz({
-                id: localId,
-                userId: user.uid,
-                masterQuizId: masterQuiz.id,
-                title: quizTitle,
-                category: category || "AI Generated",
-                questionCount: parsed.questions.length,
-                sourceText: masterQuiz.sourceText,
-                questionsList: parsed.questions,
-                flashcards: parsed.flashcards,
-              }).catch(() => {});
-            }
-          }
-
-          setIsGenerating(false);
-          showToast(t("generation.instant_load") || "⚡ Instant load · No AI used", {
-            icon: "flash",
-            color: "#38bdf8",
-            durationMs: 3000,
+          showToast("⚡ Instant load · No AI used", {
+            icon: "⚡",
+            color: "#34d399",
           });
 
-          setTimeout(() => {
-            router.push(`/quiz/${quizToOpenId}`);
-          }, 300);
+          router.push(`/quiz/${localId}`);
           return;
         }
       }
+    } catch (cacheErr) {
+      console.warn("[MasterQuizCache] Cache check skipped:", cacheErr);
+    }
 
-      // 3. Cache Miss: Fetch App Configuration
-      const { config, error: cfgErr } = await fetchAppConfig();
-      if (cfgErr || !config) throw new Error(cfgErr ?? "Failed to load AI config");
+    setIsGenerating(true);
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
-      if (abortController.signal.aborted) return;
-
-      // 4. Check Daily Limit
-      if (user?.uid) {
-        const { allowed } = await checkAiDailyLimit(user.uid);
-        if (!allowed) {
-          throw new Error("You have reached your daily AI generation limit. Please try again tomorrow.");
-        }
+    try {
+      const config = appConfig || (await fetchAppConfig()).config;
+      if (!config?.aiConfig?.geminiKey || !config?.aiConfig?.modelUrl) {
+        throw new Error("AI service temporarily unavailable. Please try again later.");
       }
 
       const { geminiKey, modelUrl, promptTemplate } = config.aiConfig;
 
-      // 5. Build AI Prompt
       let effectivePrompt = (promptTemplate || "")
         .replace("{sourceText}", fileBase64 ? "" : textContent.slice(0, 30000))
         .replace("{questionCount}", String(effectiveCount))
@@ -253,7 +234,6 @@ export default function CreateQuizPage() {
         },
       };
 
-      // Call Gemini API
       const geminiRes = await fetch(modelUrl, {
         method: "POST",
         headers: {
@@ -291,7 +271,6 @@ export default function CreateQuizPage() {
         throw new Error("AI generated no questions. Please provide more detailed notes.");
       }
 
-      // Format questions
       const formattedQuestions = parsedQuestions.map((q: any, i: number) => ({
         id: `q_${Date.now()}_${i + 1}`,
         question: q.question || q.prompt || "",
@@ -306,7 +285,6 @@ export default function CreateQuizPage() {
           : [],
       }));
 
-      // Format flashcards
       const formattedFlashcards = parsedFlashcards.map((f: any, i: number) => ({
         id: `f_${Date.now()}_${i + 1}`,
         front: f.front || f.term || "",
@@ -316,7 +294,6 @@ export default function CreateQuizPage() {
       const quizTitle = title.trim() || selectedFile?.name.replace(/\.[^.]+$/, "") || "Generated Quiz";
       const masterSourceText = questionsToSourceText(quizTitle, category, formattedQuestions, formattedFlashcards);
 
-      // 6. Save Master Quiz Cache
       let masterQuizId: string | null = null;
       try {
         const masterRes = await saveMasterQuiz({
@@ -336,7 +313,6 @@ export default function CreateQuizPage() {
         console.warn("[MasterCache] Save failed:", e);
       }
 
-      // 7. Save to User Library
       const localId = `ai_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const newQuiz: QuizRecord = {
         id: localId,
@@ -390,6 +366,232 @@ export default function CreateQuizPage() {
     }
   };
 
+  // ── Manual Creation Handlers ───────────────────────────────────────────
+  const handleProceedToDrafting = () => {
+    if (!manualTitle.trim()) {
+      setErrorMsg("Please enter a quiz title.");
+      return;
+    }
+    const count = parseInt(manualCount) || 5;
+    if (count <= 0 || count > 50) {
+      setErrorMsg("Please enter a question count between 1 and 50.");
+      return;
+    }
+
+    setErrorMsg(null);
+    const initialDrafts: DraftQuestion[] = Array.from({ length: count }, (_, i) => ({
+      id: `manual_q_${Date.now()}_${i + 1}`,
+      prompt: "",
+      answers: [
+        { id: `a_${i}_0`, text: "", isCorrect: true },
+        { id: `a_${i}_1`, text: "", isCorrect: false },
+        { id: `a_${i}_2`, text: "", isCorrect: false },
+        { id: `a_${i}_3`, text: "", isCorrect: false },
+      ],
+    }));
+
+    setDraftQuestions(initialDrafts);
+    setDraftIndex(0);
+    setManualStep("drafting");
+  };
+
+  const updateDraftPrompt = (text: string) => {
+    const updated = [...draftQuestions];
+    updated[draftIndex].prompt = text;
+    setDraftQuestions(updated);
+  };
+
+  const updateDraftOptionText = (optIdx: number, text: string) => {
+    const updated = [...draftQuestions];
+    updated[draftIndex].answers[optIdx].text = text;
+    setDraftQuestions(updated);
+  };
+
+  const selectDraftOptionCorrect = (optIdx: number) => {
+    const updated = [...draftQuestions];
+    updated[draftIndex].answers = updated[draftIndex].answers.map((a, i) => ({
+      ...a,
+      isCorrect: i === optIdx,
+    }));
+    setDraftQuestions(updated);
+  };
+
+  const addDraftOption = () => {
+    const updated = [...draftQuestions];
+    const curAnswers = updated[draftIndex].answers;
+    if (curAnswers.length >= 6) return;
+    updated[draftIndex].answers.push({
+      id: `a_${draftIndex}_${curAnswers.length}`,
+      text: "",
+      isCorrect: false,
+    });
+    setDraftQuestions(updated);
+  };
+
+  const deleteDraftOption = (optIdx: number) => {
+    const updated = [...draftQuestions];
+    const curAnswers = updated[draftIndex].answers;
+    if (curAnswers.length <= 2) return;
+    const wasCorrect = curAnswers[optIdx].isCorrect;
+    updated[draftIndex].answers.splice(optIdx, 1);
+    if (wasCorrect && updated[draftIndex].answers.length > 0) {
+      updated[draftIndex].answers[0].isCorrect = true;
+    }
+    setDraftQuestions(updated);
+  };
+
+  const handleNextDraftQuestion = () => {
+    const cur = draftQuestions[draftIndex];
+    if (!cur.prompt.trim()) {
+      setErrorMsg("Please enter a question prompt.");
+      return;
+    }
+    const filledOpts = cur.answers.filter((a) => a.text.trim());
+    if (filledOpts.length < 2) {
+      setErrorMsg("Please enter at least 2 non-empty options.");
+      return;
+    }
+    const hasCorrect = filledOpts.some((a) => a.isCorrect);
+    if (!hasCorrect) {
+      setErrorMsg("Please select a correct answer amongst non-empty options.");
+      return;
+    }
+
+    setErrorMsg(null);
+    if (draftIndex < draftQuestions.length - 1) {
+      setDraftIndex(draftIndex + 1);
+    }
+  };
+
+  const handleSaveDraftedQuiz = async () => {
+    const cur = draftQuestions[draftIndex];
+    if (!cur.prompt.trim()) {
+      setErrorMsg("Please enter a question prompt.");
+      return;
+    }
+    const filledOpts = cur.answers.filter((a) => a.text.trim());
+    if (filledOpts.length < 2) {
+      setErrorMsg("Please enter at least 2 non-empty options.");
+      return;
+    }
+
+    setErrorMsg(null);
+
+    const formattedQuestions = draftQuestions.map((q, i) => ({
+      id: `q_${Date.now()}_${i + 1}`,
+      question: q.prompt,
+      prompt: q.prompt,
+      explanation: "",
+      answers: q.answers
+        .filter((a) => a.text.trim())
+        .map((a, ai) => ({
+          id: `a_${i}_${ai}`,
+          text: a.text,
+          isCorrect: a.isCorrect,
+        })),
+    }));
+
+    const sourceText = questionsToSourceText(manualTitle, "Custom", formattedQuestions, []);
+    const localId = `manual_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const newQuiz: QuizRecord = {
+      id: localId,
+      title: manualTitle.trim() || "Custom Quiz",
+      category: "Custom",
+      questions: formattedQuestions.length,
+      questionsList: formattedQuestions,
+      flashcards: [],
+      sourceText,
+      attempts: [],
+      wrongQuestions: [],
+      uniqueCorrectIds: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    const localQuizzes = getLocalItem<QuizRecord[]>("quizzes", [SAMPLE_QUIZ]);
+    setLocalItem("quizzes", [newQuiz, ...localQuizzes.filter((q) => q.id !== localId)]);
+
+    if (user?.uid) {
+      createQuiz({
+        id: localId,
+        userId: user.uid,
+        title: newQuiz.title,
+        category: newQuiz.category || "Custom",
+        questionCount: newQuiz.questions || 5,
+        sourceText,
+        questionsList: formattedQuestions,
+        flashcards: [],
+      }).catch(() => {});
+    }
+
+    showToast("✍️ Custom quiz created successfully!", {
+      icon: "✍️",
+      color: "#10b981",
+    });
+
+    router.push(`/quiz/${localId}`);
+  };
+
+  // ── Import QST / Text Handler ─────────────────────────────────────────
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const parsed = parseQstText(text);
+
+      if (!parsed.questions || parsed.questions.length === 0) {
+        setErrorMsg("No questions could be parsed from this file.");
+        return;
+      }
+
+      const quizTitle = parsed.title || file.name.replace(/\.[^.]+$/, "") || "Imported Quiz";
+      const localId = `import_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+      const newQuiz: QuizRecord = {
+        id: localId,
+        title: quizTitle,
+        category: parsed.category || "Imported",
+        questions: parsed.questions.length,
+        questionsList: parsed.questions,
+        flashcards: parsed.flashcards || [],
+        sourceText: text,
+        attempts: [],
+        wrongQuestions: [],
+        uniqueCorrectIds: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+
+      const localQuizzes = getLocalItem<QuizRecord[]>("quizzes", [SAMPLE_QUIZ]);
+      setLocalItem("quizzes", [newQuiz, ...localQuizzes.filter((q) => q.id !== localId)]);
+
+      if (user?.uid) {
+        createQuiz({
+          id: localId,
+          userId: user.uid,
+          title: newQuiz.title,
+          category: newQuiz.category || "Imported",
+          questionCount: newQuiz.questions || 5,
+          sourceText: text,
+          questionsList: parsed.questions,
+          flashcards: parsed.flashcards,
+        }).catch(() => {});
+      }
+
+      showToast("📁 Quiz imported successfully!", {
+        icon: "📁",
+        color: "#34d399",
+      });
+
+      router.push(`/quiz/${localId}`);
+    } catch (err: any) {
+      setErrorMsg("Failed to import file. Make sure it is a valid .qst or text format.");
+    }
+  };
+
   return (
     <div
       style={{
@@ -407,24 +609,9 @@ export default function CreateQuizPage() {
         onCancel={handleCancelGeneration}
       />
 
+      {/* Header & Mode Switcher Tabs */}
       <header style={{ marginBottom: 24 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
-          <div
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 12,
-              background: "linear-gradient(135deg, #6366f1, #34d399)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 20,
-              boxShadow: "0 8px 24px rgba(99, 102, 241, 0.3)",
-              flexShrink: 0,
-            }}
-          >
-            ✨
-          </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
           <div>
             <h1
               style={{
@@ -435,12 +622,97 @@ export default function CreateQuizPage() {
                 letterSpacing: "-0.6px",
               }}
             >
-              {t("create_menu.ai_generate") || "Generate Quiz & Flashcards"}
+              {t("tabs.create") || "Create & Import"}
             </h1>
             <p style={{ color: "#9ca3af", fontSize: 13, margin: "3px 0 0" }}>
-              Upload any PDF, document, slides, or paste your notes to start.
+              Generate with AI, write your own questions manually, or import study sets.
             </p>
           </div>
+        </div>
+
+        {/* 3 Creation Mode Tabs */}
+        <div
+          style={{
+            display: "flex",
+            gap: 6,
+            background: "#0d111d",
+            border: "1px solid rgba(255, 255, 255, 0.08)",
+            borderRadius: 14,
+            padding: 4,
+            overflowX: "auto",
+          }}
+        >
+          <button
+            onClick={() => { setActiveTab("ai"); setErrorMsg(null); }}
+            style={{
+              flex: 1,
+              minWidth: 120,
+              padding: "10px 14px",
+              borderRadius: 10,
+              border: "none",
+              background: activeTab === "ai" ? "rgba(99, 102, 241, 0.2)" : "transparent",
+              color: activeTab === "ai" ? "#ffffff" : "#9ca3af",
+              fontWeight: activeTab === "ai" ? 700 : 500,
+              fontSize: 13,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 6,
+              whiteSpace: "nowrap",
+            }}
+          >
+            <span>✨</span>
+            <span>AI Generator</span>
+          </button>
+
+          <button
+            onClick={() => { setActiveTab("manual"); setErrorMsg(null); }}
+            style={{
+              flex: 1,
+              minWidth: 120,
+              padding: "10px 14px",
+              borderRadius: 10,
+              border: "none",
+              background: activeTab === "manual" ? "rgba(99, 102, 241, 0.2)" : "transparent",
+              color: activeTab === "manual" ? "#ffffff" : "#9ca3af",
+              fontWeight: activeTab === "manual" ? 700 : 500,
+              fontSize: 13,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 6,
+              whiteSpace: "nowrap",
+            }}
+          >
+            <span>✍️</span>
+            <span>Create Manually</span>
+          </button>
+
+          <button
+            onClick={() => { setActiveTab("import"); setErrorMsg(null); }}
+            style={{
+              flex: 1,
+              minWidth: 120,
+              padding: "10px 14px",
+              borderRadius: 10,
+              border: "none",
+              background: activeTab === "import" ? "rgba(99, 102, 241, 0.2)" : "transparent",
+              color: activeTab === "import" ? "#ffffff" : "#9ca3af",
+              fontWeight: activeTab === "import" ? 700 : 500,
+              fontSize: 13,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 6,
+              whiteSpace: "nowrap",
+            }}
+          >
+            <span>📁</span>
+            <span>Import File</span>
+          </button>
         </div>
       </header>
 
@@ -452,8 +724,8 @@ export default function CreateQuizPage() {
             borderRadius: 14,
             padding: "14px 18px",
             color: "#f87171",
-            fontSize: 14,
-            marginBottom: 24,
+            fontSize: 13,
+            marginBottom: 20,
             display: "flex",
             alignItems: "center",
             gap: 10,
@@ -464,295 +736,597 @@ export default function CreateQuizPage() {
         </div>
       )}
 
-      {/* Main Form Container */}
-      <div
-        style={{
-          background: "#0f1423",
-          border: "1px solid rgba(255, 255, 255, 0.08)",
-          borderRadius: 24,
-          padding: "32px",
-          display: "flex",
-          flexDirection: "column",
-          gap: 28,
-          boxShadow: "0 24px 64px rgba(0, 0, 0, 0.4)",
-        }}
-      >
-        {/* Title Input */}
-        <div>
-          <label
-            style={{
-              display: "block",
-              fontSize: 13,
-              fontWeight: 600,
-              color: "#a5b4fc",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-              marginBottom: 8,
-            }}
-          >
-            Quiz Title
-          </label>
-          <input
-            type="text"
-            placeholder="e.g. Cellular Biology & Metabolism"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            style={{
-              width: "100%",
-              background: "rgba(255, 255, 255, 0.04)",
-              border: "1px solid rgba(255, 255, 255, 0.1)",
-              borderRadius: 14,
-              padding: "14px 18px",
-              color: "#ffffff",
-              fontSize: 15,
-              outline: "none",
-              boxSizing: "border-box",
-            }}
-          />
-        </div>
-
-        {/* Upload Zone */}
-        <div>
-          <label
-            style={{
-              display: "block",
-              fontSize: 13,
-              fontWeight: 600,
-              color: "#a5b4fc",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-              marginBottom: 8,
-            }}
-          >
-            Document or Notes
-          </label>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf,.docx,.txt,.pptx,.ppt,image/*"
-            style={{ display: "none" }}
-            onChange={handleFileChange}
-          />
-
+      {/* ── TAB 1: AI GENERATOR ────────────────────────────────────────── */}
+      {activeTab === "ai" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          {/* File Upload / Paste Card */}
           <div
-            onClick={() => fileInputRef.current?.click()}
             style={{
-              border: "2px dashed rgba(99, 102, 241, 0.35)",
-              borderRadius: 18,
-              padding: "28px 20px",
-              textAlign: "center",
-              cursor: "pointer",
-              background: selectedFile ? "rgba(99, 102, 241, 0.08)" : "rgba(255, 255, 255, 0.02)",
-              transition: "all 0.2s ease",
-              marginBottom: 16,
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = "#6366f1";
-              e.currentTarget.style.background = "rgba(99, 102, 241, 0.1)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = "rgba(99, 102, 241, 0.35)";
-              e.currentTarget.style.background = selectedFile
-                ? "rgba(99, 102, 241, 0.08)"
-                : "rgba(255, 255, 255, 0.02)";
-            }}
-          >
-            <div style={{ fontSize: 32, marginBottom: 8 }}>
-              {selectedFile ? "📄" : "📁"}
-            </div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "#ffffff", marginBottom: 4 }}>
-              {selectedFile ? selectedFile.name : "Click or drag document to upload"}
-            </div>
-            <div style={{ fontSize: 13, color: "#9ca3af" }}>
-              {selectedFile
-                ? `Ready • ${(selectedFile.size / 1024).toFixed(1)} KB`
-                : "Supports PDF, DOCX, TXT, PPTX & Images"}
-            </div>
-          </div>
-
-          <div style={{ textAlign: "center", margin: "10px 0", color: "#6b7280", fontSize: 13 }}>
-            — {t("common.or") || "or paste your text directly"} —
-          </div>
-
-          <textarea
-            rows={6}
-            placeholder="Paste your study notes, articles, or lecture transcripts here..."
-            value={sourceText}
-            onChange={(e) => {
-              setSourceText(e.target.value);
-              setCharCount(e.target.value.length);
-            }}
-            style={{
-              width: "100%",
-              background: "rgba(255, 255, 255, 0.04)",
-              border: "1px solid rgba(255, 255, 255, 0.1)",
-              borderRadius: 14,
-              padding: "14px 18px",
-              color: "#ffffff",
-              fontSize: 14,
-              lineHeight: 1.6,
-              outline: "none",
-              resize: "vertical",
+              background: "#0d111d",
+              border: "1px solid rgba(255, 255, 255, 0.08)",
+              borderRadius: 20,
+              padding: "24px 20px",
               boxSizing: "border-box",
             }}
-          />
-        </div>
+          >
+            <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#a5b4fc", textTransform: "uppercase", marginBottom: 10 }}>
+              1. Document Upload or Notes Paste
+            </label>
 
-        {/* Options Row */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 20 }}>
-          {/* Question Count */}
-          <div>
+            {/* Document Dropzone */}
             <label
               style={{
-                display: "block",
-                fontSize: 13,
-                fontWeight: 600,
-                color: "#a5b4fc",
-                textTransform: "uppercase",
-                letterSpacing: "0.05em",
-                marginBottom: 10,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "28px 16px",
+                border: "2px dashed rgba(99, 102, 241, 0.3)",
+                borderRadius: 16,
+                background: "rgba(99, 102, 241, 0.03)",
+                cursor: "pointer",
+                marginBottom: 16,
+                textAlign: "center",
               }}
             >
-              Number of Questions
+              <input
+                type="file"
+                accept=".pdf,.docx,.doc,.txt,.ppt,.pptx,image/*"
+                onChange={handleFileChange}
+                style={{ display: "none" }}
+              />
+              <div style={{ fontSize: 32, marginBottom: 8 }}>📄</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#ffffff", marginBottom: 4 }}>
+                {selectedFile ? `Selected: ${selectedFile.name}` : "Upload PDF, Slides, DOCX, or Images"}
+              </div>
+              <div style={{ fontSize: 12, color: "#9ca3af" }}>
+                Click to browse files (Max 50MB)
+              </div>
             </label>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {QUESTION_PRESETS.map((cnt) => {
-                const active = !useCustomCount && questionCount === cnt;
-                return (
-                  <button
-                    key={cnt}
-                    type="button"
-                    onClick={() => {
-                      setUseCustomCount(false);
-                      setQuestionCount(cnt);
-                    }}
-                    style={{
-                      flex: 1,
-                      minWidth: 48,
-                      padding: "10px 14px",
-                      borderRadius: 12,
-                      border: active ? "1px solid #6366f1" : "1px solid rgba(255, 255, 255, 0.1)",
-                      background: active ? "rgba(99, 102, 241, 0.2)" : "rgba(255, 255, 255, 0.03)",
-                      color: active ? "#ffffff" : "#9ca3af",
-                      fontWeight: active ? 700 : 500,
-                      fontSize: 14,
-                      cursor: "pointer",
-                      transition: "all 0.15s ease",
-                    }}
-                  >
-                    {cnt}
-                  </button>
-                );
-              })}
+
+            <div style={{ textAlign: "center", fontSize: 12, color: "#6b7280", margin: "8px 0 12px" }}>
+              — OR PASTE NOTES DIRECTLY —
             </div>
-          </div>
 
-          {/* Language Selector */}
-          <div>
-            <label
-              style={{
-                display: "block",
-                fontSize: 13,
-                fontWeight: 600,
-                color: "#a5b4fc",
-                textTransform: "uppercase",
-                letterSpacing: "0.05em",
-                marginBottom: 10,
+            <textarea
+              placeholder="Paste lecture notes, study guide, or topic summary here..."
+              value={sourceText.startsWith("[Document:") ? "" : sourceText}
+              onChange={(e) => {
+                setSourceText(e.target.value);
+                setCharCount(e.target.value.length);
+                setSelectedFile(null);
+                setFileBase64(null);
               }}
-            >
-              Generation Language
-            </label>
-            <select
-              value={activeLang}
-              onChange={(e) => setActiveLang(e.target.value as any)}
+              rows={5}
               style={{
                 width: "100%",
                 background: "rgba(255, 255, 255, 0.04)",
-                border: "1px solid rgba(255, 255, 255, 0.1)",
+                border: "1px solid rgba(255, 255, 255, 0.08)",
                 borderRadius: 14,
                 padding: "12px 16px",
                 color: "#ffffff",
                 fontSize: 14,
                 outline: "none",
+                boxSizing: "border-box",
+                fontFamily: "inherit",
+              }}
+            />
+          </div>
+
+          {/* AI Settings Card */}
+          <div
+            style={{
+              background: "#0d111d",
+              border: "1px solid rgba(255, 255, 255, 0.08)",
+              borderRadius: 20,
+              padding: "24px 20px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 18,
+              boxSizing: "border-box",
+            }}
+          >
+            <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#a5b4fc", textTransform: "uppercase" }}>
+              2. Quiz Options & Language
+            </label>
+
+            <div>
+              <label style={{ display: "block", fontSize: 13, color: "#9ca3af", marginBottom: 6 }}>Quiz Title (Optional)</label>
+              <input
+                type="text"
+                placeholder="e.g. Cellular Respiration & ATP"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                style={{
+                  width: "100%",
+                  background: "rgba(255, 255, 255, 0.04)",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  borderRadius: 12,
+                  padding: "11px 14px",
+                  color: "#ffffff",
+                  fontSize: 14,
+                  outline: "none",
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+
+            {/* Question Count Pills */}
+            <div>
+              <label style={{ display: "block", fontSize: 13, color: "#9ca3af", marginBottom: 8 }}>Question Count</label>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {[5, 10, 15, 20, 25].map((cnt) => (
+                  <button
+                    key={cnt}
+                    type="button"
+                    onClick={() => { setQuestionCount(cnt); setUseCustomCount(false); }}
+                    style={{
+                      padding: "8px 16px",
+                      borderRadius: 10,
+                      border: "none",
+                      background: !useCustomCount && questionCount === cnt ? "#6366f1" : "rgba(255, 255, 255, 0.04)",
+                      color: "#ffffff",
+                      fontWeight: 600,
+                      fontSize: 13,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {cnt} Qs
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Flashcard Toggle */}
+            <div
+              onClick={() => setIncludeFlashcards(!includeFlashcards)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "12px 14px",
+                background: "rgba(255, 255, 255, 0.02)",
+                borderRadius: 12,
                 cursor: "pointer",
               }}
             >
-              <option value="en" style={{ background: "#111827" }}>English</option>
-              <option value="ru" style={{ background: "#111827" }}>Русский (Russian)</option>
-              <option value="kk" style={{ background: "#111827" }}>Қазақша (Kazakh)</option>
-              <option value="es" style={{ background: "#111827" }}>Español (Spanish)</option>
-              <option value="fr" style={{ background: "#111827" }}>Français (French)</option>
-              <option value="hi" style={{ background: "#111827" }}>हिन्दी (Hindi)</option>
-            </select>
-          </div>
-        </div>
+              <div>
+                <div style={{ color: "#ffffff", fontWeight: 600, fontSize: 14 }}>🃏 Include Flashcards</div>
+                <div style={{ color: "#9ca3af", fontSize: 12 }}>Auto-generate spaced repetition flashcard deck</div>
+              </div>
+              <input
+                type="checkbox"
+                checked={includeFlashcards}
+                onChange={() => {}}
+                style={{ accentColor: "#6366f1", width: 18, height: 18 }}
+              />
+            </div>
 
-        {/* Flashcards Toggle */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "16px 20px",
-            background: "rgba(255, 255, 255, 0.03)",
-            border: "1px solid rgba(255, 255, 255, 0.08)",
-            borderRadius: 16,
-            cursor: "pointer",
-          }}
-          onClick={() => setIncludeFlashcards(!includeFlashcards)}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span style={{ fontSize: 22 }}>🃏</span>
+            {/* Language Selector */}
             <div>
-              <div style={{ color: "#ffffff", fontWeight: 700, fontSize: 15 }}>
-                Include Memory Flashcards
-              </div>
-              <div style={{ color: "#9ca3af", fontSize: 13 }}>
-                Generate key terms with SuperMemo-2 spaced repetition
-              </div>
+              <label style={{ display: "block", fontSize: 13, color: "#9ca3af", marginBottom: 6 }}>Generation Language</label>
+              <select
+                value={activeLang}
+                onChange={(e) => setActiveLang(e.target.value as any)}
+                style={{
+                  width: "100%",
+                  background: "rgba(255, 255, 255, 0.04)",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  borderRadius: 12,
+                  padding: "11px 14px",
+                  color: "#ffffff",
+                  fontSize: 14,
+                  outline: "none",
+                  cursor: "pointer",
+                }}
+              >
+                <option value="en" style={{ background: "#111827" }}>English</option>
+                <option value="ru" style={{ background: "#111827" }}>Русский (Russian)</option>
+                <option value="kk" style={{ background: "#111827" }}>Қазақша (Kazakh)</option>
+                <option value="es" style={{ background: "#111827" }}>Español (Spanish)</option>
+                <option value="fr" style={{ background: "#111827" }}>Français (French)</option>
+                <option value="hi" style={{ background: "#111827" }}>हिन्दी (Hindi)</option>
+              </select>
             </div>
           </div>
-          <input
-            type="checkbox"
-            checked={includeFlashcards}
-            onChange={(e) => setIncludeFlashcards(e.target.checked)}
-            style={{ width: 18, height: 18, accentColor: "#6366f1", cursor: "pointer" }}
-          />
-        </div>
 
-        {/* Generate Button */}
-        <button
-          type="button"
-          onClick={handleGenerate}
-          disabled={isGenerating}
+          <button
+            onClick={handleGenerate}
+            disabled={isGenerating || (!sourceText.trim() && !selectedFile)}
+            style={{
+              width: "100%",
+              background: "linear-gradient(135deg, #6366f1, #4f46e5)",
+              border: "none",
+              borderRadius: 14,
+              padding: "16px",
+              color: "#ffffff",
+              fontSize: 15,
+              fontWeight: 700,
+              cursor: isGenerating || (!sourceText.trim() && !selectedFile) ? "not-allowed" : "pointer",
+              boxShadow: "0 8px 24px rgba(99, 102, 241, 0.35)",
+            }}
+          >
+            {isGenerating ? "Generating Quiz..." : "✨ Generate with AI"}
+          </button>
+        </div>
+      )}
+
+      {/* ── TAB 2: MANUAL CREATOR ──────────────────────────────────────── */}
+      {activeTab === "manual" && (
+        <div>
+          {manualStep === "setup" ? (
+            <div
+              style={{
+                background: "#0d111d",
+                border: "1px solid rgba(255, 255, 255, 0.08)",
+                borderRadius: 20,
+                padding: "24px 20px",
+                display: "flex",
+                flexDirection: "column",
+                gap: 20,
+                boxSizing: "border-box",
+              }}
+            >
+              <div>
+                <h3 style={{ fontSize: 18, fontWeight: 700, color: "#ffffff", margin: "0 0 4px 0" }}>
+                  {t("create.title") || "Create Quiz Manually"}
+                </h3>
+                <p style={{ color: "#9ca3af", fontSize: 13, margin: 0 }}>
+                  {t("create.subtitle") || "Setup your custom MCQ quiz structure"}
+                </p>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#a5b4fc", marginBottom: 6 }}>
+                  {t("create.quiz_title") || "Quiz Title"}
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Advanced JavaScript Concepts"
+                  value={manualTitle}
+                  onChange={(e) => setManualTitle(e.target.value)}
+                  style={{
+                    width: "100%",
+                    background: "rgba(255, 255, 255, 0.04)",
+                    border: "1px solid rgba(255, 255, 255, 0.08)",
+                    borderRadius: 12,
+                    padding: "12px 16px",
+                    color: "#ffffff",
+                    fontSize: 14,
+                    outline: "none",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#a5b4fc", marginBottom: 6 }}>
+                  {t("create.num_questions") || "Questions Count"}
+                </label>
+                <input
+                  type="number"
+                  placeholder="e.g. 5"
+                  value={manualCount}
+                  onChange={(e) => setManualCount(e.target.value)}
+                  style={{
+                    width: "100%",
+                    background: "rgba(255, 255, 255, 0.04)",
+                    border: "1px solid rgba(255, 255, 255, 0.08)",
+                    borderRadius: 12,
+                    padding: "12px 16px",
+                    color: "#ffffff",
+                    fontSize: 14,
+                    outline: "none",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#a5b4fc", marginBottom: 8 }}>
+                  {t("create.language") || "Language"}
+                </label>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {["English", "Spanish", "French", "Hindi", "Russian", "Kazakh"].map((lang) => (
+                    <button
+                      key={lang}
+                      type="button"
+                      onClick={() => setManualLanguage(lang)}
+                      style={{
+                        padding: "8px 16px",
+                        borderRadius: 10,
+                        border: "none",
+                        background: manualLanguage === lang ? "rgba(99, 102, 241, 0.2)" : "rgba(255, 255, 255, 0.04)",
+                        color: manualLanguage === lang ? "#818cf8" : "#9ca3af",
+                        fontWeight: manualLanguage === lang ? 700 : 500,
+                        fontSize: 13,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {lang}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                onClick={handleProceedToDrafting}
+                style={{
+                  width: "100%",
+                  background: "linear-gradient(135deg, #6366f1, #4f46e5)",
+                  border: "none",
+                  borderRadius: 12,
+                  padding: "14px",
+                  color: "#ffffff",
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  marginTop: 8,
+                }}
+              >
+                {t("create.next_btn") || "Next: Draft Questions →"}
+              </button>
+            </div>
+          ) : (
+            <div
+              style={{
+                background: "#0d111d",
+                border: "1px solid rgba(255, 255, 255, 0.08)",
+                borderRadius: 20,
+                padding: "24px 20px",
+                display: "flex",
+                flexDirection: "column",
+                gap: 20,
+                boxSizing: "border-box",
+              }}
+            >
+              {/* Header Progress */}
+              <div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                  <h3 style={{ fontSize: 18, fontWeight: 700, color: "#ffffff", margin: 0 }}>
+                    {t("create.draft_title") || "Draft Questions"}
+                  </h3>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "#34d399" }}>
+                    Question {draftIndex + 1} of {draftQuestions.length}
+                  </span>
+                </div>
+
+                <div style={{ height: 5, background: "rgba(255, 255, 255, 0.08)", borderRadius: 99, overflow: "hidden" }}>
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${((draftIndex + 1) / draftQuestions.length) * 100}%`,
+                      background: "#34d399",
+                      borderRadius: 99,
+                      transition: "width 0.3s ease",
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Question Prompt */}
+              <div>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#a5b4fc", marginBottom: 6 }}>
+                  {t("create.question_prompt") || "Question Prompt"}
+                </label>
+                <textarea
+                  placeholder={t("create.question_placeholder") || "Enter your question prompt here..."}
+                  value={draftQuestions[draftIndex]?.prompt || ""}
+                  onChange={(e) => updateDraftPrompt(e.target.value)}
+                  rows={3}
+                  style={{
+                    width: "100%",
+                    background: "rgba(255, 255, 255, 0.04)",
+                    border: "1px solid rgba(255, 255, 255, 0.08)",
+                    borderRadius: 12,
+                    padding: "12px 16px",
+                    color: "#ffffff",
+                    fontSize: 14,
+                    outline: "none",
+                    boxSizing: "border-box",
+                    fontFamily: "inherit",
+                  }}
+                />
+              </div>
+
+              {/* Options */}
+              <div>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#a5b4fc", marginBottom: 4 }}>
+                  {t("create.options") || "Options / Choices"}
+                </label>
+                <p style={{ fontSize: 11, color: "#6b7280", margin: "0 0 12px 0" }}>
+                  Type answer texts below and select the radio button for the correct answer.
+                </p>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {(draftQuestions[draftIndex]?.answers || []).map((ans, optIdx) => (
+                    <div key={ans.id || optIdx} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <button
+                        type="button"
+                        onClick={() => selectDraftOptionCorrect(optIdx)}
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: "50%",
+                          border: `2px solid ${ans.isCorrect ? "#34d399" : "rgba(255, 255, 255, 0.2)"}`,
+                          background: ans.isCorrect ? "rgba(52, 211, 153, 0.2)" : "transparent",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          cursor: "pointer",
+                          flexShrink: 0,
+                        }}
+                      >
+                        {ans.isCorrect && <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#34d399" }} />}
+                      </button>
+
+                      <input
+                        type="text"
+                        placeholder={`Option ${optIdx + 1}`}
+                        value={ans.text}
+                        onChange={(e) => updateDraftOptionText(optIdx, e.target.value)}
+                        style={{
+                          flex: 1,
+                          background: "rgba(255, 255, 255, 0.04)",
+                          border: "1px solid rgba(255, 255, 255, 0.08)",
+                          borderRadius: 10,
+                          padding: "10px 14px",
+                          color: "#ffffff",
+                          fontSize: 13,
+                          outline: "none",
+                          boxSizing: "border-box",
+                        }}
+                      />
+
+                      {draftQuestions[draftIndex]?.answers.length > 2 && (
+                        <button
+                          type="button"
+                          onClick={() => deleteDraftOption(optIdx)}
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            color: "#ef4444",
+                            cursor: "pointer",
+                            fontSize: 16,
+                            padding: "6px",
+                          }}
+                        >
+                          🗑️
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {draftQuestions[draftIndex]?.answers.length < 6 && (
+                  <button
+                    type="button"
+                    onClick={addDraftOption}
+                    style={{
+                      marginTop: 12,
+                      background: "transparent",
+                      border: "1px solid rgba(52, 211, 153, 0.3)",
+                      borderRadius: 8,
+                      padding: "6px 14px",
+                      color: "#34d399",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    + {t("create.add_option") || "Add Option"}
+                  </button>
+                )}
+              </div>
+
+              {/* Navigation Actions */}
+              <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (draftIndex === 0) setManualStep("setup");
+                    else setDraftIndex(draftIndex - 1);
+                  }}
+                  style={{
+                    flex: 1,
+                    background: "rgba(255, 255, 255, 0.05)",
+                    border: "1px solid rgba(255, 255, 255, 0.1)",
+                    borderRadius: 12,
+                    padding: "14px",
+                    color: "#ffffff",
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  {draftIndex === 0 ? "← Back to Setup" : "← Previous Q"}
+                </button>
+
+                {draftIndex < draftQuestions.length - 1 ? (
+                  <button
+                    type="button"
+                    onClick={handleNextDraftQuestion}
+                    style={{
+                      flex: 1,
+                      background: "#34d399",
+                      border: "none",
+                      borderRadius: 12,
+                      padding: "14px",
+                      color: "#000000",
+                      fontSize: 14,
+                      fontWeight: 800,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Next Question →
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleSaveDraftedQuiz}
+                    style={{
+                      flex: 1,
+                      background: "#34d399",
+                      border: "none",
+                      borderRadius: 12,
+                      padding: "14px",
+                      color: "#000000",
+                      fontSize: 14,
+                      fontWeight: 800,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Save & Create Quiz ✓
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── TAB 3: IMPORT FILE ─────────────────────────────────────────── */}
+      {activeTab === "import" && (
+        <div
           style={{
-            background: "linear-gradient(135deg, #6366f1, #4f46e5)",
-            border: "none",
-            borderRadius: 16,
-            padding: "18px 28px",
-            color: "#ffffff",
-            fontSize: 16,
-            fontWeight: 800,
-            cursor: isGenerating ? "not-allowed" : "pointer",
-            boxShadow: "0 12px 32px rgba(99, 102, 241, 0.4)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 10,
-            marginTop: 8,
-            transition: "all 0.2s ease",
-          }}
-          onMouseEnter={(e) => {
-            if (!isGenerating) e.currentTarget.style.transform = "translateY(-2px)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = "translateY(0)";
+            background: "#0d111d",
+            border: "1px solid rgba(255, 255, 255, 0.08)",
+            borderRadius: 20,
+            padding: "36px 24px",
+            textAlign: "center",
+            boxSizing: "border-box",
           }}
         >
-          <span>⚡</span>
-          <span>Generate Quiz & Flashcards</span>
-        </button>
-      </div>
+          <div style={{ fontSize: 44, marginBottom: 12 }}>📁</div>
+          <h3 style={{ fontSize: 18, fontWeight: 700, color: "#ffffff", margin: "0 0 6px 0" }}>
+            Import QST or Text Quiz File
+          </h3>
+          <p style={{ color: "#9ca3af", fontSize: 13, margin: "0 0 24px 0", maxWidth: 400, marginLeft: "auto", marginRight: "auto" }}>
+            Upload any existing .qst or structured text quiz file to import questions and flashcards directly into your library.
+          </p>
+
+          <label
+            style={{
+              display: "inline-block",
+              background: "linear-gradient(135deg, #6366f1, #4f46e5)",
+              borderRadius: 12,
+              padding: "14px 28px",
+              color: "#ffffff",
+              fontWeight: 700,
+              fontSize: 14,
+              cursor: "pointer",
+            }}
+          >
+            <input
+              type="file"
+              accept=".qst,.txt"
+              onChange={handleImportFile}
+              style={{ display: "none" }}
+            />
+            Select .qst / .txt File
+          </label>
+        </div>
+      )}
     </div>
   );
 }
