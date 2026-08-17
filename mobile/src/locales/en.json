@@ -343,6 +343,8 @@
     "delete_attempt": "Delete Attempt"
   },
   "share": {
-    "quiz_deleted": "This quiz was deleted or is no longer available."
+    "quiz_deleted": "This quiz was deleted or is no longer available.",
+    "share_quiz": "Share Quiz",
+    "share_desc": "Send a link to study together"
   }
 }

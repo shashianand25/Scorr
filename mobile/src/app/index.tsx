@@ -41,6 +41,8 @@ import * as Sentry from "@sentry/react-native";
 import { identifyUser, clearUser, trackQuizStarted, trackQuizCompleted, trackAiGenerationStarted, trackAiGenerationSucceeded, trackAiGenerationFailed, trackQuizCreated, trackBattleStarted, trackBattleCompleted, trackShareLinkTapped } from "../lib/analytics";
 import { syncUserToNeon, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz, deleteUserFromNeon, sendFeedback, saveBattleHistory, fetchBattleHistory, parsePdfFromBackend, parsePptFromBackend, fetchGeminiKey, fetchAppConfig, fetchSharedQuiz, checkAiDailyLimit, checkMasterQuizCache, saveMasterQuiz, sendOtpEmail, verifyOtpCode, type AppConfig } from "../lib/api";
 import { computeContentHash } from "../lib/contentHash";
+import { computeQuizFingerprint } from "../lib/quizFingerprint";
+import { deduplicateUserQuizzes, mergeQuizPersonalState } from "../lib/quizDeduplication";
 import { getUserErrorMessage } from "../utils/errors";
 import { createBattleRoom, joinBattleRoom, updateBattleScore, finishBattle, markPlayerFinished, listenToBattleRoom, getBattleRoom, type BattleRoom } from "../lib/multiplayer";
 import NetInfo from "@react-native-community/netinfo";
@@ -597,12 +599,22 @@ export default function HomeScreen() {
                   !allTombstoneIds.has(n.id) &&
                   !allTombstoneIds.has(n.neonId)
                 );
-                const combined = [...updatedLocal, ...newFromServer];
-                return combined.filter((q: any) => {
+                const combined = [...updatedLocal, ...newFromServer].filter((q: any) => {
                   const qc = typeof q.questions === "number" ? q.questions : (q.questionsList?.length || 0);
                   const cc = q.flashcards?.length || 0;
                   return qc > 0 || cc > 0;
                 });
+                deduplicateUserQuizzes(combined, { currentUserId: user.uid }).then(({ deduplicatedQuizzes, removedQuizIds, neonDeletions, hasChanges }) => {
+                  if (hasChanges) {
+                    removedQuizIds.forEach((id) => pendingDeleteIdsRef.current.add(id));
+                    setQuizzes(deduplicatedQuizzes);
+                    AsyncStorage.setItem(storageKey("quizzes"), JSON.stringify(deduplicatedQuizzes)).catch(() => {});
+                    for (const d of neonDeletions) {
+                      deleteMobileQuiz(user.uid, d.neonId).catch(() => {});
+                    }
+                  }
+                }).catch(() => {});
+                return combined;
               });
 
               // Backfill local-only quizzes to Neon
@@ -752,7 +764,19 @@ export default function HomeScreen() {
               const cc = q.flashcards?.length || 0;
               return qc > 0 || cc > 0;
             });
-          setQuizzes(prev => prev.length === 0 ? parsed : prev);
+          try {
+            const { deduplicatedQuizzes, removedQuizIds, hasChanges } = await deduplicateUserQuizzes(parsed);
+            if (hasChanges) {
+              removedQuizIds.forEach(id => {
+                tombstoneIds[id] = true;
+                pendingDeleteIdsRef.current.add(id);
+              });
+              AsyncStorage.setItem(storageKey("quizzes"), JSON.stringify(deduplicatedQuizzes)).catch(() => {});
+            }
+            setQuizzes(prev => prev.length === 0 ? deduplicatedQuizzes : prev);
+          } catch {
+            setQuizzes(prev => prev.length === 0 ? parsed : prev);
+          }
         }
         if (sRaw) {
           setStarredQuestions(new Set(JSON.parse(sRaw)));
@@ -1144,6 +1168,38 @@ export default function HomeScreen() {
             uniqueCorrectIds: []
           };
 
+          // Check for existing identical quiz in user's library before creating duplicate
+          const existingQuiz = await (async () => {
+            const newFp = await computeQuizFingerprint(finalQuiz);
+            if (!newFp) return null;
+            for (const q of quizzesRef.current) {
+              const curFp = await computeQuizFingerprint(q);
+              if (curFp && curFp === newFp) return q;
+            }
+            return null;
+          })();
+
+          if (existingQuiz) {
+            console.log("[SharedQuizImport] Found existing identical quiz in library — updating canonical:", existingQuiz.id);
+            const merged = mergeQuizPersonalState(existingQuiz, [finalQuiz]);
+            setQuizzes((prev) => {
+              const updated = prev.map((q) => q.id === existingQuiz.id ? merged : q);
+              AsyncStorage.setItem(storageKey("quizzes"), JSON.stringify(updated)).catch(() => {});
+              return updated;
+            });
+            trackQuizCreated({ source: "shared_link", questionCount: qCount });
+            setActiveTab("insights");
+            setViewingInsightsQuiz(merged);
+            setViewingInsightsQuizFromTab("home");
+            setCustomToast({
+              message: `Opened course: ${quiz.title}`,
+              icon: 'checkmark-circle-outline',
+              color: '#38bdf8'
+            });
+            setTimeout(() => setCustomToast(null), 3500);
+            return;
+          }
+
           if (firebaseUser?.uid && neonUserReadyRef.current) {
             try {
               const { quiz: savedQuiz, error: saveErr } = await createMobileQuiz({
@@ -1279,8 +1335,20 @@ export default function HomeScreen() {
 
             const localOnly = quizzesRef.current.filter((l: any) => !allTombstones.has(l.id) && !filteredFromDb.some((dbQ: any) => dbQ.id === l.id || dbQ.id === l.neonId));
             const merged = [...normalized, ...localOnly];
-            setQuizzes(merged);
-            AsyncStorage.setItem(storageKey("quizzes"), JSON.stringify(merged)).catch(() => {});
+            try {
+              const { deduplicatedQuizzes, removedQuizIds, neonDeletions, hasChanges } = await deduplicateUserQuizzes(merged, { currentUserId: firebaseUser.uid });
+              if (hasChanges) {
+                removedQuizIds.forEach((id) => pendingDeleteIdsRef.current.add(id));
+                for (const d of neonDeletions) {
+                  deleteMobileQuiz(firebaseUser.uid, d.neonId).catch(() => {});
+                }
+              }
+              setQuizzes(deduplicatedQuizzes);
+              AsyncStorage.setItem(storageKey("quizzes"), JSON.stringify(deduplicatedQuizzes)).catch(() => {});
+            } catch {
+              setQuizzes(merged);
+              AsyncStorage.setItem(storageKey("quizzes"), JSON.stringify(merged)).catch(() => {});
+            }
           }
         }
       }
@@ -2668,18 +2736,18 @@ export default function HomeScreen() {
           </Pressable>
         </View>
         <Pressable 
-          onPress={() => handleHostBattle(quiz.id, "insights")} 
+          onPress={() => handleShareQuiz(quiz)} 
           style={({pressed}) => [{ 
             backgroundColor: cardBg, borderRadius: 16, paddingVertical: 16, paddingHorizontal: 12, 
             borderWidth: 1, borderColor: border, flexDirection: "row", alignItems: "center", marginBottom: 32
           }, pressed && {opacity: 0.8}]}
         >
-          <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: isDark ? "rgba(244,63,94,0.15)" : "#ffe4e6", alignItems: "center", justifyContent: "center", marginRight: 12 }}>
-            <Ionicons name="flame" size={18} color={isDark ? "#FB7185" : "#e11d48"} />
+          <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: isDark ? "rgba(99,102,241,0.15)" : "#e0e7ff", alignItems: "center", justifyContent: "center", marginRight: 12 }}>
+            <Ionicons name="share-social" size={18} color={isDark ? "#818cf8" : "#4f46e5"} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 16, fontWeight: "700", color: textMain, marginBottom: 4 }} numberOfLines={1}>{t('battle.challenge_friend') || "Challenge a Friend"}</Text>
-            <Text style={{ fontSize: 12, color: isDark ? "rgba(255,255,255,0.8)" : textSub }} numberOfLines={1}>{t('battle.challenge_desc') || "Battle using this quiz in real-time"}</Text>
+            <Text style={{ fontSize: 16, fontWeight: "700", color: textMain, marginBottom: 4 }} numberOfLines={1}>{t('share.share_quiz') || "Share Quiz"}</Text>
+            <Text style={{ fontSize: 12, color: isDark ? "rgba(255,255,255,0.8)" : textSub }} numberOfLines={1}>{t('share.share_desc') || "Send a link to study together"}</Text>
           </View>
           <Feather name="chevron-right" size={16} color={isDark ? "#FFFFFF" : "#9ca3af"} style={{ opacity: isDark ? 0.8 : 1 }} />
         </Pressable>
