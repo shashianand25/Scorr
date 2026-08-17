@@ -946,6 +946,9 @@ app.get('/api/version-config', (req, res) => {
   res.json({
     latestVersion: process.env.APP_LATEST_VERSION || "1.0.0",
     minimumVersion: process.env.APP_MINIMUM_VERSION || "1.0.0",
+    updateTitle: process.env.APP_UPDATE_TITLE || "Update Required",
+    updateMessage: process.env.APP_UPDATE_MESSAGE || "A critical update is available for Scorr. Please update to the latest version to continue using the app.",
+    updateButtonText: process.env.APP_UPDATE_BUTTON_TEXT || "Update Now",
     updatePromptScheduleDays
   });
 });

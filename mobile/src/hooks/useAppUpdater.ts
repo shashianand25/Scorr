@@ -13,6 +13,7 @@ const DEFAULT_PROMPT_SCHEDULE_DAYS = [0, 7, 14, 30]; // Fallback if backend does
 
 export function useAppUpdater() {
   const [forceUpdateRequired, setForceUpdateRequired] = useState(false);
+  const [updateConfig, setUpdateConfig] = useState<any>(null);
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
@@ -45,6 +46,7 @@ export function useAppUpdater() {
       let schedDays: number[] = DEFAULT_PROMPT_SCHEDULE_DAYS;
 
       if (!error && config) {
+        setUpdateConfig(config);
         const { minimumVersion, updatePromptScheduleDays } = config as any;
         if (Array.isArray(updatePromptScheduleDays) && updatePromptScheduleDays.length > 0) {
           schedDays = updatePromptScheduleDays;
@@ -138,5 +140,5 @@ export function useAppUpdater() {
     }
   };
 
-  return { forceUpdateRequired, isChecking };
+  return { forceUpdateRequired, isChecking, updateConfig };
 }

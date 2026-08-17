@@ -451,6 +451,10 @@ export async function fetchAppConfig(): Promise<{ config: AppConfig | null; erro
 export interface VersionConfig {
   latestVersion: string;
   minimumVersion: string;
+  updateTitle?: string;
+  updateMessage?: string;
+  updateButtonText?: string;
+  updatePromptScheduleDays?: number[];
 }
 
 /**

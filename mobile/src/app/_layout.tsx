@@ -34,7 +34,7 @@ Sentry.init({
 
 function RootLayout() {
   const colorScheme = useColorScheme();
-  const { forceUpdateRequired } = useAppUpdater();
+  const { forceUpdateRequired, updateConfig } = useAppUpdater();
   const [maintenanceMode, setMaintenanceMode] = useState(false);
 
   const checkFlags = useCallback(async () => {
@@ -60,7 +60,7 @@ function RootLayout() {
   }, []);
 
   if (forceUpdateRequired) {
-    return <ForceUpdateScreen />;
+    return <ForceUpdateScreen config={updateConfig} />;
   }
 
   if (maintenanceMode) {
