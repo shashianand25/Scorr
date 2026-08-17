@@ -8863,33 +8863,33 @@ export default function HomeScreen() {
                             key={item.id}
                             style={{
                               width: SCREEN_WIDTH - 52,
-                              backgroundColor: cardBg, // Use consistent card background
-                              borderRadius: 18,
-                              padding: 18,
+                              backgroundColor: cardBg,
+                              borderRadius: 16,
+                              padding: 16,
                               borderWidth: 1,
                               borderColor: border,
                             }}
                           >
                             {/* Title row */}
-                            <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 18, minHeight: 44 }}>
-                              <Text style={{ fontSize: 16, fontWeight: "700", color: "#FFFFFF", flex: 1, lineHeight: 22 }} numberOfLines={2}>
+                            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                              <Text style={{ fontSize: 15, fontWeight: "700", color: "#FFFFFF", flex: 1, lineHeight: 20 }} numberOfLines={1} ellipsizeMode="tail">
                                 {item.title}
                               </Text>
-                              <Ionicons name="ellipsis-vertical" size={18} color={muted} style={{ marginLeft: 8, marginTop: 2 }} />
+                              <Ionicons name="ellipsis-vertical" size={16} color={muted} style={{ marginLeft: 8 }} />
                             </View>
 
                             {/* Progress bar */}
-                            <View style={{ height: 12, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 6, marginBottom: 12, overflow: "hidden", flexDirection: "row" }}>
+                            <View style={{ height: 6, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 3, marginBottom: 8, overflow: "hidden", flexDirection: "row" }}>
                               {pct > 0 && (
                                 <View style={{ width: `${Math.max(pct - 12, 0)}%` as any, backgroundColor: "#10B981" }} />
                               )}
                               {pct > 0 && pct < 100 && (
-                                <View style={{ width: "12%", backgroundColor: "#F59E0B", borderTopRightRadius: 6, borderBottomRightRadius: 6 }} />
+                                <View style={{ width: "12%", backgroundColor: "#F59E0B", borderTopRightRadius: 3, borderBottomRightRadius: 3 }} />
                               )}
                             </View>
 
                             {/* Label */}
-                            <Text style={{ fontSize: 14, color: "#FFFFFF", fontWeight: "500", marginBottom: 20 }}>{item.label}</Text>
+                            <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", fontWeight: "500", marginBottom: 14 }}>{item.label}</Text>
 
                             {/* Continue button — blue pill */}
                             <Pressable
@@ -8899,13 +8899,13 @@ export default function HomeScreen() {
                               }}
                               style={({ pressed }) => ({
                                 backgroundColor: "#4F46E5",
-                                borderRadius: 24,
-                                paddingVertical: 14,
+                                borderRadius: 14,
+                                paddingVertical: 10,
                                 alignItems: "center",
                                 opacity: pressed ? 0.85 : 1,
                               })}
                             >
-                              <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>{t('home.continue_btn') || "Continue"}</Text>
+                              <Text style={{ color: "#fff", fontSize: 14, fontWeight: "600" }}>{t('home.continue_btn') || "Continue"}</Text>
                             </Pressable>
                           </View>
                         );
@@ -8914,14 +8914,14 @@ export default function HomeScreen() {
 
                     {/* Dot pagination */}
                     {jumpItems.length > 1 && (
-                      <View style={{ flexDirection: "row", justifyContent: "center", gap: 8, marginTop: 16 }}>
+                      <View style={{ flexDirection: "row", justifyContent: "center", gap: 6, marginTop: 10 }}>
                         {jumpItems.map((_, idx) => (
                           <View
                             key={idx}
                             style={{
-                              width: 8,
-                              height: 8,
-                              borderRadius: 4,
+                              width: 6,
+                              height: 6,
+                              borderRadius: 3,
                               backgroundColor: idx === jumpPage ? "#FFFFFF" : "rgba(255,255,255,0.3)",
                             }}
                           />
@@ -8933,8 +8933,8 @@ export default function HomeScreen() {
 
                 {/* ── Battle Arena Banner ── */}
                 {!homeSearch && (
-                  <View style={{ marginTop: jumpItems.length > 0 || !hasContent ? 28 : 20, paddingHorizontal: 20 }}>
-                    <Text style={{ fontSize: 18, fontWeight: "700", color: txt, marginBottom: 14 }}>{t('home.multiplayer') || "Multiplayer"}</Text>
+                  <View style={{ marginTop: jumpItems.length > 0 || !hasContent ? 20 : 16, paddingHorizontal: 20 }}>
+                    <Text style={{ fontSize: 16, fontWeight: "700", color: txt, marginBottom: 10 }}>{t('home.multiplayer') || "Multiplayer"}</Text>
                     
                     <Pressable
                       onPress={() => {
@@ -8949,57 +8949,76 @@ export default function HomeScreen() {
                       }}
                       style={({ pressed }) => ({
                         backgroundColor: cardBg,
-                        borderRadius: 20, padding: 20,
-                        borderWidth: 1, borderColor: border,
-                        flexDirection: "row", alignItems: "center",
-                        shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 2,
+                        borderRadius: 16,
+                        paddingVertical: 13,
+                        paddingHorizontal: 16,
+                        borderWidth: 1,
+                        borderColor: border,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        shadowColor: "#000",
+                        shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.1,
+                        shadowRadius: 12,
+                        elevation: 2,
                         opacity: pressed ? 0.8 : 1,
                       })}
                     >
-                      <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: "rgba(251, 113, 133, 0.15)", alignItems: "center", justifyContent: "center", marginRight: 16 }}>
-                        <Ionicons name="flame" size={24} color="#FB7185" />
+                      <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: "rgba(251, 113, 133, 0.15)", alignItems: "center", justifyContent: "center", marginRight: 14 }}>
+                        <Ionicons name="flame" size={20} color="#FB7185" />
                       </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 16, fontWeight: "700", color: txt, marginBottom: 4 }}>{t('battle.title') || "Battle Arena"}</Text>
-                        <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.65)" }}>{t('battle.subtitle') || "Challenge friends in real-time matches"}</Text>
+                      <View style={{ flex: 1, marginRight: 8 }}>
+                        <Text style={{ fontSize: 15, fontWeight: "700", color: txt, marginBottom: 2 }} numberOfLines={1}>
+                          {t('battle.title') || "Battle Arena"}
+                        </Text>
+                        <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.65)" }} numberOfLines={1} ellipsizeMode="tail">
+                          {t('battle.subtitle') || "Challenge friends in real-time matches"}
+                        </Text>
                       </View>
-                      <Feather name="chevron-right" size={20} color={muted} />
+                      <Feather name="chevron-right" size={18} color={muted} />
                     </Pressable>
                   </View>
                 )}
 
                 {/* ── Create Flashcards Banner ── */}
                 {!homeSearch && (
-                  <View style={{ marginTop: 28, paddingHorizontal: 20 }}>
-                    <Text style={{ fontSize: 15, fontWeight: "600", color: txt, marginBottom: 14 }}>{t('home.study_need_title') || "Study exactly what you need"}</Text>
+                  <View style={{ marginTop: 20, paddingHorizontal: 20 }}>
+                    <Text style={{ fontSize: 15, fontWeight: "600", color: txt, marginBottom: 10 }}>{t('home.study_need_title') || "Study exactly what you need"}</Text>
                     
                     <View style={{
                         backgroundColor: cardBg,
-                        borderRadius: 20, padding: 20,
-                        borderWidth: 1, borderColor: border,
-                        shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 2,
+                        borderRadius: 16,
+                        padding: 16,
+                        borderWidth: 1,
+                        borderColor: border,
+                        shadowColor: "#000",
+                        shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.1,
+                        shadowRadius: 12,
+                        elevation: 2,
                       }}>
-                      <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
-                        <Ionicons name="albums" size={32} color="#4F46E5" />
+                      <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
+                        <Ionicons name="albums" size={24} color="#4F46E5" />
                       </View>
-                      <Text style={{ fontSize: 18, fontWeight: "700", color: txt, marginBottom: 4 }}>{t('home.create_flashcards_title') || "Create your own flashcards"}</Text>
-                      <Text style={{ fontSize: 14, color: "#FFFFFF", marginBottom: 20 }}>{t('home.study_need_sub') || "Study exactly what's on your test"}</Text>
+                      <Text style={{ fontSize: 16, fontWeight: "700", color: txt, marginBottom: 2 }}>{t('home.create_flashcards_title') || "Create your own flashcards"}</Text>
+                      <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", marginBottom: 14 }}>{t('home.study_need_sub') || "Study exactly what's on your test"}</Text>
                       
                       {/* Image placeholder */}
-                      <View style={{ height: 120, backgroundColor: "#E0F2FE", borderRadius: 12, marginBottom: 20, alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-                        <Ionicons name="document-text" size={64} color="#4F46E5" style={{ opacity: 0.8 }} />
+                      <View style={{ height: 88, backgroundColor: "#E0F2FE", borderRadius: 12, marginBottom: 14, alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                        <Ionicons name="document-text" size={48} color="#4F46E5" style={{ opacity: 0.8 }} />
                       </View>
                       
                       <Pressable
                         onPress={() => setShowAddMenu(true)}
                         style={({ pressed }) => ({
                           backgroundColor: "#4F46E5",
-                          borderRadius: 24, paddingVertical: 14,
+                          borderRadius: 14,
+                          paddingVertical: 11,
                           alignItems: "center",
                           opacity: pressed ? 0.8 : 1,
                         })}
                       >
-                        <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>{t('home.create_flashcards_btn') || "Create flashcards"}</Text>
+                        <Text style={{ color: "#fff", fontSize: 14, fontWeight: "600" }}>{t('home.create_flashcards_btn') || "Create flashcards"}</Text>
                       </Pressable>
                     </View>
                   </View>
@@ -9007,8 +9026,8 @@ export default function HomeScreen() {
 
                 {/* ── More Options ── */}
                 {!homeSearch && (
-                  <View style={{ marginTop: 28, paddingHorizontal: 20 }}>
-                    <Text style={{ fontSize: 18, fontWeight: "700", color: txt, marginBottom: 14 }}>{t('home.more') || "More"}</Text>
+                  <View style={{ marginTop: 20, paddingHorizontal: 20 }}>
+                    <Text style={{ fontSize: 16, fontWeight: "700", color: txt, marginBottom: 10 }}>{t('home.more') || "More"}</Text>
                     
                     <Pressable
                       onPress={async () => {
@@ -9024,40 +9043,56 @@ export default function HomeScreen() {
                       }}
                       style={({ pressed }) => ({
                         backgroundColor: cardBg,
-                        borderRadius: 16, padding: 20,
-                        borderWidth: 1, borderColor: border,
-                        flexDirection: "row", alignItems: "center",
-                        shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 2,
+                        borderRadius: 16,
+                        paddingVertical: 14,
+                        paddingHorizontal: 16,
+                        borderWidth: 1,
+                        borderColor: border,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        shadowColor: "#000",
+                        shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.1,
+                        shadowRadius: 12,
+                        elevation: 2,
                         opacity: pressed ? 0.8 : 1,
                       })}
                     >
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 16, fontWeight: "700", color: txt, marginBottom: 4 }}>{t('home.invite_friends') || "Invite your friends"}</Text>
-                        <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.65)" }}>{t('home.invite_sub') || "Learn together and grow faster"}</Text>
+                        <Text style={{ fontSize: 15, fontWeight: "700", color: txt, marginBottom: 2 }}>{t('home.invite_friends') || "Invite your friends"}</Text>
+                        <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.65)" }} numberOfLines={1}>{t('home.invite_sub') || "Learn together and grow faster"}</Text>
                       </View>
-                      <View style={{ width: 48, height: 48, alignItems: "center", justifyContent: "center" }}>
-                        <Text style={{ fontSize: 32 }}>💌</Text>
+                      <View style={{ width: 40, height: 40, alignItems: "center", justifyContent: "center" }}>
+                        <Text style={{ fontSize: 26 }}>💌</Text>
                       </View>
                     </Pressable>
 
                     <Pressable
                       onPress={() => setShowFeedbackPage(true)}
                       style={({ pressed }) => ({
-                        marginTop: 12,
+                        marginTop: 10,
                         backgroundColor: cardBg,
-                        borderRadius: 16, padding: 20,
-                        borderWidth: 1, borderColor: border,
-                        flexDirection: "row", alignItems: "center",
-                        shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 2,
+                        borderRadius: 16,
+                        paddingVertical: 14,
+                        paddingHorizontal: 16,
+                        borderWidth: 1,
+                        borderColor: border,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        shadowColor: "#000",
+                        shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.1,
+                        shadowRadius: 12,
+                        elevation: 2,
                         opacity: pressed ? 0.8 : 1,
                       })}
                     >
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 16, fontWeight: "700", color: txt, marginBottom: 4 }}>{t('profile.feedback') || "Feedback"}</Text>
-                        <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.65)" }}>{t('home.feedback_sub') || "Help us improve"}</Text>
+                        <Text style={{ fontSize: 15, fontWeight: "700", color: txt, marginBottom: 2 }}>{t('profile.feedback') || "Feedback"}</Text>
+                        <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.65)" }} numberOfLines={1}>{t('home.feedback_sub') || "Help us improve"}</Text>
                       </View>
-                      <View style={{ width: 48, height: 48, alignItems: "center", justifyContent: "center" }}>
-                        <Text style={{ fontSize: 32 }}>💡</Text>
+                      <View style={{ width: 40, height: 40, alignItems: "center", justifyContent: "center" }}>
+                        <Text style={{ fontSize: 26 }}>💡</Text>
                       </View>
                     </Pressable>
                   </View>
