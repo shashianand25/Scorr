@@ -1,53 +1,91 @@
 /**
- * Web API client — mirrors mobile/src/lib/api.ts but for Next.js web.
- * All calls go to https://api.scorrapp.com
+ * Web API client — mirrors mobile/src/lib/api.ts for Next.js web.
+ * All calls communicate with https://api.scorrapp.com
  */
 
 const BASE_URL = "https://api.scorrapp.com";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
+export interface QuestionAnswer {
+  id?: string;
+  text: string;
+  isCorrect: boolean;
+}
+
 export interface Question {
   id: string;
-  prompt: string;
-  answers: { id: string; text: string; isCorrect: boolean }[];
+  question?: string;
+  prompt?: string;
+  answers: QuestionAnswer[];
+  explanation?: string;
 }
 
 export interface Flashcard {
   id: string;
   front: string;
   back: string;
+  sm2_interval?: number;
+  sm2_repetition?: number;
+  sm2_easeFactor?: number;
+  sm2_nextReviewDate?: number;
+  starred?: boolean;
+}
+
+export interface Attempt {
+  id?: string | number;
+  date?: number;
+  timestamp?: number;
+  score?: number;
+  correct?: number;
+  total?: number;
+  durationSec?: number | null;
+  timeSpent?: number | null;
+  answers?: any[];
+}
+
+export interface WrongQuestion {
+  id: string;
+  question?: string;
+  prompt?: string;
+  selectedTexts?: string[];
+  correctTexts?: string[];
+  explanation?: string;
+  answers?: QuestionAnswer[];
 }
 
 export interface Quiz {
   id: string;
+  neonId?: string | null;
+  masterQuizId?: string | null;
+  master_quiz_id?: string | null;
+  userId?: string | null;
   title: string;
   category: string;
-  questions: number;             // count
+  questions: number;
   questionsList: Question[];
   flashcards: Flashcard[];
   sourceText: string;
   attempts: Attempt[];
   wrongQuestions: WrongQuestion[];
   uniqueCorrectIds: string[];
-  createdAt: string;
-  updatedAt: string;
+  createdAt: string | number;
+  updatedAt: string | number;
+  isSample?: boolean;
+  time?: string;
 }
 
-export interface Attempt {
-  date?: number;
-  timestamp?: number;
-  score: number;
-  correct: number;
-  total: number;
-  durationSec?: number;
-}
-
-export interface WrongQuestion {
+export interface MasterQuiz {
   id: string;
-  prompt: string;
-  selectedTexts: string[];
-  correctTexts: string[];
+  contentHash: string;
+  generationVersion?: string;
+  language: string;
+  title: string;
+  category: string;
+  questionCount: number;
+  flashcardCount: number;
+  sourceText: string;
+  createdAt: string;
 }
 
 export interface NeonUser {
@@ -70,7 +108,7 @@ export interface QuizHistoryEvent {
     wrong: number;
     score: number;
     durationSec: number | null;
-    wrongQuestions: WrongQuestion[];
+    wrongQuestions: any[];
   };
   createdAt: string;
 }
@@ -86,37 +124,123 @@ export interface BattleHistoryEvent {
   created_at: string;
 }
 
+export interface AppConfig {
+  aiConfig: {
+    geminiKey: string;
+    modelUrl: string;
+    promptTemplate: string;
+    chunkSize: number;
+    maxChunks: number;
+    concurrencyLimit?: number;
+    maxOutputTokens?: number;
+    temperature?: number;
+    generationRanges?: Array<{
+      max: number;
+      minF: number;
+      expF: number;
+    }>;
+    maxDailyGenerations?: number;
+  };
+  featureFlags?: {
+    disableBattles?: boolean;
+    maintenanceMode?: boolean;
+  };
+  fileLimits?: {
+    pdfExtractThresholdMB: number;
+    pptMaxMB: number;
+  };
+  appLinks?: {
+    shareBaseUrl: string;
+    playStoreUrl: string;
+    downloadUrl?: string;
+    tutorialUrl: string;
+  };
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────
 
 async function apiFetch<T>(
   path: string,
-  options?: RequestInit
+  options?: RequestInit & { timeoutMs?: number }
 ): Promise<{ data: T | null; error: string | null }> {
+  const timeout = options?.timeoutMs ?? 10000;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
   try {
     const res = await fetch(`${BASE_URL}${path}`, {
       headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
       ...options,
     });
+    clearTimeout(timeoutId);
+
     const json = await res.json();
-    if (!res.ok) return { data: null, error: json?.error ?? `HTTP ${res.status}` };
+    if (!res.ok) {
+      return { data: null, error: json?.error ?? `Server error (${res.status})` };
+    }
     return { data: json as T, error: null };
   } catch (err: any) {
-    return { data: null, error: err?.message ?? "Network error" };
+    clearTimeout(timeoutId);
+    let errMsg = err?.message ?? "Network error";
+    if (err.name === "AbortError" || errMsg.toLowerCase().includes("timeout")) {
+      errMsg = "Network timeout: Server took too long to respond.";
+    }
+    return { data: null, error: errMsg };
   }
 }
 
-// ── User ───────────────────────────────────────────────────────────────
+// ── Master Quiz Cache Endpoints ────────────────────────────────────────
+
+export async function checkMasterQuizCache(
+  contentHash: string,
+  language: string = "en"
+): Promise<{ hit: boolean; masterQuiz: MasterQuiz | null; error: string | null }> {
+  const { data, error } = await apiFetch<{ hit: boolean; masterQuiz: MasterQuiz | null }>(
+    `/api/master-quizzes/cache-check?contentHash=${encodeURIComponent(contentHash)}&language=${encodeURIComponent(language)}`
+  );
+  return {
+    hit: data?.hit ?? false,
+    masterQuiz: data?.masterQuiz ?? null,
+    error,
+  };
+}
+
+export async function saveMasterQuiz(params: {
+  id?: string;
+  contentHash: string;
+  generationVersion?: string;
+  language?: string;
+  title: string;
+  category?: string;
+  questionCount: number;
+  flashcardCount?: number;
+  sourceText: string;
+  userId?: string;
+}): Promise<{ masterQuiz: MasterQuiz | null; error: string | null }> {
+  const { data, error } = await apiFetch<{ masterQuiz: MasterQuiz }>("/api/master-quizzes", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+  return { masterQuiz: data?.masterQuiz ?? null, error };
+}
+
+// ── User Sync ──────────────────────────────────────────────────────────
 
 export async function syncUser(params: {
-  uid: string; email?: string | null; displayName?: string | null; photoURL?: string | null;
+  uid: string;
+  email?: string | null;
+  displayName?: string | null;
+  photoURL?: string | null;
 }): Promise<{ user: NeonUser | null; error: string | null }> {
   const { data, error } = await apiFetch<{ user: NeonUser }>("/api/sync-user", {
-    method: "POST", body: JSON.stringify(params),
+    method: "POST",
+    body: JSON.stringify(params),
   });
   return { user: data?.user ?? null, error };
 }
 
-// ── Quizzes ────────────────────────────────────────────────────────────
+// ── Quizzes (Neon) ─────────────────────────────────────────────────────
 
 export async function fetchQuizzes(userId: string): Promise<{ quizzes: Quiz[]; error: string | null }> {
   const { data, error } = await apiFetch<{ quizzes: Quiz[] }>(
@@ -126,22 +250,38 @@ export async function fetchQuizzes(userId: string): Promise<{ quizzes: Quiz[]; e
 }
 
 export async function createQuiz(params: {
-  userId: string; title: string; category: string;
-  questionCount: number; sourceText: string;
-  questionsList?: Question[]; flashcards?: Flashcard[];
+  id?: string;
+  userId: string;
+  masterQuizId?: string | null;
+  title: string;
+  category: string;
+  questionCount: number;
+  sourceText: string;
+  questionsList?: Question[];
+  flashcards?: Flashcard[];
+  attempts?: Attempt[];
+  wrongQuestions?: WrongQuestion[];
+  uniqueCorrectIds?: string[];
 }): Promise<{ quiz: Quiz | null; error: string | null }> {
   const { data, error } = await apiFetch<{ quiz: Quiz }>("/api/mobile-quizzes", {
-    method: "POST", body: JSON.stringify(params),
+    method: "POST",
+    body: JSON.stringify(params),
   });
   return { quiz: data?.quiz ?? null, error };
 }
 
 export async function updateQuiz(params: {
-  userId: string; quizId: string;
-  attempts?: Attempt[]; wrongQuestions?: WrongQuestion[]; uniqueCorrectIds?: string[];
+  userId: string;
+  quizId: string;
+  masterQuizId?: string | null;
+  title?: string;
+  attempts?: Attempt[];
+  wrongQuestions?: WrongQuestion[];
+  uniqueCorrectIds?: string[];
 }): Promise<{ quiz: Quiz | null; error: string | null }> {
   const { data, error } = await apiFetch<{ quiz: Quiz }>("/api/mobile-quizzes", {
-    method: "PUT", body: JSON.stringify(params),
+    method: "PUT",
+    body: JSON.stringify(params),
   });
   return { quiz: data?.quiz ?? null, error };
 }
@@ -154,15 +294,30 @@ export async function deleteQuiz(userId: string, quizId: string): Promise<{ erro
   return { error };
 }
 
+// ── Shared Quiz Link ───────────────────────────────────────────────────
+
+export async function fetchSharedQuiz(
+  id: string
+): Promise<{ quiz: any | null; error: string | null }> {
+  const { data, error } = await apiFetch<{ quiz: any }>(`/api/share/quiz/${encodeURIComponent(id)}`);
+  return { quiz: data?.quiz ?? null, error };
+}
+
 // ── Quiz History ───────────────────────────────────────────────────────
 
 export async function saveQuizHistory(params: {
-  userId: string; quizTitle: string; totalQuestions: number;
-  correct: number; wrong: number; score: number;
-  durationSec?: number; wrongQuestions?: WrongQuestion[];
+  userId: string;
+  quizTitle: string;
+  totalQuestions: number;
+  correct: number;
+  wrong: number;
+  score: number;
+  durationSec?: number | null;
+  wrongQuestions?: WrongQuestion[];
 }): Promise<{ error: string | null }> {
   const { error } = await apiFetch<{ eventId: string }>("/api/quiz-history", {
-    method: "POST", body: JSON.stringify(params),
+    method: "POST",
+    body: JSON.stringify(params),
   });
   return { error };
 }
@@ -186,7 +341,8 @@ export async function saveBattleHistory(params: {
   won: boolean;
 }): Promise<{ error: string | null }> {
   const { error } = await apiFetch<{ eventId: string }>("/api/battle-history", {
-    method: "POST", body: JSON.stringify(params),
+    method: "POST",
+    body: JSON.stringify(params),
   });
   return { error };
 }
@@ -198,17 +354,33 @@ export async function fetchBattleHistory(userId: string): Promise<{ history: Bat
   return { history: data?.history ?? [], error };
 }
 
-// ── AI Config ──────────────────────────────────────────────────────────
+// ── Daily Limit ────────────────────────────────────────────────────────
 
-export interface AppConfig {
-  aiConfig: {
-    geminiKey: string;
-    modelUrl: string;
-    promptTemplate: string;
-    chunkSize: number;
-    maxChunks: number;
+export async function checkAiDailyLimit(
+  userId: string
+): Promise<{ allowed: boolean; remaining: number; limit: number; error: string | null }> {
+  const { data, error } = await apiFetch<{ allowed: boolean; remaining: number; limit: number }>(
+    `/api/daily-limit?userId=${encodeURIComponent(userId)}`
+  );
+  return {
+    allowed: data?.allowed ?? true,
+    remaining: data?.remaining ?? 10,
+    limit: data?.limit ?? 10,
+    error,
   };
 }
+
+export async function recordAiGeneration(
+  userId: string
+): Promise<{ success: boolean; error: string | null }> {
+  const { error } = await apiFetch<{ success: boolean }>("/api/daily-limit/record", {
+    method: "POST",
+    body: JSON.stringify({ userId }),
+  });
+  return { success: !error, error };
+}
+
+// ── App & AI Config ────────────────────────────────────────────────────
 
 export async function fetchAppConfig(): Promise<{ config: AppConfig | null; error: string | null }> {
   const { data, error } = await apiFetch<AppConfig>("/api/app-config");
@@ -218,10 +390,13 @@ export async function fetchAppConfig(): Promise<{ config: AppConfig | null; erro
 // ── Feedback ───────────────────────────────────────────────────────────
 
 export async function sendFeedback(params: {
-  userId?: string; userEmail?: string; message: string;
+  userId?: string;
+  userEmail?: string;
+  message: string;
 }): Promise<{ error: string | null }> {
   const { error } = await apiFetch<{ ok: boolean }>("/api/feedback", {
-    method: "POST", body: JSON.stringify(params),
+    method: "POST",
+    body: JSON.stringify(params),
   });
   return { error };
 }

@@ -1,385 +1,886 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/store/auth";
-import { fetchQuizzes, saveQuizHistory, updateQuiz } from "@/lib/api";
-import type { Quiz, Question, WrongQuestion } from "@/lib/api";
-
-const spin = `@keyframes spin { to { transform: rotate(360deg); } }`;
-const fadeIn = `@keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }`;
-const pop = `@keyframes pop { 0%{transform:scale(1)} 50%{transform:scale(1.04)} 100%{transform:scale(1)} }`;
-const shake = `@keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-6px)} 40%,80%{transform:translateX(6px)} }`;
+import { useToast } from "@/components/ui/ToastPill";
+import { useTranslation } from "@/lib/i18n";
+import {
+  fetchQuizzes,
+  saveQuizHistory,
+  updateQuiz,
+  Question,
+  WrongQuestion,
+  Attempt,
+} from "@/lib/api";
+import { getLocalItem, setLocalItem, SAMPLE_QUIZ } from "@/lib/storage";
+import { renderFormattedText } from "@/lib/qstParser";
+import type { QuizRecord } from "@/lib/quizDeduplication";
 
 type Phase = "options" | "playing" | "results";
 
-function Spinner({ label = "Loading…" }: { label?: string }) {
-  return (
-    <div style={{ minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
-      <style>{spin}</style>
-      <div style={{ width: 44, height: 44, border: "3px solid #1f2937", borderTop: "3px solid #6366f1", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-      <span style={{ color: "#9ca3af", fontSize: 14 }}>{label}</span>
-    </div>
-  );
-}
-
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
+function calculateGrade(percentage: number): { letter: string; color: string; label: string } {
+  if (percentage >= 95) return { letter: "A+", color: "#34d399", label: "Mastery! Exceptional understanding." };
+  if (percentage >= 85) return { letter: "A", color: "#10b981", label: "Great job! Strong mastery." };
+  if (percentage >= 75) return { letter: "B", color: "#60a5fa", label: "Good effort! A little review will help." };
+  if (percentage >= 60) return { letter: "C", color: "#f59e0b", label: "Passing, but needs more practice." };
+  return { letter: "F", color: "#ef4444", label: "Needs review. Try flashcards or retake!" };
 }
 
 export default function QuizPlayerPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { user } = useAuthStore();
+  const { showToast } = useToast();
+  const { t } = useTranslation();
 
-  const [quiz, setQuiz] = useState<Quiz | null>(null);
+  const [quiz, setQuiz] = useState<QuizRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [phase, setPhase] = useState<Phase>("options");
 
-  // Options
-  const [shuffleQ, setShuffleQ] = useState(false);
+  // Options & Modes
+  const [shuffleQuestions, setShuffleQuestions] = useState(false);
   const [wrongOnly, setWrongOnly] = useState(false);
+  const [timedMode, setTimedMode] = useState(false);
+  const [timerSeconds, setTimerSeconds] = useState(30); // 30s per question
+  const [rangeStart, setRangeStart] = useState(1);
+  const [rangeEnd, setRangeEnd] = useState(10);
 
-  // Playing state
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [currentIdx, setCurrentIdx] = useState(0);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [answered, setAnswered] = useState(false);
-  const [wrongAnswered, setWrongAnswered] = useState<WrongQuestion[]>([]);
+  // Playing State
+  const [activeQuestions, setActiveQuestions] = useState<Question[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [selectedAnswerId, setSelectedAnswerId] = useState<string | null>(null);
+  const [isAnswered, setIsAnswered] = useState(false);
+  const [wrongList, setWrongList] = useState<WrongQuestion[]>([]);
   const [correctCount, setCorrectCount] = useState(0);
+  const [starredQuestionIds, setStarredQuestionIds] = useState<Set<string>>(new Set());
+  const [shakeCard, setShakeCard] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(30);
   const [startTime, setStartTime] = useState<number>(0);
-  const [answerShake, setAnswerShake] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
+  // Load Quiz from LocalStorage or Neon
   useEffect(() => {
-    if (!user?.uid) return;
-    fetchQuizzes(user.uid).then(({ quizzes }) => {
-      const found = quizzes.find(q => q.id === id) ?? null;
-      setQuiz(found);
-      setLoading(false);
-    });
-  }, [user?.uid, id]);
+    const localQuizzes = getLocalItem<QuizRecord[]>("quizzes", [SAMPLE_QUIZ]);
+    const found = localQuizzes.find((q) => q.id === id || q.neonId === id) || (id === "sample_quiz_welcome" ? SAMPLE_QUIZ : null);
 
-  const startQuiz = () => {
-    if (!quiz) return;
-    let qs = quiz.questionsList ?? [];
-    if (wrongOnly) {
-      const wrongIds = new Set((quiz.wrongQuestions ?? []).map(w => w.id));
-      qs = qs.filter(q => wrongIds.has(q.id));
+    if (found) {
+      setQuiz(found);
+      const totalQ = found.questionsList?.length || 0;
+      setRangeStart(1);
+      setRangeEnd(totalQ > 0 ? totalQ : 10);
+      setLoading(false);
+    } else if (user?.uid) {
+      fetchQuizzes(user.uid).then(({ quizzes }) => {
+        const cloudFound = quizzes.find((q) => q.id === id || (q as any).neonId === id) as any;
+        if (cloudFound) {
+          setQuiz(cloudFound);
+          const totalQ = cloudFound.questionsList?.length || 0;
+          setRangeStart(1);
+          setRangeEnd(totalQ > 0 ? totalQ : 10);
+        }
+        setLoading(false);
+      });
+    } else {
+      setLoading(false);
     }
-    if (qs.length === 0) qs = quiz.questionsList ?? [];
-    if (shuffleQ) qs = shuffle(qs);
-    setQuestions(qs);
-    setCurrentIdx(0);
-    setSelected(null);
-    setAnswered(false);
-    setWrongAnswered([]);
+  }, [id, user?.uid]);
+
+  // Load Starred Questions from storage
+  useEffect(() => {
+    const starred = getLocalItem<string[]>("starred_questions", []);
+    setStarredQuestionIds(new Set(starred));
+  }, []);
+
+  // Timed Mode Interval
+  useEffect(() => {
+    if (phase !== "playing" || !timedMode || isAnswered) return;
+
+    if (timeLeft <= 0) {
+      // Auto-submit unanswered
+      handleAnswer("__timeout__");
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => prev - 1);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [phase, timedMode, timeLeft, isAnswered]);
+
+  // Keyboard navigation
+  useEffect(() => {
+    if (phase !== "playing") return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const currentQ = activeQuestions[currentIndex];
+      if (!currentQ || !currentQ.answers) return;
+
+      if (!isAnswered) {
+        // Options: 1-4 or A-D
+        let pickedIndex = -1;
+        if (e.key === "1" || e.key.toLowerCase() === "a") pickedIndex = 0;
+        if (e.key === "2" || e.key.toLowerCase() === "b") pickedIndex = 1;
+        if (e.key === "3" || e.key.toLowerCase() === "c") pickedIndex = 2;
+        if (e.key === "4" || e.key.toLowerCase() === "d") pickedIndex = 3;
+
+        if (pickedIndex >= 0 && currentQ.answers[pickedIndex]) {
+          const ans = currentQ.answers[pickedIndex];
+          handleAnswer(ans.id || `a_${pickedIndex}`);
+        }
+      } else {
+        // Space or Enter advances to next
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          handleNextQuestion();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [phase, isAnswered, activeQuestions, currentIndex]);
+
+  // ── Start Quiz ─────────────────────────────────────────────────────────
+  const startQuiz = (onlyWrong: boolean = false) => {
+    if (!quiz || !quiz.questionsList) return;
+
+    let pool = [...quiz.questionsList];
+
+    if (onlyWrong) {
+      const wrongIds = new Set((quiz.wrongQuestions || []).map((w: any) => w.id || w.question));
+      pool = pool.filter((q) => wrongIds.has(q.id || q.question || q.prompt));
+      if (pool.length === 0) pool = [...quiz.questionsList];
+    } else {
+      // Apply range filter
+      const start = Math.max(1, rangeStart) - 1;
+      const end = Math.min(pool.length, rangeEnd);
+      pool = pool.slice(start, end);
+    }
+
+    if (shuffleQuestions) {
+      pool = pool.sort(() => Math.random() - 0.5);
+    }
+
+    // Shuffle options inside each question
+    pool = pool.map((q) => ({
+      ...q,
+      answers: [...(q.answers || [])].sort(() => Math.random() - 0.5),
+    }));
+
+    setActiveQuestions(pool);
+    setCurrentIndex(0);
+    setSelectedAnswerId(null);
+    setIsAnswered(false);
+    setWrongList([]);
     setCorrectCount(0);
+    setTimeLeft(timerSeconds);
     setStartTime(Date.now());
     setPhase("playing");
   };
 
-  const handleAnswer = (answerId: string) => {
-    if (answered) return;
-    const q = questions[currentIdx];
-    const correctAns = q.answers.find(a => a.isCorrect);
-    const isCorrect = correctAns?.id === answerId;
+  // ── Handle Answer Selection ────────────────────────────────────────────
+  const handleAnswer = (ansId: string) => {
+    if (isAnswered) return;
 
-    setSelected(answerId);
-    setAnswered(true);
+    const currentQ = activeQuestions[currentIndex];
+    if (!currentQ) return;
+
+    const isTimeout = ansId === "__timeout__";
+    const correctAns = (currentQ.answers || []).find((a) => a.isCorrect);
+    const isCorrect = !isTimeout && (correctAns?.id === ansId || (correctAns && (currentQ.answers || []).findIndex(a => a.id === ansId) === (currentQ.answers || []).findIndex(a => a.isCorrect)));
+
+    setSelectedAnswerId(ansId);
+    setIsAnswered(true);
 
     if (isCorrect) {
-      setCorrectCount(prev => prev + 1);
+      setCorrectCount((prev) => prev + 1);
     } else {
-      setAnswerShake(true);
-      setTimeout(() => setAnswerShake(false), 500);
-      const selectedText = q.answers.find(a => a.id === answerId)?.text ?? "";
-      setWrongAnswered(prev => [...prev, {
-        id: q.id,
-        prompt: q.prompt,
-        selectedTexts: [selectedText],
-        correctTexts: [correctAns?.text ?? ""],
-      }]);
+      setShakeCard(true);
+      setTimeout(() => setShakeCard(false), 500);
+
+      const wrongEntry: WrongQuestion = {
+        id: currentQ.id || `w_${currentIndex}`,
+        question: currentQ.question || currentQ.prompt || "",
+        prompt: currentQ.prompt || currentQ.question || "",
+        selectedTexts: isTimeout ? ["Timed out"] : [(currentQ.answers || []).find((a) => a.id === ansId)?.text || ""],
+        correctTexts: [correctAns?.text || ""],
+        explanation: currentQ.explanation,
+        answers: currentQ.answers,
+      };
+
+      setWrongList((prev) => [...prev, wrongEntry]);
     }
   };
 
-  const handleNext = async () => {
-    if (currentIdx + 1 >= questions.length) {
-      // Finish
-      const duration = Math.round((Date.now() - startTime) / 1000);
-      const score = Math.round((correctCount / questions.length) * 100);
-      const wrong = questions.length - correctCount;
-
-      if (user?.uid && quiz) {
-        // Save history
-        await saveQuizHistory({
-          userId: user.uid,
-          quizTitle: quiz.title,
-          totalQuestions: questions.length,
-          correct: correctCount,
-          wrong,
-          score,
-          durationSec: duration,
-          wrongQuestions: wrongAnswered,
-        });
-
-        // Update quiz record
-        const newAttempt = { date: Date.now(), score, correct: correctCount, total: questions.length, durationSec: duration };
-        const prevAttempts = quiz.attempts ?? [];
-        const prevUniqueCorrect = new Set(quiz.uniqueCorrectIds ?? []);
-        questions.forEach((q, i) => {
-          const correct = wrongAnswered.find(w => w.id === q.id) == null;
-          if (correct) prevUniqueCorrect.add(q.id);
-        });
-
-        await updateQuiz({
-          userId: user.uid,
-          quizId: quiz.id,
-          attempts: [...prevAttempts, newAttempt],
-          wrongQuestions: wrongAnswered,
-          uniqueCorrectIds: Array.from(prevUniqueCorrect),
-        });
-      }
-
-      setPhase("results");
+  // ── Next Question / Finish ─────────────────────────────────────────────
+  const handleNextQuestion = () => {
+    if (currentIndex + 1 < activeQuestions.length) {
+      setCurrentIndex((prev) => prev + 1);
+      setSelectedAnswerId(null);
+      setIsAnswered(false);
+      setTimeLeft(timerSeconds);
     } else {
-      setCurrentIdx(prev => prev + 1);
-      setSelected(null);
-      setAnswered(false);
+      finishQuiz();
     }
   };
 
-  if (loading) return (
-    <div style={{ padding: "36px 40px", maxWidth: 760, margin: "0 auto" }}>
-      <Spinner label="Loading quiz…" />
-    </div>
-  );
+  // ── Finish Quiz & Save Results ─────────────────────────────────────────
+  const finishQuiz = () => {
+    if (!quiz) return;
 
-  if (!quiz) return (
-    <div style={{ padding: "36px 40px", maxWidth: 760, margin: "0 auto", fontFamily: "'Inter', sans-serif" }}>
-      <div style={{ textAlign: "center", padding: "80px 20px" }}>
-        <div style={{ fontSize: 48, marginBottom: 16 }}>😕</div>
-        <h2 style={{ color: "#fff", fontSize: 20, fontWeight: 700, margin: "0 0 8px" }}>Quiz not found</h2>
-        <Link href="/library" style={{ color: "#6366f1", textDecoration: "none" }}>← Back to Library</Link>
-      </div>
-    </div>
-  );
+    const elapsed = Math.round((Date.now() - startTime) / 1000);
+    setElapsedSeconds(elapsed);
 
-  // ── OPTIONS SCREEN ──
-  if (phase === "options") {
-    const total = quiz.questionsList?.length || 0;
-    const wrongCount = quiz.wrongQuestions?.length || 0;
+    const total = activeQuestions.length;
+    const scorePct = total > 0 ? Math.round((correctCount / total) * 100) : 0;
+
+    const newAttempt: Attempt = {
+      id: Date.now(),
+      date: Date.now(),
+      timestamp: Date.now(),
+      score: scorePct,
+      correct: correctCount,
+      total,
+      durationSec: elapsed,
+    };
+
+    const updatedAttempts = [newAttempt, ...(quiz.attempts || [])];
+    const updatedWrong = [...wrongList];
+
+    const updatedQuiz: QuizRecord = {
+      ...quiz,
+      attempts: updatedAttempts,
+      wrongQuestions: updatedWrong,
+      updatedAt: Date.now(),
+    };
+
+    setQuiz(updatedQuiz);
+
+    // Save locally
+    const localQuizzes = getLocalItem<QuizRecord[]>("quizzes", [SAMPLE_QUIZ]);
+    const updatedLocal = localQuizzes.map((q) => (q.id === quiz.id ? updatedQuiz : q));
+    setLocalItem("quizzes", updatedLocal);
+
+    // Save to Neon cloud
+    if (user?.uid) {
+      saveQuizHistory({
+        userId: user.uid,
+        quizTitle: quiz.title,
+        totalQuestions: total,
+        correct: correctCount,
+        wrong: wrongList.length,
+        score: scorePct,
+        durationSec: elapsed,
+        wrongQuestions: wrongList,
+      }).catch(() => {});
+
+      updateQuiz({
+        userId: user.uid,
+        quizId: quiz.id,
+        attempts: updatedAttempts as Attempt[],
+        wrongQuestions: updatedWrong,
+      }).catch(() => {});
+    }
+
+    setPhase("results");
+  };
+
+  // ── Star Toggle ────────────────────────────────────────────────────────
+  const toggleStarQuestion = (qId: string) => {
+    const next = new Set(starredQuestionIds);
+    if (next.has(qId)) {
+      next.delete(qId);
+      showToast("Question removed from bookmarks", { icon: "☆" });
+    } else {
+      next.add(qId);
+      showToast("Question bookmarked ⭐", { icon: "⭐", color: "#f59e0b" });
+    }
+    setStarredQuestionIds(next);
+    setLocalItem("starred_questions", Array.from(next));
+  };
+
+  if (loading) {
     return (
-      <div style={{ padding: "36px 40px", maxWidth: 680, margin: "0 auto", fontFamily: "'Inter', sans-serif" }}>
-        <style>{spin}{fadeIn}{pop}</style>
-        <Link href="/library" style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#9ca3af", textDecoration: "none", fontSize: 14, marginBottom: 28 }}>← Back to Library</Link>
-
-        <div style={{ background: "linear-gradient(135deg, #6366f115, #8b5cf610)", border: "1px solid #6366f130", borderRadius: 20, padding: 32, marginBottom: 28, animation: "fadeIn 0.4s ease" }}>
-          <h1 style={{ fontSize: 24, fontWeight: 800, color: "#fff", margin: "0 0 8px", letterSpacing: "-0.5px" }}>{quiz.title}</h1>
-          {quiz.category && <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: 99, background: "#6366f115", color: "#a5b4fc", fontSize: 12, fontWeight: 600 }}>{quiz.category}</span>}
-          <div style={{ display: "flex", gap: 20, marginTop: 16 }}>
-            <div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: "#fff" }}>{total}</div>
-              <div style={{ fontSize: 12, color: "#6b7280" }}>Questions</div>
-            </div>
-            <div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: "#fff" }}>{quiz.attempts?.length || 0}</div>
-              <div style={{ fontSize: 12, color: "#6b7280" }}>Attempts</div>
-            </div>
-            {quiz.attempts?.length > 0 && (
-              <div>
-                <div style={{ fontSize: 22, fontWeight: 800, color: "#10b981" }}>{Math.max(...quiz.attempts.map(a => a.score))}%</div>
-                <div style={{ fontSize: 12, color: "#6b7280" }}>Best Score</div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 16, animation: "fadeIn 0.5s ease 0.1s both" }}>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: "#9ca3af", margin: "0 0 4px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Options</h2>
-
-          {[
-            { label: "🔀 Shuffle Questions", desc: "Randomize question order", value: shuffleQ, set: setShuffleQ },
-            { label: "❌ Wrong Questions Only", desc: `Focus on ${wrongCount} questions you got wrong`, value: wrongOnly, set: setWrongOnly, disabled: wrongCount === 0 },
-          ].map(opt => (
-            <div key={opt.label} style={{ display: "flex", alignItems: "center", gap: 14, padding: "16px 20px", background: "#0f1420", border: "1px solid #1f2937", borderRadius: 14, opacity: opt.disabled ? 0.5 : 1 }}>
-              <div onClick={() => !opt.disabled && opt.set(!opt.value)} style={{ width: 48, height: 28, borderRadius: 99, background: opt.value ? "#6366f1" : "#374151", position: "relative", cursor: opt.disabled ? "default" : "pointer", transition: "background 0.2s", flexShrink: 0 }}>
-                <div style={{ position: "absolute", top: 3, left: opt.value ? 23 : 3, width: 22, height: 22, borderRadius: "50%", background: "#fff", transition: "left 0.2s" }} />
-              </div>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: "#e5e7eb" }}>{opt.label}</div>
-                <div style={{ fontSize: 12, color: "#6b7280" }}>{opt.desc}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <button
-          onClick={startQuiz}
-          style={{ width: "100%", marginTop: 28, padding: "16px", borderRadius: 14, border: "none", background: "linear-gradient(135deg,#6366f1,#8b5cf6)", color: "#fff", fontSize: 17, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", boxShadow: "0 4px 20px rgba(99,102,241,0.4)", transition: "all 0.2s", animation: "fadeIn 0.5s ease 0.2s both" }}
-          onMouseEnter={e => { const el = e.currentTarget as HTMLButtonElement; el.style.transform = "translateY(-2px)"; el.style.boxShadow = "0 8px 28px rgba(99,102,241,0.5)"; }}
-          onMouseLeave={e => { const el = e.currentTarget as HTMLButtonElement; el.style.transform = "translateY(0)"; el.style.boxShadow = "0 4px 20px rgba(99,102,241,0.4)"; }}
-        >
-          🚀 Start Quiz
-        </button>
+      <div style={{ minHeight: "70vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ width: 44, height: 44, border: "3px solid #1f2937", borderTop: "3px solid #6366f1", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
       </div>
     );
   }
 
-  // ── PLAYING SCREEN ──
-  if (phase === "playing") {
-    const q = questions[currentIdx];
-    const correctAns = q.answers.find(a => a.isCorrect);
-    const progress = ((currentIdx + 1) / questions.length) * 100;
-
+  if (!quiz) {
     return (
-      <div style={{ padding: "36px 40px", maxWidth: 720, margin: "0 auto", fontFamily: "'Inter', sans-serif" }}>
-        <style>{spin}{fadeIn}{pop}{shake}</style>
-
-        {/* Top bar */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-          <button onClick={() => setPhase("options")} style={{ background: "none", border: "none", color: "#6b7280", cursor: "pointer", fontSize: 14, fontFamily: "'Inter', sans-serif" }}>✕ Quit</button>
-          <span style={{ fontSize: 14, fontWeight: 600, color: "#9ca3af" }}>
-            {currentIdx + 1} <span style={{ color: "#4b5563" }}>/ {questions.length}</span>
-          </span>
-          <span style={{ fontSize: 14, fontWeight: 700, color: "#10b981" }}>✓ {correctCount}</span>
-        </div>
-
-        {/* Progress bar */}
-        <div style={{ height: 6, background: "#1f2937", borderRadius: 99, marginBottom: 28, overflow: "hidden" }}>
-          <div style={{ height: "100%", width: `${progress}%`, background: "linear-gradient(90deg,#6366f1,#8b5cf6)", borderRadius: 99, transition: "width 0.4s ease" }} />
-        </div>
-
-        {/* Question */}
-        <div style={{ background: "#0f1420", border: "1px solid #1f2937", borderRadius: 20, padding: "28px 32px", marginBottom: 20, animation: "fadeIn 0.3s ease" }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#6366f1", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.08em" }}>Question {currentIdx + 1}</div>
-          <p style={{ fontSize: 18, fontWeight: 600, color: "#e5e7eb", margin: 0, lineHeight: 1.5 }}>{q.prompt}</p>
-        </div>
-
-        {/* Answers */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {q.answers.map(a => {
-            const isSelected = selected === a.id;
-            const isCorrect = a.isCorrect;
-            let bg = "#0f1420";
-            let border = "#1f2937";
-            let color = "#e5e7eb";
-            let glow = "none";
-
-            if (answered) {
-              if (isCorrect) { bg = "#10b98115"; border = "#10b981"; color = "#6ee7b7"; glow = "0 0 20px rgba(16,185,129,0.2)"; }
-              else if (isSelected && !isCorrect) { bg = "#7f1d1d20"; border = "#ef4444"; color = "#fca5a5"; }
-              else { bg = "#0f1420"; border = "#111827"; color = "#4b5563"; }
-            }
-
-            return (
-              <button
-                key={a.id}
-                onClick={() => handleAnswer(a.id)}
-                disabled={answered}
-                style={{
-                  width: "100%", padding: "14px 18px", borderRadius: 12, border: `1px solid ${border}`,
-                  background: bg, color, fontSize: 15, fontWeight: 500, cursor: answered ? "default" : "pointer",
-                  textAlign: "left", fontFamily: "'Inter', sans-serif", transition: "all 0.2s",
-                  boxShadow: glow,
-                  animation: answered && isSelected && !isCorrect ? "shake 0.4s ease" : undefined,
-                }}
-                onMouseEnter={e => { if (!answered) { (e.currentTarget as HTMLButtonElement).style.borderColor = "#6366f1"; (e.currentTarget as HTMLButtonElement).style.background = "#6366f110"; }}}
-                onMouseLeave={e => { if (!answered) { (e.currentTarget as HTMLButtonElement).style.borderColor = "#1f2937"; (e.currentTarget as HTMLButtonElement).style.background = "#0f1420"; }}}
-              >
-                <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  {answered && isCorrect && <span>✓</span>}
-                  {answered && isSelected && !isCorrect && <span>✗</span>}
-                  {a.text}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Next button */}
-        {answered && (
-          <button
-            onClick={handleNext}
-            style={{ width: "100%", marginTop: 20, padding: "15px", borderRadius: 14, border: "none", background: "linear-gradient(135deg,#6366f1,#8b5cf6)", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", animation: "fadeIn 0.3s ease", boxShadow: "0 4px 16px rgba(99,102,241,0.35)" }}
-          >
-            {currentIdx + 1 >= questions.length ? "🏁 See Results" : "Next Question →"}
-          </button>
-        )}
+      <div style={{ padding: "80px 24px", textAlign: "center", color: "#9ca3af" }}>
+        <h2>Quiz not found</h2>
+        <Link href="/library" style={{ color: "#6366f1", marginTop: 12, display: "inline-block" }}>
+          ← Back to Library
+        </Link>
       </div>
     );
   }
 
-  // ── RESULTS SCREEN ──
-  const score = Math.round((correctCount / questions.length) * 100);
-  const duration = Math.round((Date.now() - startTime) / 1000);
-  const wrong = questions.length - correctCount;
-  const emoji = score >= 80 ? "🏆" : score >= 60 ? "👍" : score >= 40 ? "📚" : "💪";
-  const scoreColor = score >= 80 ? "#10b981" : score >= 60 ? "#f59e0b" : score >= 40 ? "#6366f1" : "#ef4444";
+  const currentQ = activeQuestions[currentIndex];
+  const progressPct = activeQuestions.length > 0 ? ((currentIndex + 1) / activeQuestions.length) * 100 : 0;
+  const gradeInfo = calculateGrade(
+    activeQuestions.length > 0 ? Math.round((correctCount / activeQuestions.length) * 100) : 0
+  );
 
   return (
-    <div style={{ padding: "36px 40px", maxWidth: 720, margin: "0 auto", fontFamily: "'Inter', sans-serif" }}>
-      <style>{spin}{fadeIn}{pop}</style>
+    <div style={{ padding: "36px 20px 80px", maxWidth: 840, margin: "0 auto", fontFamily: "'Inter', sans-serif" }}>
+      <style>{`
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          20%, 60% { transform: translateX(-6px); }
+          40%, 80% { transform: translateX(6px); }
+        }
+      `}</style>
 
-      {/* Score card */}
-      <div style={{ textAlign: "center", marginBottom: 36, animation: "fadeIn 0.5s ease" }}>
-        <div style={{ fontSize: 64, marginBottom: 8, animation: "pop 0.5s ease" }}>{emoji}</div>
-        <h1 style={{ fontSize: 26, fontWeight: 800, color: "#fff", margin: "0 0 4px" }}>
-          {score >= 80 ? "Excellent!" : score >= 60 ? "Good Job!" : score >= 40 ? "Keep Practicing!" : "Don't Give Up!"}
-        </h1>
-        <p style={{ color: "#9ca3af", fontSize: 15, margin: 0 }}>{quiz.title}</p>
-      </div>
+      {/* ── PHASE 1: OPTIONS / LOBBY ── */}
+      {phase === "options" && (
+        <div>
+          {/* Header Back */}
+          <Link
+            href="/library"
+            style={{
+              color: "#9ca3af",
+              textDecoration: "none",
+              fontSize: 14,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              marginBottom: 20,
+            }}
+          >
+            ← {t("common.back") || "Back"} to Library
+          </Link>
 
-      {/* Big score */}
-      <div style={{ background: "linear-gradient(135deg, #0f1420, #111827)", border: `2px solid ${scoreColor}40`, borderRadius: 24, padding: "32px", textAlign: "center", marginBottom: 24, animation: "fadeIn 0.5s ease 0.1s both" }}>
-        <div style={{ fontSize: 72, fontWeight: 900, color: scoreColor, lineHeight: 1, letterSpacing: "-2px" }}>{score}%</div>
-        <div style={{ color: "#9ca3af", fontSize: 15, marginTop: 6 }}>Final Score</div>
-      </div>
+          {/* Quiz Card Banner */}
+          <div
+            style={{
+              background: "linear-gradient(135deg, #111827 0%, #161c30 100%)",
+              border: "1px solid rgba(255, 255, 255, 0.08)",
+              borderRadius: 24,
+              padding: "36px 32px",
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.4)",
+              marginBottom: 28,
+            }}
+          >
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(99, 102, 241, 0.15)", border: "1px solid rgba(99, 102, 241, 0.3)", borderRadius: 100, padding: "4px 14px", fontSize: 12, fontWeight: 700, color: "#a5b4fc", textTransform: "uppercase", marginBottom: 16 }}>
+              <span>📚</span>
+              <span>{quiz.category || "General"}</span>
+            </div>
 
-      {/* Stats row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 28, animation: "fadeIn 0.5s ease 0.2s both" }}>
-        {[
-          { label: "Correct", value: correctCount, color: "#10b981", icon: "✓" },
-          { label: "Wrong", value: wrong, color: "#ef4444", icon: "✗" },
-          { label: "Time", value: duration < 60 ? `${duration}s` : `${Math.floor(duration / 60)}m ${duration % 60}s`, color: "#6366f1", icon: "⏱" },
-        ].map(s => (
-          <div key={s.label} style={{ background: "#0f1420", border: "1px solid #1f2937", borderRadius: 16, padding: "18px", textAlign: "center" }}>
-            <div style={{ fontSize: 24, fontWeight: 800, color: s.color }}>{s.value}</div>
-            <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>{s.icon} {s.label}</div>
+            <h1 style={{ fontSize: 32, fontWeight: 800, color: "#ffffff", letterSpacing: "-0.6px", margin: "0 0 12px 0" }}>
+              {quiz.title}
+            </h1>
+
+            <div style={{ display: "flex", gap: 16, color: "#9ca3af", fontSize: 14, flexWrap: "wrap" }}>
+              <span>❓ {quiz.questionsList?.length || quiz.questions || 0} Questions</span>
+              <span>🃏 {quiz.flashcards?.length || 0} Flashcards</span>
+              <span>📈 {quiz.attempts?.length || 0} Attempts</span>
+            </div>
           </div>
-        ))}
-      </div>
 
-      {/* Wrong questions breakdown */}
-      {wrongAnswered.length > 0 && (
-        <div style={{ marginBottom: 28, animation: "fadeIn 0.5s ease 0.3s both" }}>
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: "#fff", margin: "0 0 14px" }}>❌ Missed Questions ({wrong})</h2>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: 320, overflowY: "auto" }}>
-            {wrongAnswered.map((w, i) => (
-              <div key={i} style={{ background: "#0f1420", border: "1px solid #7f1d1d50", borderRadius: 12, padding: "14px 16px" }}>
-                <p style={{ fontSize: 13, color: "#e5e7eb", margin: "0 0 8px", fontWeight: 600 }}>{w.prompt}</p>
-                <div style={{ fontSize: 12, color: "#f87171", marginBottom: 4 }}>Your answer: {w.selectedTexts.join(", ")}</div>
-                <div style={{ fontSize: 12, color: "#6ee7b7" }}>Correct: {w.correctTexts.join(", ")}</div>
+          {/* Practice Modes Config */}
+          <div
+            style={{
+              background: "#0d111e",
+              border: "1px solid rgba(255, 255, 255, 0.08)",
+              borderRadius: 20,
+              padding: "24px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 16,
+              marginBottom: 28,
+            }}
+          >
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: "#ffffff", margin: "0 0 4px 0" }}>
+              Study Configuration
+            </h3>
+
+            {/* Shuffle Toggle */}
+            <div
+              onClick={() => setShuffleQuestions(!shuffleQuestions)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "12px 16px",
+                background: "rgba(255, 255, 255, 0.02)",
+                borderRadius: 12,
+                cursor: "pointer",
+              }}
+            >
+              <div>
+                <div style={{ color: "#ffffff", fontWeight: 600, fontSize: 14 }}>🔀 Shuffle Questions</div>
+                <div style={{ color: "#9ca3af", fontSize: 12 }}>Randomize question order each attempt</div>
               </div>
-            ))}
+              <input type="checkbox" checked={shuffleQuestions} onChange={() => {}} style={{ accentColor: "#6366f1", width: 18, height: 18 }} />
+            </div>
+
+            {/* Timed Mode Toggle */}
+            <div
+              onClick={() => setTimedMode(!timedMode)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "12px 16px",
+                background: "rgba(255, 255, 255, 0.02)",
+                borderRadius: 12,
+                cursor: "pointer",
+              }}
+            >
+              <div>
+                <div style={{ color: "#ffffff", fontWeight: 600, fontSize: 14 }}>⏱️ Timed Mode</div>
+                <div style={{ color: "#9ca3af", fontSize: 12 }}>30 seconds countdown per question</div>
+              </div>
+              <input type="checkbox" checked={timedMode} onChange={() => {}} style={{ accentColor: "#6366f1", width: 18, height: 18 }} />
+            </div>
+
+            {/* Question Range Selection */}
+            <div style={{ padding: "12px 16px", background: "rgba(255, 255, 255, 0.02)", borderRadius: 12 }}>
+              <div style={{ color: "#ffffff", fontWeight: 600, fontSize: 14, marginBottom: 8 }}>
+                🔢 Question Range
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 13, color: "#9ca3af" }}>From</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={quiz.questionsList?.length || 1}
+                  value={rangeStart}
+                  onChange={(e) => setRangeStart(parseInt(e.target.value) || 1)}
+                  style={{ width: 60, background: "rgba(255, 255, 255, 0.06)", border: "1px solid rgba(255, 255, 255, 0.1)", borderRadius: 8, padding: "6px 8px", color: "#fff", textAlign: "center" }}
+                />
+                <span style={{ fontSize: 13, color: "#9ca3af" }}>To</span>
+                <input
+                  type="number"
+                  min={rangeStart}
+                  max={quiz.questionsList?.length || 1}
+                  value={rangeEnd}
+                  onChange={(e) => setRangeEnd(parseInt(e.target.value) || (quiz.questionsList?.length || 1))}
+                  style={{ width: 60, background: "rgba(255, 255, 255, 0.06)", border: "1px solid rgba(255, 255, 255, 0.1)", borderRadius: 8, padding: "6px 8px", color: "#fff", textAlign: "center" }}
+                />
+                <span style={{ fontSize: 12, color: "#6b7280" }}>(of {quiz.questionsList?.length || 0} total)</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+            <button
+              onClick={() => startQuiz(false)}
+              style={{
+                flex: 2,
+                minWidth: 200,
+                background: "linear-gradient(135deg, #6366f1, #4f46e5)",
+                border: "none",
+                borderRadius: 16,
+                padding: "16px 28px",
+                color: "#ffffff",
+                fontSize: 16,
+                fontWeight: 800,
+                cursor: "pointer",
+                boxShadow: "0 8px 24px rgba(99, 102, 241, 0.4)",
+              }}
+            >
+              🚀 Start Practice Quiz
+            </button>
+
+            {quiz.wrongQuestions && quiz.wrongQuestions.length > 0 && (
+              <button
+                onClick={() => startQuiz(true)}
+                style={{
+                  flex: 1,
+                  minWidth: 180,
+                  background: "rgba(239, 68, 68, 0.15)",
+                  border: "1px solid rgba(239, 68, 68, 0.3)",
+                  borderRadius: 16,
+                  padding: "16px 20px",
+                  color: "#f87171",
+                  fontSize: 15,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                ⚠️ Wrong Only ({quiz.wrongQuestions.length})
+              </button>
+            )}
+
+            {quiz.flashcards && quiz.flashcards.length > 0 && (
+              <Link
+                href={`/flashcards/${quiz.id}`}
+                style={{
+                  flex: 1,
+                  minWidth: 160,
+                  background: "rgba(255, 255, 255, 0.05)",
+                  border: "1px solid rgba(255, 255, 255, 0.12)",
+                  borderRadius: 16,
+                  padding: "16px 20px",
+                  color: "#ffffff",
+                  fontSize: 15,
+                  fontWeight: 700,
+                  textDecoration: "none",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                }}
+              >
+                <span>🃏 Flashcards</span>
+              </Link>
+            )}
           </div>
         </div>
       )}
 
-      {/* Actions */}
-      <div style={{ display: "flex", gap: 12, animation: "fadeIn 0.5s ease 0.4s both" }}>
-        <button onClick={startQuiz} style={{ flex: 1, padding: "13px", borderRadius: 12, border: "none", background: "linear-gradient(135deg,#6366f1,#8b5cf6)", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-          🔄 Try Again
-        </button>
-        <Link href="/library" style={{ flex: 1, padding: "13px", borderRadius: 12, border: "1px solid #1f2937", background: "#0f1420", color: "#9ca3af", fontSize: 14, fontWeight: 600, textDecoration: "none", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          📚 Library
-        </Link>
-      </div>
+      {/* ── PHASE 2: IN-QUIZ RUNNER ── */}
+      {phase === "playing" && currentQ && (
+        <div>
+          {/* Top Progress & Header */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#a5b4fc" }}>
+              Question {currentIndex + 1} of {activeQuestions.length}
+            </span>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {timedMode && (
+                <div
+                  style={{
+                    background: timeLeft <= 5 ? "rgba(239, 68, 68, 0.2)" : "rgba(99, 102, 241, 0.15)",
+                    border: `1px solid ${timeLeft <= 5 ? "#ef4444" : "#6366f1"}40`,
+                    borderRadius: 99,
+                    padding: "4px 12px",
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: timeLeft <= 5 ? "#f87171" : "#a5b4fc",
+                  }}
+                >
+                  ⏱️ {timeLeft}s
+                </div>
+              )}
+
+              <button
+                onClick={() => toggleStarQuestion(currentQ.id)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  fontSize: 20,
+                  cursor: "pointer",
+                }}
+              >
+                {starredQuestionIds.has(currentQ.id) ? "⭐" : "☆"}
+              </button>
+            </div>
+          </div>
+
+          {/* Progress Bar */}
+          <div style={{ height: 6, background: "rgba(255, 255, 255, 0.08)", borderRadius: 99, overflow: "hidden", marginBottom: 28 }}>
+            <div style={{ height: "100%", width: `${progressPct}%`, background: "linear-gradient(90deg, #6366f1, #34d399)", transition: "width 0.3s ease" }} />
+          </div>
+
+          {/* Question Card */}
+          <div
+            style={{
+              background: "#0d111d",
+              border: "1px solid rgba(255, 255, 255, 0.08)",
+              borderRadius: 24,
+              padding: "32px",
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.5)",
+              animation: shakeCard ? "shake 0.4s ease" : "none",
+              marginBottom: 24,
+            }}
+          >
+            <h2 style={{ fontSize: 20, fontWeight: 700, color: "#ffffff", lineHeight: 1.5, margin: "0 0 24px 0" }}>
+              {renderFormattedText(currentQ.question || currentQ.prompt || "")}
+            </h2>
+
+            {/* Answer Choices */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {(currentQ.answers || []).map((ans, aIdx) => {
+                const isSelected = selectedAnswerId === ans.id;
+                const isCorrect = ans.isCorrect;
+                const letter = ["A", "B", "C", "D", "E"][aIdx] || `${aIdx + 1}`;
+
+                let cardBg = "rgba(255, 255, 255, 0.03)";
+                let borderColor = "rgba(255, 255, 255, 0.08)";
+                let badgeBg = "rgba(255, 255, 255, 0.08)";
+                let badgeColor = "#9ca3af";
+
+                if (isAnswered) {
+                  if (isCorrect) {
+                    cardBg = "rgba(16, 185, 129, 0.15)";
+                    borderColor = "#10b981";
+                    badgeBg = "#10b981";
+                    badgeColor = "#ffffff";
+                  } else if (isSelected && !isCorrect) {
+                    cardBg = "rgba(239, 68, 68, 0.15)";
+                    borderColor = "#ef4444";
+                    badgeBg = "#ef4444";
+                    badgeColor = "#ffffff";
+                  }
+                }
+
+                return (
+                  <button
+                    key={ans.id || aIdx}
+                    type="button"
+                    disabled={isAnswered}
+                    onClick={() => handleAnswer(ans.id || `a_${aIdx}`)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 14,
+                      padding: "16px 18px",
+                      borderRadius: 16,
+                      background: cardBg,
+                      border: `1px solid ${borderColor}`,
+                      cursor: isAnswered ? "default" : "pointer",
+                      textAlign: "left",
+                      color: "#ffffff",
+                      transition: "all 0.15s ease",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isAnswered) {
+                        e.currentTarget.style.borderColor = "#6366f1";
+                        e.currentTarget.style.background = "rgba(99, 102, 241, 0.08)";
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isAnswered) {
+                        e.currentTarget.style.borderColor = borderColor;
+                        e.currentTarget.style.background = cardBg;
+                      }
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 10,
+                        background: badgeBg,
+                        color: badgeColor,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontWeight: 800,
+                        fontSize: 14,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {isAnswered && isCorrect ? "✓" : isAnswered && isSelected ? "✕" : letter}
+                    </div>
+                    <span style={{ fontSize: 15, fontWeight: 500, lineHeight: 1.4, flex: 1 }}>
+                      {ans.text}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Explanation Section */}
+            {isAnswered && currentQ.explanation && (
+              <div
+                style={{
+                  marginTop: 24,
+                  padding: "18px 20px",
+                  background: "rgba(99, 102, 241, 0.08)",
+                  border: "1px solid rgba(99, 102, 241, 0.2)",
+                  borderRadius: 16,
+                }}
+              >
+                <div style={{ color: "#a5b4fc", fontWeight: 700, fontSize: 13, marginBottom: 6 }}>
+                  💡 Explanation
+                </div>
+                <div style={{ color: "#d1d5db", fontSize: 14, lineHeight: 1.5 }}>
+                  {renderFormattedText(currentQ.explanation)}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Next / Submit Button */}
+          {isAnswered && (
+            <button
+              onClick={handleNextQuestion}
+              style={{
+                width: "100%",
+                background: "linear-gradient(135deg, #6366f1, #4f46e5)",
+                border: "none",
+                borderRadius: 16,
+                padding: "16px 28px",
+                color: "#ffffff",
+                fontSize: 16,
+                fontWeight: 800,
+                cursor: "pointer",
+                boxShadow: "0 8px 24px rgba(99, 102, 241, 0.4)",
+              }}
+            >
+              {currentIndex + 1 < activeQuestions.length ? "Next Question →" : "View Results 🎉"}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ── PHASE 3: RESULTS SCREEN ── */}
+      {phase === "results" && (
+        <div style={{ textAlign: "center" }}>
+          {/* Circular Score & Grade */}
+          <div
+            style={{
+              background: "#0d111d",
+              border: "1px solid rgba(255, 255, 255, 0.08)",
+              borderRadius: 28,
+              padding: "44px 32px",
+              boxShadow: "0 24px 64px rgba(0, 0, 0, 0.6)",
+              marginBottom: 32,
+            }}
+          >
+            <div
+              style={{
+                width: 100,
+                height: 100,
+                borderRadius: "50%",
+                background: `radial-gradient(circle, ${gradeInfo.color}25, transparent 70%)`,
+                border: `3px solid ${gradeInfo.color}`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 44,
+                fontWeight: 900,
+                color: gradeInfo.color,
+                margin: "0 auto 20px",
+                boxShadow: `0 8px 32px ${gradeInfo.color}40`,
+              }}
+            >
+              {gradeInfo.letter}
+            </div>
+
+            <h2 style={{ fontSize: 28, fontWeight: 800, color: "#ffffff", margin: "0 0 6px 0" }}>
+              {Math.round((correctCount / activeQuestions.length) * 100)}% Accuracy
+            </h2>
+            <p style={{ color: "#9ca3af", fontSize: 15, margin: "0 0 28px 0" }}>
+              {gradeInfo.label}
+            </p>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+              <div style={{ background: "rgba(255, 255, 255, 0.03)", borderRadius: 14, padding: "14px 10px" }}>
+                <div style={{ fontSize: 22, fontWeight: 800, color: "#34d399" }}>{correctCount}</div>
+                <div style={{ fontSize: 12, color: "#9ca3af" }}>Correct</div>
+              </div>
+              <div style={{ background: "rgba(255, 255, 255, 0.03)", borderRadius: 14, padding: "14px 10px" }}>
+                <div style={{ fontSize: 22, fontWeight: 800, color: "#ef4444" }}>{wrongList.length}</div>
+                <div style={{ fontSize: 12, color: "#9ca3af" }}>Wrong</div>
+              </div>
+              <div style={{ background: "rgba(255, 255, 255, 0.03)", borderRadius: 14, padding: "14px 10px" }}>
+                <div style={{ fontSize: 22, fontWeight: 800, color: "#60a5fa" }}>{elapsedSeconds}s</div>
+                <div style={{ fontSize: 12, color: "#9ca3af" }}>Time Spent</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 40 }}>
+            <button
+              onClick={() => startQuiz(false)}
+              style={{
+                flex: 1,
+                minWidth: 160,
+                background: "linear-gradient(135deg, #6366f1, #4f46e5)",
+                border: "none",
+                borderRadius: 16,
+                padding: "16px",
+                color: "#ffffff",
+                fontSize: 15,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              🔄 Retake Quiz
+            </button>
+
+            {wrongList.length > 0 && (
+              <button
+                onClick={() => startQuiz(true)}
+                style={{
+                  flex: 1,
+                  minWidth: 180,
+                  background: "rgba(239, 68, 68, 0.15)",
+                  border: "1px solid rgba(239, 68, 68, 0.3)",
+                  borderRadius: 16,
+                  padding: "16px",
+                  color: "#f87171",
+                  fontSize: 15,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                ⚠️ Practice Wrong Only ({wrongList.length})
+              </button>
+            )}
+
+            <button
+              onClick={() => setPhase("options")}
+              style={{
+                flex: 1,
+                minWidth: 140,
+                background: "rgba(255, 255, 255, 0.05)",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+                borderRadius: 16,
+                padding: "16px",
+                color: "#ffffff",
+                fontSize: 15,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              📚 Quiz Options
+            </button>
+          </div>
+
+          {/* Detailed Question Review List */}
+          {wrongList.length > 0 && (
+            <div style={{ textAlign: "left" }}>
+              <h3 style={{ fontSize: 18, fontWeight: 700, color: "#ffffff", marginBottom: 16 }}>
+                Questions to Review
+              </h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {wrongList.map((w, idx) => (
+                  <div
+                    key={w.id || idx}
+                    style={{
+                      background: "#0d111d",
+                      border: "1px solid rgba(239, 68, 68, 0.2)",
+                      borderRadius: 18,
+                      padding: "20px",
+                    }}
+                  >
+                    <div style={{ color: "#ffffff", fontWeight: 600, fontSize: 15, marginBottom: 12 }}>
+                      {renderFormattedText(w.question || w.prompt || "")}
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13 }}>
+                      <div style={{ color: "#ef4444" }}>
+                        <strong>Your answer:</strong> {w.selectedTexts?.join(", ") || "None"}
+                      </div>
+                      <div style={{ color: "#34d399" }}>
+                        <strong>Correct answer:</strong> {w.correctTexts?.join(", ")}
+                      </div>
+                    </div>
+                    {w.explanation && (
+                      <div style={{ marginTop: 10, fontSize: 13, color: "#9ca3af", background: "rgba(255, 255, 255, 0.02)", padding: "10px 12px", borderRadius: 10 }}>
+                        {renderFormattedText(w.explanation)}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

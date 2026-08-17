@@ -1,197 +1,501 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { useAuthStore } from "@/store/auth";
+import { useToast } from "@/components/ui/ToastPill";
+import { useTranslation } from "@/lib/i18n";
 import { fetchQuizzes, deleteQuiz } from "@/lib/api";
-import type { Quiz } from "@/lib/api";
+import { getLocalItem, setLocalItem, SAMPLE_QUIZ } from "@/lib/storage";
+import { deduplicateUserQuizzes, QuizRecord } from "@/lib/quizDeduplication";
+import { isCardDue } from "@/lib/sm2";
 
-const spin = `@keyframes spin { to { transform: rotate(360deg); } }`;
-const fadeIn = `@keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }`;
+function getTimeGroup(timestamp: number | string | undefined): "This week" | "Last week" | "Older" {
+  if (!timestamp) return "Older";
+  const t = typeof timestamp === "number" ? timestamp : new Date(timestamp).getTime();
+  if (isNaN(t)) return "Older";
 
-function Spinner() {
-  return (
-    <div style={{ minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
-      <style>{spin}</style>
-      <div style={{ width: 44, height: 44, border: "3px solid #1f2937", borderTop: "3px solid #6366f1", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-      <span style={{ color: "#9ca3af", fontSize: 14 }}>Loading library…</span>
-    </div>
-  );
-}
+  const diffMs = Date.now() - t;
+  const days = diffMs / (1000 * 60 * 60 * 24);
 
-function ProgressBar({ pct, color = "#6366f1" }: { pct: number; color?: string }) {
-  return (
-    <div style={{ height: 5, background: "#1f2937", borderRadius: 99, overflow: "hidden" }}>
-      <div style={{ height: "100%", width: `${Math.min(100, pct)}%`, background: color, borderRadius: 99, transition: "width 0.6s ease" }} />
-    </div>
-  );
+  if (days <= 7) return "This week";
+  if (days <= 14) return "Last week";
+  return "Older";
 }
 
 export default function LibraryPage() {
   const { user } = useAuthStore();
-  const [quizzes, setQuizzes] = useState<Quiz[]>([]);
+  const { showToast } = useToast();
+  const { t } = useTranslation();
+
+  const [quizzes, setQuizzes] = useState<QuizRecord[]>([]);
+  const [activeTab, setActiveTab] = useState<"quizzes" | "flashcards">("quizzes");
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"all" | "inprogress" | "completed">("all");
-  const [deleting, setDeleting] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<Quiz | null>(null);
+  const [activeMenuQuiz, setActiveMenuQuiz] = useState<QuizRecord | null>(null);
 
+  // Load and deduplicate library
   useEffect(() => {
-    if (!user?.uid) return;
-    fetchQuizzes(user.uid).then(({ quizzes: q }) => {
-      setQuizzes(q ?? []);
+    async function loadLibrary() {
+      const local = getLocalItem<QuizRecord[]>("quizzes", [SAMPLE_QUIZ]);
+      let allQuizzes = [...local];
+
+      if (user?.uid) {
+        try {
+          const { quizzes: cloudQuizzes } = await fetchQuizzes(user.uid);
+          for (const cq of cloudQuizzes || []) {
+            if (!allQuizzes.some((l) => l.id === cq.id || l.neonId === cq.id)) {
+              allQuizzes.push(cq as any);
+            }
+          }
+        } catch (e) {
+          console.warn("[Library] Cloud fetch warning:", e);
+        }
+      }
+
+      // Run automatic deduplication
+      const dedup = await deduplicateUserQuizzes(allQuizzes, { currentUserId: user?.uid });
+      setQuizzes(dedup.deduplicatedQuizzes);
+      setLocalItem("quizzes", dedup.deduplicatedQuizzes);
       setLoading(false);
-    });
+    }
+
+    loadLibrary();
   }, [user?.uid]);
 
-  const quizStatus = (q: Quiz) => {
-    if (!q.attempts?.length) return "notstarted";
-    const lastScore = q.attempts[q.attempts.length - 1].score;
-    if (lastScore >= 80) return "completed";
-    return "inprogress";
+  // ── Share Quiz ─────────────────────────────────────────────────────────
+  const handleShareQuiz = (quiz: QuizRecord) => {
+    const shareUrl = `https://scorrapp.com/share/quiz/${quiz.neonId || quiz.id}`;
+    if (typeof navigator !== "undefined") {
+      navigator.clipboard.writeText(shareUrl);
+      showToast("Link copied to clipboard!", { icon: "🔗", color: "#38bdf8" });
+    }
+    setActiveMenuQuiz(null);
   };
 
-  const filtered = useMemo(() => {
-    let list = quizzes;
-    if (search.trim()) list = list.filter(q => q.title.toLowerCase().includes(search.toLowerCase()));
-    if (filter === "inprogress") list = list.filter(q => quizStatus(q) === "inprogress");
-    if (filter === "completed") list = list.filter(q => quizStatus(q) === "completed");
-    return list;
-  }, [quizzes, search, filter]);
+  // ── Delete Quiz ────────────────────────────────────────────────────────
+  const handleDeleteQuiz = async (quiz: QuizRecord) => {
+    const updated = quizzes.filter((q) => q.id !== quiz.id && q.neonId !== quiz.id);
+    setQuizzes(updated);
+    setLocalItem("quizzes", updated);
+    setActiveMenuQuiz(null);
 
-  const handleDelete = async (quiz: Quiz) => {
-    if (!user?.uid) return;
-    setDeleting(quiz.id);
-    await deleteQuiz(user.uid, quiz.id);
-    setQuizzes(prev => prev.filter(q => q.id !== quiz.id));
-    setDeleting(null);
-    setConfirmDelete(null);
+    if (user?.uid && (quiz.neonId || !quiz.id.startsWith("ai_"))) {
+      await deleteQuiz(user.uid, quiz.neonId || quiz.id).catch(() => {});
+    }
+
+    showToast("Quiz removed from library", { icon: "🗑️" });
   };
+
+  const filteredItems = useMemo(() => {
+    return quizzes.filter((q) => {
+      const matchesSearch =
+        (q.title || "").toLowerCase().includes(search.toLowerCase()) ||
+        (q.category || "").toLowerCase().includes(search.toLowerCase());
+
+      if (!matchesSearch) return false;
+
+      if (activeTab === "flashcards") {
+        return Array.isArray(q.flashcards) && q.flashcards.length > 0;
+      }
+      return true;
+    });
+  }, [quizzes, search, activeTab]);
+
+  // Group into chronological sections
+  const groupedSections = useMemo(() => {
+    const groups: { [key in "This week" | "Last week" | "Older"]?: QuizRecord[] } = {
+      "This week": [],
+      "Last week": [],
+      "Older": [],
+    };
+
+    for (const item of filteredItems) {
+      const groupKey = getTimeGroup(item.createdAt || item.updatedAt);
+      groups[groupKey]?.push(item);
+    }
+
+    return Object.entries(groups).filter(([, items]) => items && items.length > 0) as Array<
+      ["This week" | "Last week" | "Older", QuizRecord[]]
+    >;
+  }, [filteredItems]);
 
   return (
-    <div style={{ padding: "32px 40px", maxWidth: 1200, margin: "0 auto", fontFamily: "'Inter', sans-serif" }}>
-      <style>{spin}{fadeIn}</style>
+    <div style={{ padding: "36px 24px 80px", maxWidth: 960, margin: "0 auto", fontFamily: "'Inter', sans-serif" }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 28, flexWrap: "wrap", gap: 16 }}>
+        <div>
+          <h1 style={{ fontSize: 30, fontWeight: 800, color: "#ffffff", letterSpacing: "-0.6px", margin: "0 0 6px 0" }}>
+            📚 {t("tabs.library") || "Library"}
+          </h1>
+          <p style={{ color: "#9ca3af", fontSize: 14, margin: 0 }}>
+            All your AI-generated quizzes, sets, and flashcards in one place
+          </p>
+        </div>
 
-      <div style={{ marginBottom: 32, animation: "fadeIn 0.4s ease" }}>
-        <h1 style={{ fontSize: 28, fontWeight: 800, color: "#fff", margin: "0 0 6px", letterSpacing: "-0.5px" }}>My Library</h1>
-        <p style={{ color: "#9ca3af", fontSize: 14, margin: 0 }}>All your quizzes in one place</p>
+        <Link
+          href="/quiz/create"
+          style={{
+            background: "linear-gradient(135deg, #6366f1, #4f46e5)",
+            border: "none",
+            borderRadius: 14,
+            padding: "12px 22px",
+            color: "#ffffff",
+            fontSize: 14,
+            fontWeight: 700,
+            textDecoration: "none",
+            boxShadow: "0 8px 24px rgba(99, 102, 241, 0.35)",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <span>+</span>
+          <span>Create New</span>
+        </Link>
       </div>
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 28, flexWrap: "wrap", alignItems: "center" }}>
-        <div style={{ flex: 1, minWidth: 240, position: "relative" }}>
-          <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#4b5563", fontSize: 16 }}>🔍</span>
+      {/* Tabs & Search Row */}
+      <div style={{ display: "flex", gap: 16, marginBottom: 28, flexWrap: "wrap", alignItems: "center" }}>
+        {/* Search */}
+        <div style={{ flex: 1, minWidth: 260 }}>
           <input
+            type="text"
+            placeholder={t("home.search_library_placeholder") || "Search your quizzes & decks..."}
             value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search quizzes…"
-            style={{ width: "100%", padding: "11px 14px 11px 42px", background: "#0f1420", border: "1px solid #1f2937", borderRadius: 12, color: "#e5e7eb", fontSize: 14, outline: "none", fontFamily: "'Inter', sans-serif", boxSizing: "border-box" }}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{
+              width: "100%",
+              background: "#0d111d",
+              border: "1px solid rgba(255, 255, 255, 0.08)",
+              borderRadius: 14,
+              padding: "12px 18px",
+              color: "#ffffff",
+              fontSize: 14,
+              outline: "none",
+              boxSizing: "border-box",
+            }}
           />
         </div>
-        <div style={{ display: "flex", gap: 4, background: "#0f1420", border: "1px solid #1f2937", borderRadius: 12, padding: 4 }}>
-          {(["all", "inprogress", "completed"] as const).map(tab => (
-            <button key={tab} onClick={() => setFilter(tab)} style={{ padding: "7px 16px", borderRadius: 9, border: "none", cursor: "pointer", background: filter === tab ? "#6366f1" : "transparent", color: filter === tab ? "#fff" : "#9ca3af", fontSize: 13, fontWeight: 600, transition: "all 0.15s", fontFamily: "'Inter', sans-serif" }}>
-              {tab === "all" ? "All" : tab === "inprogress" ? "In Progress" : "Completed"}
-            </button>
-          ))}
+
+        {/* Tab Pills */}
+        <div
+          style={{
+            display: "flex",
+            gap: 6,
+            background: "#0d111d",
+            border: "1px solid rgba(255, 255, 255, 0.08)",
+            borderRadius: 14,
+            padding: 4,
+          }}
+        >
+          <button
+            onClick={() => setActiveTab("quizzes")}
+            style={{
+              padding: "8px 18px",
+              borderRadius: 10,
+              border: "none",
+              background: activeTab === "quizzes" ? "rgba(99, 102, 241, 0.2)" : "transparent",
+              color: activeTab === "quizzes" ? "#ffffff" : "#9ca3af",
+              fontWeight: activeTab === "quizzes" ? 700 : 500,
+              fontSize: 13,
+              cursor: "pointer",
+            }}
+          >
+            Quizzes ({quizzes.length})
+          </button>
+          <button
+            onClick={() => setActiveTab("flashcards")}
+            style={{
+              padding: "8px 18px",
+              borderRadius: 10,
+              border: "none",
+              background: activeTab === "flashcards" ? "rgba(99, 102, 241, 0.2)" : "transparent",
+              color: activeTab === "flashcards" ? "#ffffff" : "#9ca3af",
+              fontWeight: activeTab === "flashcards" ? 700 : 500,
+              fontSize: 13,
+              cursor: "pointer",
+            }}
+          >
+            Flashcards ({quizzes.filter((q) => Array.isArray(q.flashcards) && q.flashcards.length > 0).length})
+          </button>
         </div>
-        <Link href="/quiz/create" style={{ padding: "10px 20px", background: "linear-gradient(135deg,#6366f1,#8b5cf6)", borderRadius: 12, color: "#fff", fontWeight: 600, fontSize: 14, textDecoration: "none", whiteSpace: "nowrap" }}>+ New Quiz</Link>
       </div>
 
-      {loading ? <Spinner /> : (
-        <div style={{ animation: "fadeIn 0.5s ease" }}>
-          {filtered.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "60px 20px" }}>
-              <div style={{ fontSize: 48, marginBottom: 16 }}>🔍</div>
-              <p style={{ color: "#9ca3af", fontSize: 15 }}>
-                {search ? `No quizzes matching "${search}"` : "No quizzes in this category yet."}
-              </p>
-            </div>
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 20 }}>
-              {filtered.map(q => {
-                const total = q.questionsList?.length || 0;
-                const correct = q.uniqueCorrectIds?.length || 0;
-                const pct = total > 0 ? Math.round((correct / total) * 100) : 0;
-                const attempts = q.attempts?.length || 0;
-                const bestScore = attempts > 0 ? Math.max(...q.attempts.map(a => a.score)) : 0;
-                const status = quizStatus(q);
-                const statusColor = status === "completed" ? "#10b981" : status === "inprogress" ? "#f59e0b" : "#6b7280";
-                const statusLabel = status === "completed" ? "Completed" : status === "inprogress" ? "In Progress" : "Not Started";
+      {loading ? (
+        <div style={{ minHeight: "50vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ width: 40, height: 40, border: "3px solid #1f2937", borderTop: "3px solid #6366f1", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+        </div>
+      ) : filteredItems.length === 0 ? (
+        <div
+          style={{
+            textAlign: "center",
+            padding: "80px 24px",
+            background: "#0d111d",
+            border: "1px dashed rgba(255, 255, 255, 0.1)",
+            borderRadius: 24,
+          }}
+        >
+          <div style={{ fontSize: 52, marginBottom: 16 }}>📚</div>
+          <h3 style={{ color: "#ffffff", fontSize: 18, fontWeight: 700, margin: "0 0 8px 0" }}>
+            {search ? "No matches found" : "Your library is empty"}
+          </h3>
+          <p style={{ color: "#9ca3af", fontSize: 14, margin: "0 0 24px 0" }}>
+            {search ? "Try adjusting your search query." : "Generate your first quiz from notes or documents."}
+          </p>
+          <Link
+            href="/quiz/create"
+            style={{
+              display: "inline-block",
+              padding: "12px 28px",
+              background: "linear-gradient(135deg, #6366f1, #4f46e5)",
+              borderRadius: 14,
+              color: "#ffffff",
+              fontWeight: 700,
+              fontSize: 14,
+              textDecoration: "none",
+            }}
+          >
+            + Generate Quiz
+          </Link>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
+          {groupedSections.map(([sectionTitle, sectionItems]) => (
+            <div key={sectionTitle}>
+              <h2
+                style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: "#6b7280",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  margin: "0 0 14px 4px",
+                }}
+              >
+                {sectionTitle}
+              </h2>
 
-                return (
-                  <div key={q.id} style={{ background: "#0f1420", border: "1px solid #1f2937", borderRadius: 18, padding: 20, display: "flex", flexDirection: "column", gap: 12, transition: "border-color 0.2s" }}
-                    onMouseEnter={e => (e.currentTarget.style.borderColor = "#374151")}
-                    onMouseLeave={e => (e.currentTarget.style.borderColor = "#1f2937")}
-                  >
-                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <h3 style={{ fontSize: 15, fontWeight: 700, color: "#e5e7eb", margin: "0 0 6px", overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as any }}>{q.title}</h3>
-                        {q.category && (
-                          <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 99, background: "#6366f115", color: "#a5b4fc", fontSize: 11, fontWeight: 600 }}>{q.category}</span>
-                        )}
-                      </div>
-                      <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 99, background: `${statusColor}20`, color: statusColor, flexShrink: 0 }}>{statusLabel}</span>
-                    </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {sectionItems.map((q) => {
+                  const qCount = q.questionsList?.length || q.questions || 0;
+                  const fCount = q.flashcards?.length || 0;
+                  const dueCount = (q.flashcards || []).filter((c: any) => isCardDue(c)).length;
 
-                    <div style={{ display: "flex", gap: 16 }}>
-                      <div style={{ textAlign: "center" }}>
-                        <div style={{ fontSize: 18, fontWeight: 800, color: "#fff" }}>{total}</div>
-                        <div style={{ fontSize: 11, color: "#6b7280" }}>Questions</div>
-                      </div>
-                      <div style={{ textAlign: "center" }}>
-                        <div style={{ fontSize: 18, fontWeight: 800, color: "#fff" }}>{attempts}</div>
-                        <div style={{ fontSize: 11, color: "#6b7280" }}>Attempts</div>
-                      </div>
-                      {attempts > 0 && (
-                        <div style={{ textAlign: "center" }}>
-                          <div style={{ fontSize: 18, fontWeight: 800, color: bestScore >= 80 ? "#10b981" : bestScore >= 50 ? "#f59e0b" : "#e5e7eb" }}>{bestScore}%</div>
-                          <div style={{ fontSize: 11, color: "#6b7280" }}>Best</div>
+                  return (
+                    <div
+                      key={q.id}
+                      style={{
+                        background: "#0d111d",
+                        border: "1px solid rgba(255, 255, 255, 0.08)",
+                        borderRadius: 18,
+                        padding: "18px 22px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 16,
+                        transition: "all 0.15s ease",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = "rgba(99, 102, 241, 0.4)";
+                        e.currentTarget.style.background = "#111728";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.08)";
+                        e.currentTarget.style.background = "#0d111d";
+                      }}
+                    >
+                      <Link
+                        href={activeTab === "flashcards" ? `/flashcards/${q.id}` : `/quiz/${q.id}`}
+                        style={{ flex: 1, minWidth: 0, textDecoration: "none" }}
+                      >
+                        <div
+                          style={{
+                            fontSize: 16,
+                            fontWeight: 700,
+                            color: "#ffffff",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            marginBottom: 6,
+                          }}
+                        >
+                          {q.title}
                         </div>
-                      )}
-                    </div>
 
-                    <div>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                        <span style={{ fontSize: 12, color: "#6b7280" }}>Mastery</span>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: pct >= 80 ? "#10b981" : "#9ca3af" }}>{pct}%</span>
-                      </div>
-                      <ProgressBar pct={pct} color={pct >= 80 ? "#10b981" : pct >= 50 ? "#f59e0b" : "#6366f1"} />
-                    </div>
+                        {/* Metadata row: single line ellipsis */}
+                        <div
+                          style={{
+                            fontSize: 13,
+                            color: "#9ca3af",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                          }}
+                        >
+                          <span>{qCount} questions</span>
+                          <span>•</span>
+                          <span>{fCount} Flashcards</span>
+                          {dueCount > 0 && (
+                            <>
+                              <span>•</span>
+                              <span style={{ color: "#fbbf24", fontWeight: 600 }}>{dueCount} Due</span>
+                            </>
+                          )}
+                        </div>
+                      </Link>
 
-                    {q.flashcards?.length > 0 && (
-                      <div style={{ fontSize: 12, color: "#6b7280" }}>🃏 {q.flashcards.length} flashcards</div>
-                    )}
-
-                    <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-                      <Link href={`/quiz/${q.id}`} style={{ flex: 1, padding: "8px", borderRadius: 10, textAlign: "center", background: "linear-gradient(135deg,#6366f1,#8b5cf6)", color: "#fff", fontWeight: 600, fontSize: 13, textDecoration: "none" }}>▶ Play</Link>
-                      {q.flashcards?.length > 0 && (
-                        <Link href={`/flashcards/${q.id}`} style={{ flex: 1, padding: "8px", borderRadius: 10, textAlign: "center", background: "#1f2937", color: "#a5b4fc", fontWeight: 600, fontSize: 13, textDecoration: "none" }}>🃏 Cards</Link>
-                      )}
+                      {/* Settings / Options Button */}
                       <button
-                        onClick={() => setConfirmDelete(q)}
-                        style={{ width: 36, height: 36, borderRadius: 10, border: "1px solid #374151", background: "transparent", color: "#6b7280", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, transition: "all 0.15s" }}
-                        onMouseEnter={e => { const el = e.currentTarget as HTMLButtonElement; el.style.background = "#7f1d1d30"; el.style.color = "#f87171"; el.style.borderColor = "#7f1d1d"; }}
-                        onMouseLeave={e => { const el = e.currentTarget as HTMLButtonElement; el.style.background = "transparent"; el.style.color = "#6b7280"; el.style.borderColor = "#374151"; }}
-                      >🗑</button>
+                        onClick={() => setActiveMenuQuiz(q)}
+                        style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: 10,
+                          background: "rgba(255, 255, 255, 0.04)",
+                          border: "1px solid rgba(255, 255, 255, 0.08)",
+                          color: "#9ca3af",
+                          fontSize: 16,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          cursor: "pointer",
+                          flexShrink: 0,
+                        }}
+                      >
+                        ⚙️
+                      </button>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
-          )}
+          ))}
         </div>
       )}
 
-      {confirmDelete && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(4px)" }} onClick={() => setConfirmDelete(null)}>
-          <div style={{ background: "#111827", border: "1px solid #1f2937", borderRadius: 20, padding: 36, maxWidth: 400, width: "90%", textAlign: "center" }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize: 44, marginBottom: 12 }}>⚠️</div>
-            <h3 style={{ color: "#fff", fontSize: 18, fontWeight: 700, margin: "0 0 8px" }}>Delete Quiz?</h3>
-            <p style={{ color: "#9ca3af", fontSize: 14, margin: "0 0 24px" }}>"{confirmDelete.title}" will be permanently deleted. This cannot be undone.</p>
-            <div style={{ display: "flex", gap: 12 }}>
-              <button onClick={() => setConfirmDelete(null)} style={{ flex: 1, padding: "10px", borderRadius: 10, border: "1px solid #374151", background: "transparent", color: "#9ca3af", cursor: "pointer", fontWeight: 600, fontFamily: "'Inter', sans-serif" }}>Cancel</button>
-              <button onClick={() => handleDelete(confirmDelete)} disabled={deleting === confirmDelete.id} style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: "#dc2626", color: "#fff", cursor: "pointer", fontWeight: 600, fontFamily: "'Inter', sans-serif", opacity: deleting === confirmDelete.id ? 0.6 : 1 }}>
-                {deleting === confirmDelete.id ? "Deleting…" : "Delete"}
+      {/* Item Actions Modal */}
+      {activeMenuQuiz && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            background: "rgba(0, 0, 0, 0.7)",
+            backdropFilter: "blur(8px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 24,
+          }}
+          onClick={() => setActiveMenuQuiz(null)}
+        >
+          <div
+            style={{
+              background: "#0f1423",
+              border: "1px solid rgba(255, 255, 255, 0.12)",
+              borderRadius: 24,
+              padding: "28px",
+              maxWidth: 420,
+              width: "100%",
+              boxShadow: "0 24px 64px rgba(0, 0, 0, 0.6)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: "#ffffff", margin: "0 0 6px 0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {activeMenuQuiz.title}
+            </h3>
+            <p style={{ color: "#9ca3af", fontSize: 13, margin: "0 0 20px 0" }}>
+              Choose an action for this quiz
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <Link
+                href={`/quiz/${activeMenuQuiz.id}`}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "14px 16px",
+                  background: "rgba(99, 102, 241, 0.15)",
+                  border: "1px solid rgba(99, 102, 241, 0.3)",
+                  borderRadius: 14,
+                  color: "#ffffff",
+                  textDecoration: "none",
+                  fontWeight: 600,
+                  fontSize: 14,
+                }}
+              >
+                <span>🚀</span>
+                <span>Practice Quiz</span>
+              </Link>
+
+              {activeMenuQuiz.flashcards && activeMenuQuiz.flashcards.length > 0 && (
+                <Link
+                  href={`/flashcards/${activeMenuQuiz.id}`}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    padding: "14px 16px",
+                    background: "rgba(255, 255, 255, 0.04)",
+                    border: "1px solid rgba(255, 255, 255, 0.08)",
+                    borderRadius: 14,
+                    color: "#ffffff",
+                    textDecoration: "none",
+                    fontWeight: 600,
+                    fontSize: 14,
+                  }}
+                >
+                  <span>🃏</span>
+                  <span>Study Flashcards</span>
+                </Link>
+              )}
+
+              <button
+                onClick={() => handleShareQuiz(activeMenuQuiz)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "14px 16px",
+                  background: "rgba(255, 255, 255, 0.04)",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  borderRadius: 14,
+                  color: "#ffffff",
+                  fontWeight: 600,
+                  fontSize: 14,
+                  cursor: "pointer",
+                  textAlign: "left",
+                }}
+              >
+                <span>🔗</span>
+                <span>Copy Share Link</span>
+              </button>
+
+              <button
+                onClick={() => handleDeleteQuiz(activeMenuQuiz)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "14px 16px",
+                  background: "rgba(239, 68, 68, 0.1)",
+                  border: "1px solid rgba(239, 68, 68, 0.25)",
+                  borderRadius: 14,
+                  color: "#f87171",
+                  fontWeight: 600,
+                  fontSize: 14,
+                  cursor: "pointer",
+                  textAlign: "left",
+                  marginTop: 6,
+                }}
+              >
+                <span>🗑️</span>
+                <span>Delete from Library</span>
               </button>
             </div>
           </div>
