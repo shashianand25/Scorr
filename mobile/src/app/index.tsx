@@ -101,6 +101,7 @@ const STEPS = [
 ] as const;
 
 function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true, generationTimeoutMs = 60000, connectionLost = false }: { onCancel?: () => void; documentCharCount?: number; isDark?: boolean; generationTimeoutMs?: number; connectionLost?: boolean }) {
+  const { t } = useTranslation();
   const sway = React.useRef(new Animated.Value(0)).current;
   const blink = React.useRef(new Animated.Value(0.3)).current; // Start at 0.3
   const progress = React.useRef(new Animated.Value(0)).current;
@@ -170,12 +171,32 @@ function AIGeneratingScreen({ onCancel, documentCharCount = 0, isDark = true, ge
     <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
       backgroundColor: isDark ? "#0B0F1E" : "#f4f4f8", alignItems: "center", justifyContent: "center", zIndex: 99999 }}>
 
-      {/* Back / Close button */}
+      {/* Back / Cancel button header */}
       {!!onCancel && (
-        <SafeAreaView style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 10 }}>
-          <Pressable onPress={onCancel} style={{ padding: 24, paddingTop: Platform.OS === 'android' ? 36 : 20, alignSelf: 'flex-start' }}>
-            <Ionicons name="chevron-back" size={28} color={isDark ? "#FFFFFF" : "#0f172a"} />
-          </Pressable>
+        <SafeAreaView style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 999999 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-start", paddingHorizontal: 20, paddingTop: Platform.OS === 'android' ? 24 : 12 }}>
+            <Pressable 
+              onPress={onCancel} 
+              hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+              style={({ pressed }) => [{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+                backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
+                paddingVertical: 8,
+                paddingHorizontal: 14,
+                borderRadius: 20,
+                borderWidth: 1,
+                borderColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)",
+                opacity: pressed ? 0.6 : 1,
+              }]}
+            >
+              <Ionicons name="chevron-back" size={20} color={isDark ? "#FFFFFF" : "#0f172a"} />
+              <Text style={{ fontSize: 14, fontWeight: "600", color: isDark ? "#FFFFFF" : "#0f172a" }}>
+                {t('actions.cancel') || "Cancel"}
+              </Text>
+            </Pressable>
+          </View>
         </SafeAreaView>
       )}
       
@@ -6419,25 +6440,11 @@ export default function HomeScreen() {
                   {item.title}
                 </Text>
                 {isQuiz ? (
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                    <Text style={{ fontSize: 13, color: "#D1D5DB", fontWeight: "500" }}>
-                      {questionCount} {t('actions.questions') || "Questions"}
-                    </Text>
-                    <Text style={{ fontSize: 13, color: "#D1D5DB", fontWeight: "500" }}>
-                      •
-                    </Text>
-                    <Text style={{ fontSize: 13, color: "#D1D5DB", fontWeight: "500" }}>
-                      {cardCount} {t('create_pick.flashcard_title') || "Cards"}
-                    </Text>
-                    <Text style={{ fontSize: 13, color: "#D1D5DB", fontWeight: "500" }}>
-                      •
-                    </Text>
-                    <Text style={{ fontSize: 13, color: "#D1D5DB", fontWeight: "500" }}>
-                      {dueCount} {t('library.due') || "Due"}
-                    </Text>
-                  </View>
+                  <Text style={{ fontSize: 13, color: "#D1D5DB", fontWeight: "500" }} numberOfLines={1} ellipsizeMode="tail">
+                    {`${questionCount} ${t('actions.questions') || "Questions"}  •  ${cardCount} ${t('create_pick.flashcard_title') || "Cards"}  •  ${dueCount} ${t('library.due') || "Due"}`}
+                  </Text>
                 ) : (
-                  <Text style={{ fontSize: 13, color: "#D1D5DB", fontWeight: "500" }}>{subtitle}</Text>
+                  <Text style={{ fontSize: 13, color: "#D1D5DB", fontWeight: "500" }} numberOfLines={1} ellipsizeMode="tail">{subtitle}</Text>
                 )}
               </View>
             </Pressable>
