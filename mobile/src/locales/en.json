@@ -353,6 +353,7 @@
     "keep_waiting": "Keep Waiting",
     "stop_generation": "Cancel Generation",
     "generation_cancelled": "Generation cancelled",
-    "taking_too_long": "Generation is taking longer than expected due to slow connection or large file size. Would you like to try again or cancel?"
+    "taking_too_long": "Generation is taking longer than expected due to slow connection or large file size. Would you like to try again or cancel?",
+    "instant_load": "⚡ Instant load · No AI used"
   }
 }

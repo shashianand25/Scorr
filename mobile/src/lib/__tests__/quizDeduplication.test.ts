@@ -1,6 +1,32 @@
 import { computeQuizFingerprint, normalizeQuizText, buildQuizCanonicalString } from '../quizFingerprint';
 import { chooseCanonicalQuiz, mergeQuizPersonalState, deduplicateUserQuizzes, QuizRecord } from '../quizDeduplication';
-import assert from 'assert';
+interface CustomAssert {
+  (condition: any, msg?: string): void;
+  ok(condition: any, msg?: string): void;
+  strictEqual(actual: any, expected: any, msg?: string): void;
+  notStrictEqual(actual: any, expected: any, msg?: string): void;
+  deepStrictEqual(actual: any, expected: any, msg?: string): void;
+}
+
+const assert: CustomAssert = Object.assign(
+  function (condition: any, msg?: string) {
+    if (!condition) throw new Error(msg || "Assertion failed");
+  },
+  {
+    ok: (condition: any, msg?: string) => {
+      if (!condition) throw new Error(msg || "Assertion failed");
+    },
+    strictEqual: (actual: any, expected: any, msg?: string) => {
+      if (actual !== expected) throw new Error(msg || `Expected ${expected} but got ${actual}`);
+    },
+    notStrictEqual: (actual: any, expected: any, msg?: string) => {
+      if (actual === expected) throw new Error(msg || `Expected values to differ, but both were ${actual}`);
+    },
+    deepStrictEqual: (actual: any, expected: any, msg?: string) => {
+      if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(msg || `Expected ${JSON.stringify(expected)} but got ${JSON.stringify(actual)}`);
+    },
+  }
+);
 
 async function runTests() {
   console.log('--- Starting Quiz Deduplication Test Suite ---');

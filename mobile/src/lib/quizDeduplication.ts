@@ -216,8 +216,8 @@ export async function deduplicateUserQuizzes(
 
   const untouchedQuizzes = quizzes.filter((q) => !targetQuizzes.includes(q));
 
-  // Compute fingerprints for each quiz
-  const fingerprintGroups = new Map<string, QuizRecord[]>();
+  // Compute fingerprints and masterQuizIds for each quiz
+  const groupMap = new Map<string, QuizRecord[]>();
   const unhashableQuizzes: QuizRecord[] = [];
 
   for (const quiz of targetQuizzes) {
@@ -227,19 +227,51 @@ export async function deduplicateUserQuizzes(
     }
 
     try {
+      const masterId = quiz.masterQuizId || quiz.master_quiz_id;
       const fp = await computeQuizFingerprint(quiz);
-      if (!fp) {
+      const key = fp ? `fp_${fp}` : (masterId ? `master_${masterId}` : null);
+
+      if (!key) {
         unhashableQuizzes.push(quiz);
         continue;
       }
 
-      const existing = fingerprintGroups.get(fp) || [];
+      const existing = groupMap.get(key) || [];
       existing.push(quiz);
-      fingerprintGroups.set(fp, existing);
+      groupMap.set(key, existing);
     } catch (err) {
       console.warn(`[QuizDeduplication] Failed to fingerprint quiz ${quiz.id}:`, err);
       unhashableQuizzes.push(quiz);
     }
+  }
+
+  // Cross-merge groups that share the same masterQuizId
+  const finalGroups: QuizRecord[][] = [];
+  const processedKeys = new Set<string>();
+
+  for (const [key, group] of groupMap) {
+    if (processedKeys.has(key)) continue;
+    processedKeys.add(key);
+
+    const mergedGroup = [...group];
+    const groupMasterIds = new Set<string>(
+      group.map((q) => q.masterQuizId || q.master_quiz_id).filter(Boolean) as string[]
+    );
+
+    if (groupMasterIds.size > 0) {
+      for (const [otherKey, otherGroup] of groupMap) {
+        if (processedKeys.has(otherKey)) continue;
+        const otherHasMatchingMaster = otherGroup.some((q) => {
+          const mid = q.masterQuizId || q.master_quiz_id;
+          return mid && groupMasterIds.has(mid);
+        });
+        if (otherHasMatchingMaster) {
+          processedKeys.add(otherKey);
+          mergedGroup.push(...otherGroup);
+        }
+      }
+    }
+    finalGroups.push(mergedGroup);
   }
 
   const deduplicatedQuizzes: QuizRecord[] = [...unhashableQuizzes];
@@ -247,7 +279,7 @@ export async function deduplicateUserQuizzes(
   const neonDeletions: Array<{ quizId: string; neonId: string }> = [];
   let hasChanges = false;
 
-  for (const [, group] of fingerprintGroups) {
+  for (const group of finalGroups) {
     if (group.length === 1) {
       deduplicatedQuizzes.push(group[0]);
     } else {
