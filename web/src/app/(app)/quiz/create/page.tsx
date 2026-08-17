@@ -393,10 +393,12 @@ export default function CreateQuizPage() {
   return (
     <div
       style={{
-        padding: "36px 24px 80px",
+        padding: "20px 16px 80px",
         maxWidth: 860,
         margin: "0 auto",
         fontFamily: "'Inter', sans-serif",
+        boxSizing: "border-box",
+        width: "100%",
       }}
     >
       <AIGenerationModal
@@ -405,19 +407,20 @@ export default function CreateQuizPage() {
         onCancel={handleCancelGeneration}
       />
 
-      <header style={{ marginBottom: 32 }}>
+      <header style={{ marginBottom: 24 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
           <div
             style={{
-              width: 44,
-              height: 44,
-              borderRadius: 14,
+              width: 40,
+              height: 40,
+              borderRadius: 12,
               background: "linear-gradient(135deg, #6366f1, #34d399)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 22,
+              fontSize: 20,
               boxShadow: "0 8px 24px rgba(99, 102, 241, 0.3)",
+              flexShrink: 0,
             }}
           >
             ✨
@@ -425,7 +428,7 @@ export default function CreateQuizPage() {
           <div>
             <h1
               style={{
-                fontSize: 28,
+                fontSize: "clamp(20px, 5vw, 28px)",
                 fontWeight: 800,
                 color: "#ffffff",
                 margin: 0,
@@ -434,7 +437,7 @@ export default function CreateQuizPage() {
             >
               {t("create_menu.ai_generate") || "Generate Quiz & Flashcards"}
             </h1>
-            <p style={{ color: "#9ca3af", fontSize: 14, margin: "4px 0 0" }}>
+            <p style={{ color: "#9ca3af", fontSize: 13, margin: "3px 0 0" }}>
               Upload any PDF, document, slides, or paste your notes to start.
             </p>
           </div>

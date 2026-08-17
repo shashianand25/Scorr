@@ -554,7 +554,7 @@ export default function QuizPlayerPage() {
                     border: `1px solid ${timeLeft <= 5 ? "#ef4444" : "#6366f1"}40`,
                     borderRadius: 99,
                     padding: "4px 12px",
-                    fontSize: 13,
+                    fontSize: 12,
                     fontWeight: 700,
                     color: timeLeft <= 5 ? "#f87171" : "#a5b4fc",
                   }}
@@ -578,7 +578,7 @@ export default function QuizPlayerPage() {
           </div>
 
           {/* Progress Bar */}
-          <div style={{ height: 6, background: "rgba(255, 255, 255, 0.08)", borderRadius: 99, overflow: "hidden", marginBottom: 28 }}>
+          <div style={{ height: 5, background: "rgba(255, 255, 255, 0.08)", borderRadius: 99, overflow: "hidden", marginBottom: 20 }}>
             <div style={{ height: "100%", width: `${progressPct}%`, background: "linear-gradient(90deg, #6366f1, #34d399)", transition: "width 0.3s ease" }} />
           </div>
 
@@ -587,19 +587,20 @@ export default function QuizPlayerPage() {
             style={{
               background: "#0d111d",
               border: "1px solid rgba(255, 255, 255, 0.08)",
-              borderRadius: 24,
-              padding: "32px",
+              borderRadius: 20,
+              padding: "24px 20px",
               boxShadow: "0 20px 60px rgba(0, 0, 0, 0.5)",
               animation: shakeCard ? "shake 0.4s ease" : "none",
-              marginBottom: 24,
+              marginBottom: 20,
+              boxSizing: "border-box",
             }}
           >
-            <h2 style={{ fontSize: 20, fontWeight: 700, color: "#ffffff", lineHeight: 1.5, margin: "0 0 24px 0" }}>
+            <h2 style={{ fontSize: "clamp(16px, 4.5vw, 20px)", fontWeight: 700, color: "#ffffff", lineHeight: 1.5, margin: "0 0 20px 0" }}>
               {renderFormattedText(currentQ.question || currentQ.prompt || "")}
             </h2>
 
             {/* Answer Choices */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {(currentQ.answers || []).map((ans, aIdx) => {
                 const isSelected = selectedAnswerId === ans.id;
                 const isCorrect = ans.isCorrect;

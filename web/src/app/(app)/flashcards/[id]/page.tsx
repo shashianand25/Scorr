@@ -152,7 +152,7 @@ export default function FlashcardsStudyPage() {
   const progressPct = ((currentIndex + 1) / cards.length) * 100;
 
   return (
-    <div style={{ padding: "36px 20px 80px", maxWidth: 720, margin: "0 auto", fontFamily: "'Inter', sans-serif" }}>
+    <div style={{ padding: "20px 16px 40px", maxWidth: 720, margin: "0 auto", fontFamily: "'Inter', sans-serif", boxSizing: "border-box" }}>
       <style>{`
         .flashcard-wrapper {
           perspective: 1000px;
@@ -160,11 +160,14 @@ export default function FlashcardsStudyPage() {
         .flashcard-inner {
           position: relative;
           width: 100%;
-          min-height: 380px;
+          min-height: 280px;
           text-align: center;
           transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
           transform-style: preserve-3d;
           cursor: pointer;
+        }
+        @media (min-width: 640px) {
+          .flashcard-inner { min-height: 360px; }
         }
         .flashcard-inner.flipped {
           transform: rotateY(180deg);
@@ -176,14 +179,14 @@ export default function FlashcardsStudyPage() {
           height: 100%;
           -webkit-backface-visibility: hidden;
           backface-visibility: hidden;
-          border-radius: 28px;
+          border-radius: 24px;
           display: flex;
           flex-direction: column;
           align-items: center;
           justifyContent: center;
-          padding: 40px 32px;
+          padding: 28px 20px;
           box-sizing: border-box;
-          box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+          box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
         }
         .flashcard-front {
           background: linear-gradient(135deg, #111827 0%, #161c30 100%);

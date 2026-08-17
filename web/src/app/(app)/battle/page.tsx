@@ -117,30 +117,40 @@ export default function BattleLobbyPage() {
   };
 
   return (
-    <div style={{ padding: "36px 24px 80px", maxWidth: 960, margin: "0 auto", fontFamily: "'Inter', sans-serif" }}>
+    <div
+      style={{
+        padding: "20px 16px 80px",
+        maxWidth: 960,
+        margin: "0 auto",
+        fontFamily: "'Inter', sans-serif",
+        boxSizing: "border-box",
+        width: "100%",
+      }}
+    >
       {/* Header */}
-      <div style={{ marginBottom: 32 }}>
+      <div style={{ marginBottom: 24 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
           <div
             style={{
-              width: 44,
-              height: 44,
-              borderRadius: 14,
+              width: 40,
+              height: 40,
+              borderRadius: 12,
               background: "linear-gradient(135deg, #f43f5e, #e11d48)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 22,
+              fontSize: 20,
               boxShadow: "0 8px 24px rgba(244, 63, 94, 0.35)",
+              flexShrink: 0,
             }}
           >
             ⚔️
           </div>
           <div>
-            <h1 style={{ fontSize: 28, fontWeight: 800, color: "#ffffff", letterSpacing: "-0.6px", margin: 0 }}>
+            <h1 style={{ fontSize: "clamp(20px, 5vw, 28px)", fontWeight: 800, color: "#ffffff", letterSpacing: "-0.6px", margin: 0 }}>
               {t("battle.title") || "Battle Arena"}
             </h1>
-            <p style={{ color: "#9ca3af", fontSize: 14, margin: "4px 0 0" }}>
+            <p style={{ color: "#9ca3af", fontSize: 13, margin: "3px 0 0" }}>
               {t("battle.subtitle") || "Challenge friends to real-time 1v1 quiz clashes"}
             </p>
           </div>
