@@ -70,6 +70,31 @@ pool.query(`
   )
 `).catch(err => console.error('[Backend] Failed to ensure otp_codes table:', err));
 
+// Ensure master_quizzes table and relations exist
+pool.query(`
+  CREATE TABLE IF NOT EXISTS master_quizzes (
+    id TEXT PRIMARY KEY,
+    content_hash TEXT NOT NULL UNIQUE,
+    generation_version TEXT NOT NULL DEFAULT 'v1',
+    language TEXT NOT NULL DEFAULT 'en',
+    title TEXT NOT NULL,
+    category TEXT DEFAULT 'AI Generated',
+    question_count INTEGER NOT NULL DEFAULT 0,
+    flashcard_count INTEGER NOT NULL DEFAULT 0,
+    source_text TEXT NOT NULL,
+    created_by_user_id TEXT,
+    view_count INTEGER NOT NULL DEFAULT 0,
+    share_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_master_quizzes_hash ON master_quizzes(content_hash);
+  ALTER TABLE mobile_quizzes ADD COLUMN IF NOT EXISTS master_quiz_id TEXT;
+  CREATE INDEX IF NOT EXISTS idx_mobile_quizzes_master_id ON mobile_quizzes(master_quiz_id);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_mobile_quizzes_user_master_unique 
+  ON mobile_quizzes(user_id, master_quiz_id) 
+  WHERE deleted_at IS NULL AND master_quiz_id IS NOT NULL;
+`).catch(err => console.error('[Backend] Failed to ensure master_quizzes table:', err));
+
 // ── AI Usage / Rate Limiting ──────────────────────────────────────────────
 // Called by the mobile app before every AI generation.
 // Increments the user's daily count and returns whether generation is allowed.
@@ -371,16 +396,162 @@ app.get('/api/battle-history', async (req, res) => {
   }
 });
 
-// ── Mobile Quizzes ───────────────────────────────────────────────────────
+// Helper for generating public master quiz IDs
+const generateMasterQuizId = () => 'uq_' + Math.random().toString(36).substring(2, 8) + Date.now().toString(36).substring(4);
+
+// ── Master Quizzes (Canonical Content & AI Cache) ─────────────────────────
+app.post('/api/master-quizzes/cache-check', async (req, res) => {
+  const { contentHash, lang } = req.body;
+  if (!contentHash) return res.status(400).json({ error: 'contentHash required' });
+  try {
+    const result = await pool.query(
+      `SELECT id, title, category, question_count, flashcard_count, source_text, language, created_at
+       FROM master_quizzes 
+       WHERE content_hash = $1`,
+      [contentHash]
+    );
+    if (result.rows.length === 0) {
+      return res.json({ hit: false });
+    }
+    const r = result.rows[0];
+    res.json({
+      hit: true,
+      masterQuiz: {
+        id: r.id,
+        title: r.title,
+        category: r.category,
+        questionCount: r.question_count,
+        flashcardCount: r.flashcard_count,
+        sourceText: r.source_text,
+        language: r.language,
+        createdAt: r.created_at
+      }
+    });
+  } catch (err) {
+    console.error('[Backend] /api/master-quizzes/cache-check error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/master-quizzes', async (req, res) => {
+  const {
+    id,
+    contentHash,
+    generationVersion = 'v1',
+    language = 'en',
+    title,
+    category = 'AI Generated',
+    questionCount = 0,
+    flashcardCount = 0,
+    sourceText,
+    userId
+  } = req.body;
+
+  if (!contentHash || !sourceText || !title) {
+    return res.status(400).json({ error: 'contentHash, title, and sourceText are required' });
+  }
+
+  const masterId = id || generateMasterQuizId();
+
+  try {
+    const insertResult = await pool.query(
+      `INSERT INTO master_quizzes (
+        id, content_hash, generation_version, language, title, category,
+        question_count, flashcard_count, source_text, created_by_user_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      ON CONFLICT (content_hash) DO NOTHING
+      RETURNING *`,
+      [
+        masterId,
+        contentHash,
+        generationVersion,
+        language,
+        title,
+        category,
+        questionCount,
+        flashcardCount,
+        sourceText,
+        userId || null
+      ]
+    );
+
+    let masterRecord;
+    if (insertResult.rows.length > 0) {
+      masterRecord = insertResult.rows[0];
+    } else {
+      // Conflict on concurrent generation: fetch and return existing canonical record
+      const existing = await pool.query(
+        `SELECT * FROM master_quizzes WHERE content_hash = $1`,
+        [contentHash]
+      );
+      masterRecord = existing.rows[0];
+    }
+
+    res.json({
+      masterQuiz: {
+        id: masterRecord.id,
+        title: masterRecord.title,
+        category: masterRecord.category,
+        questionCount: masterRecord.question_count,
+        flashcardCount: masterRecord.flashcard_count,
+        sourceText: masterRecord.source_text,
+        language: masterRecord.language,
+        createdAt: masterRecord.created_at
+      }
+    });
+  } catch (err) {
+    console.error('[Backend] /api/master-quizzes error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Mobile Quizzes & Universal Sharing ────────────────────────────────────
 app.get('/api/share/quiz/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const result = await pool.query(`SELECT id, title, category, question_count, source_text, deleted_at FROM mobile_quizzes WHERE id = $1`, [id]);
-    if (result.rows.length === 0 || result.rows[0].deleted_at) {
+    // 1. Check master_quizzes first (canonical universal quiz)
+    const masterResult = await pool.query(
+      `SELECT id, title, category, question_count, flashcard_count, source_text, language 
+       FROM master_quizzes WHERE id = $1`,
+      [id]
+    );
+    if (masterResult.rows.length > 0) {
+      const r = masterResult.rows[0];
+      pool.query(`UPDATE master_quizzes SET view_count = view_count + 1 WHERE id = $1`, [id]).catch(() => {});
+      return res.json({
+        quiz: {
+          id: r.id,
+          title: r.title,
+          category: r.category,
+          questionCount: r.question_count,
+          flashcardCount: r.flashcard_count,
+          sourceText: r.source_text,
+          language: r.language,
+          isMaster: true
+        }
+      });
+    }
+
+    // 2. Fallback to legacy mobile_quizzes
+    const legacyResult = await pool.query(
+      `SELECT id, title, category, question_count, source_text, deleted_at 
+       FROM mobile_quizzes WHERE id = $1`,
+      [id]
+    );
+    if (legacyResult.rows.length === 0 || legacyResult.rows[0].deleted_at) {
       return res.status(404).json({ error: 'This quiz was deleted or is no longer available.' });
     }
-    const r = result.rows[0];
-    res.json({ quiz: { ...r, questionCount: r.question_count, sourceText: r.source_text } });
+    const r = legacyResult.rows[0];
+    res.json({
+      quiz: {
+        id: r.id,
+        title: r.title,
+        category: r.category,
+        questionCount: r.question_count,
+        sourceText: r.source_text,
+        isMaster: false
+      }
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -389,7 +560,26 @@ app.get('/api/share/quiz/:id', async (req, res) => {
 app.get('/api/mobile-quizzes', async (req, res) => {
   const { userId } = req.query;
   try {
-    const result = await pool.query(`SELECT * FROM mobile_quizzes WHERE user_id = $1 AND deleted_at IS NULL`, [userId]);
+    const result = await pool.query(
+      `SELECT 
+        mq.id,
+        mq.user_id,
+        mq.master_quiz_id,
+        COALESCE(mq.title, mq2.title) AS title,
+        COALESCE(mq.category, mq2.category) AS category,
+        COALESCE(mq.question_count, mq2.question_count) AS question_count,
+        COALESCE(mq.source_text, mq2.source_text) AS source_text,
+        mq.attempts,
+        mq.wrong_questions,
+        mq.unique_correct_ids,
+        mq.created_at,
+        mq.updated_at
+      FROM mobile_quizzes mq
+      LEFT JOIN master_quizzes mq2 ON mq.master_quiz_id = mq2.id
+      WHERE mq.user_id = $1 AND mq.deleted_at IS NULL
+      ORDER BY mq.updated_at DESC`,
+      [userId]
+    );
     const quizzes = result.rows.map(r => {
       const cleanSourceText = typeof r.source_text === 'string'
         ? r.source_text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
@@ -403,6 +593,7 @@ app.get('/api/mobile-quizzes', async (req, res) => {
 
       return {
         ...r,
+        masterQuizId: r.master_quiz_id,
         questionCount: r.question_count,
         sourceText: cleanSourceText,
         wrongQuestions: safeParse(r.wrong_questions, []),
@@ -417,34 +608,52 @@ app.get('/api/mobile-quizzes', async (req, res) => {
 });
 
 app.post('/api/mobile-quizzes', async (req, res) => {
-  const { id, userId, title, category, questionCount, sourceText, attempts, wrongQuestions, uniqueCorrectIds } = req.body;
+  const { id, userId, masterQuizId, title, category, questionCount, sourceText, attempts, wrongQuestions, uniqueCorrectIds } = req.body;
   const quizId = id || generateId();
   try {
     const result = await pool.query(
-      `INSERT INTO mobile_quizzes (id, user_id, title, category, question_count, source_text, attempts, wrong_questions, unique_correct_ids) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO mobile_quizzes (id, user_id, master_quiz_id, title, category, question_count, source_text, attempts, wrong_questions, unique_correct_ids) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        ON CONFLICT (id) DO UPDATE SET
+         master_quiz_id = COALESCE(EXCLUDED.master_quiz_id, mobile_quizzes.master_quiz_id),
          title = EXCLUDED.title,
          category = EXCLUDED.category,
          question_count = EXCLUDED.question_count,
          source_text = EXCLUDED.source_text,
+         attempts = EXCLUDED.attempts,
+         wrong_questions = EXCLUDED.wrong_questions,
+         unique_correct_ids = EXCLUDED.unique_correct_ids,
+         deleted_at = NULL,
          updated_at = CURRENT_TIMESTAMP
        RETURNING *`,
-      [quizId, userId, title, category, questionCount || 0, sourceText || '', JSON.stringify(attempts || []), JSON.stringify(wrongQuestions || []), JSON.stringify(uniqueCorrectIds || [])]
+      [
+        quizId,
+        userId,
+        masterQuizId || null,
+        title,
+        category,
+        questionCount || 0,
+        sourceText || '',
+        JSON.stringify(attempts || []),
+        JSON.stringify(wrongQuestions || []),
+        JSON.stringify(uniqueCorrectIds || [])
+      ]
     );
     const r = result.rows[0];
-    res.json({ quiz: { ...r, questionCount: r.question_count, sourceText: undefined } });
+    res.json({ quiz: { ...r, masterQuizId: r.master_quiz_id, questionCount: r.question_count, sourceText: undefined } });
   } catch (err) {
+    console.error('[Backend] POST /api/mobile-quizzes error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 app.put('/api/mobile-quizzes', async (req, res) => {
-  const { userId, quizId, title, category, questionCount, sourceText, attempts, wrongQuestions, uniqueCorrectIds } = req.body;
+  const { userId, quizId, masterQuizId, title, category, questionCount, sourceText, attempts, wrongQuestions, uniqueCorrectIds } = req.body;
   try {
     const updates = [];
     const values = [];
     let i = 1;
+    if (masterQuizId !== undefined) { updates.push(`master_quiz_id = $${i++}`); values.push(masterQuizId); }
     if (title !== undefined) { updates.push(`title = $${i++}`); values.push(title); }
     if (category !== undefined) { updates.push(`category = $${i++}`); values.push(category); }
     if (questionCount !== undefined) { updates.push(`question_count = $${i++}`); values.push(questionCount); }
@@ -462,7 +671,7 @@ app.put('/api/mobile-quizzes', async (req, res) => {
     
     const result = await pool.query(query, values);
     const r = result.rows[0];
-    res.json({ quiz: r ? { ...r, questionCount: r.question_count, sourceText: undefined } : null });
+    res.json({ quiz: r ? { ...r, masterQuizId: r.master_quiz_id, questionCount: r.question_count, sourceText: undefined } : null });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

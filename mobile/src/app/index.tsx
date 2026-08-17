@@ -39,7 +39,8 @@ import * as mammoth from "mammoth/mammoth.browser.js";
 import { signInWithGoogle, signInWithEmail, signUpWithEmail, signOutUser, onAuth, deleteAccount, resetPassword, type User } from "../lib/firebase";
 import * as Sentry from "@sentry/react-native";
 import { identifyUser, clearUser, trackQuizStarted, trackQuizCompleted, trackAiGenerationStarted, trackAiGenerationSucceeded, trackAiGenerationFailed, trackQuizCreated, trackBattleStarted, trackBattleCompleted, trackShareLinkTapped } from "../lib/analytics";
-import { syncUserToNeon, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz, deleteUserFromNeon, sendFeedback, saveBattleHistory, fetchBattleHistory, parsePdfFromBackend, parsePptFromBackend, fetchGeminiKey, fetchAppConfig, fetchSharedQuiz, checkAiDailyLimit, sendOtpEmail, verifyOtpCode, type AppConfig } from "../lib/api";
+import { syncUserToNeon, fetchMobileQuizzes, createMobileQuiz, updateMobileQuiz, deleteMobileQuiz, deleteUserFromNeon, sendFeedback, saveBattleHistory, fetchBattleHistory, parsePdfFromBackend, parsePptFromBackend, fetchGeminiKey, fetchAppConfig, fetchSharedQuiz, checkAiDailyLimit, checkMasterQuizCache, saveMasterQuiz, sendOtpEmail, verifyOtpCode, type AppConfig } from "../lib/api";
+import { computeContentHash } from "../lib/contentHash";
 import { getUserErrorMessage } from "../utils/errors";
 import { createBattleRoom, joinBattleRoom, updateBattleScore, finishBattle, markPlayerFinished, listenToBattleRoom, getBattleRoom, type BattleRoom } from "../lib/multiplayer";
 import NetInfo from "@react-native-community/netinfo";
@@ -1125,9 +1126,11 @@ export default function HomeScreen() {
           const qCount = questionsList.length || quiz.questionCount || 0;
 
           const newQuizId = "quiz_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
+          const masterQuizId = (quiz as any).isMaster ? id : ((quiz as any).masterQuizId || (id.startsWith("uq_") ? id : null));
 
           let finalQuiz: any = {
             id: newQuizId,
+            masterQuizId,
             neonId: null,
             title: quiz.title,
             category: quiz.category || "General",
@@ -1146,6 +1149,7 @@ export default function HomeScreen() {
               const { quiz: savedQuiz, error: saveErr } = await createMobileQuiz({
                 id: newQuizId,
                 userId: firebaseUser.uid,
+                masterQuizId,
                 title: quiz.title,
                 category: quiz.category || "General",
                 questionCount: qCount,
@@ -1193,7 +1197,7 @@ export default function HomeScreen() {
   const [bottomToast, setBottomToast] = useState<{ message: string; icon?: any; color?: string } | null>(null);
   const bottomToastOpacity = useRef(new Animated.Value(0)).current;
   const bottomToastTranslateY = useRef(new Animated.Value(20)).current;
-  const bottomToastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const bottomToastTimeoutRef = useRef<any>(null);
   const lastBackPressTimeRef = useRef<number>(0);
 
   const showBottomPillToast = React.useCallback((message: string, options?: { icon?: any; color?: string; durationMs?: number }) => {
@@ -3568,10 +3572,40 @@ export default function HomeScreen() {
         return;
       }
       
-      const targetId = quiz.neonId || quiz.id;
-      // Ensure the quiz is synced to Neon under targetId so anyone with the link can access it
-      if (targetId) {
-        const sourceText = quiz.sourceText || questionsToSourceText(quiz.title, quiz.category || "General", quiz.questionsList || [], quiz.flashcards || []);
+      let shareId = quiz.masterQuizId || quiz.master_quiz_id;
+      const sourceText = quiz.sourceText || questionsToSourceText(quiz.title, quiz.category || "General", quiz.questionsList || [], quiz.flashcards || []);
+
+      // If this quiz doesn't have a canonical master ID yet, mint one so the link is permanent and universal
+      if (!shareId && sourceText) {
+        try {
+          const contentHash = await computeContentHash(sourceText, i18n.language || "en");
+          const { masterQuiz } = await saveMasterQuiz({
+            contentHash,
+            language: (i18n.language || "en").toLowerCase(),
+            title: quiz.title,
+            category: quiz.category || "General",
+            questionCount: quiz.questionsList?.length ?? quiz.questions ?? 0,
+            flashcardCount: quiz.flashcards?.length ?? 0,
+            sourceText,
+            userId: firebaseUser ? firebaseUser.uid : "guest_shared"
+          });
+          if (masterQuiz?.id) {
+            shareId = masterQuiz.id;
+            quiz.masterQuizId = masterQuiz.id;
+            setQuizzes((prev: any[]) => prev.map((q: any) => q.id === quiz.id ? { ...q, masterQuizId: masterQuiz.id } : q));
+            if (firebaseUser && neonUserReadyRef.current) {
+              updateMobileQuiz({ userId: firebaseUser.uid, quizId: quiz.id, masterQuizId: masterQuiz.id }).catch(() => {});
+            }
+          }
+        } catch (masterErr) {
+          console.warn("[ShareSync] master quiz creation warning:", masterErr);
+        }
+      }
+
+      const targetId = shareId || quiz.neonId || quiz.id;
+
+      // Fallback: sync legacy row if still no master ID
+      if (!shareId && targetId) {
         try {
           await createMobileQuiz({
             id: targetId,
@@ -3808,6 +3842,73 @@ export default function HomeScreen() {
     setAiGenPhase("generating");
     setAiGenConnectionLost(false);
     const _aiGenStartMs = Date.now();
+    const activeLang = (i18n.language || savedAppLanguage || "en").toLowerCase();
+    let computedHash: string | null = null;
+
+    // ── Check Master Quiz Cache for Exact Content Match ───────────────────
+    if (text && text !== "__VISUAL__") {
+      try {
+        computedHash = await computeContentHash(text, activeLang);
+        console.log(`[AI Generation] Computed content hash: ${computedHash}`);
+        const { hit, masterQuiz } = await checkMasterQuizCache(computedHash, activeLang);
+        if (hit && masterQuiz && masterQuiz.sourceText) {
+          console.log(`[AI Generation] ⚡ Cache HIT for master quiz: ${masterQuiz.id}`);
+          const parsed = parseQstText(masterQuiz.sourceText);
+          if (parsed && (parsed.questions.length > 0 || (parsed.flashcards && parsed.flashcards.length > 0))) {
+            const localId = `ai_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+            const title = (masterQuiz.title || fileName).replace(/\.[^.]+$/, "");
+            const newQuiz: any = {
+              id: localId,
+              masterQuizId: masterQuiz.id,
+              title,
+              questions: parsed.questions.length,
+              category: masterQuiz.category || "AI Generated",
+              time: "Just now",
+              flashcards: parsed.flashcards || [],
+              questionsList: parsed.questions.map((q: any) => ({ ...q, answers: [...q.answers].sort(() => Math.random() - 0.5) })),
+              sourceText: masterQuiz.sourceText,
+              attempts: [],
+              wrongQuestions: [],
+              uniqueCorrectIds: [],
+            };
+
+            setQuizzes((prev: any[]) => [newQuiz, ...prev.filter((q: any) => q.id !== newQuiz.id)]);
+            AsyncStorage.setItem(storageKey("quizzes"), JSON.stringify([newQuiz, ...quizzesRef.current.filter((q: any) => q.id !== newQuiz.id)])).catch(() => {});
+            trackQuizCreated({ source: "ai_cache_hit", questionCount: parsed.questions.length, flashcardCount: (parsed.flashcards || []).length });
+
+            if (firebaseUser && neonUserReadyRef.current) {
+              createMobileQuiz({
+                id: localId,
+                userId: firebaseUser.uid,
+                masterQuizId: masterQuiz.id,
+                title,
+                category: masterQuiz.category || "AI Generated",
+                questionCount: newQuiz.questions,
+                sourceText: "",
+              }).then(({ quiz: saved }) => {
+                if (saved) setQuizzes((prev: any[]) => prev.map((q) => q.id === localId ? { ...q, neonId: saved.id } : q));
+              }).catch(() => {});
+            }
+
+            setAiGenPhase(null);
+            showBottomPillToast("⚡ Cache Hit — Loaded instantly with no AI usage!", {
+              icon: "flash",
+              color: "#38bdf8",
+              durationMs: 2600
+            });
+            setTimeout(() => {
+              setActiveTab("insights");
+              setViewingInsightsQuiz(newQuiz);
+              setViewingInsightsQuizFromTab("home");
+            }, 250);
+            return;
+          }
+        }
+      } catch (cacheErr) {
+        console.warn("[AI Generation] Cache check warning, falling back to generation:", cacheErr);
+      }
+    }
+
     try {
       // ── Helper: wait for connection to resume (max 30s) ─────────────────
       const waitForConnection = (): Promise<void> => {
@@ -4105,13 +4206,36 @@ export default function HomeScreen() {
       });
       trackQuizCreated({ source: "ai", questionCount: parsed.questions.length, flashcardCount: (parsed.flashcards || []).length });
 
-      // ── Initial Neon sync for Phase 1 questions ───────────────────────────
+      // ── Initial Neon sync & Master Quiz Cache creation ───────────────────
       let initialNeonId: string | null = null;
       const initialSourceText = questionsToSourceText(title, "AI Generated", newQuiz.questionsList, newQuiz.flashcards);
+
+      if (computedHash) {
+        saveMasterQuiz({
+          contentHash: computedHash,
+          language: activeLang,
+          title,
+          category: "AI Generated",
+          questionCount: newQuiz.questions,
+          flashcardCount: (newQuiz.flashcards || []).length,
+          sourceText: initialSourceText,
+          userId: firebaseUser ? firebaseUser.uid : undefined
+        }).then(({ masterQuiz }) => {
+          if (masterQuiz?.id) {
+            newQuiz.masterQuizId = masterQuiz.id;
+            setQuizzes((prev: any[]) => prev.map((q) => q.id === localId ? { ...q, masterQuizId: masterQuiz.id } : q));
+            if (firebaseUser && neonUserReadyRef.current) {
+              updateMobileQuiz({ userId: firebaseUser.uid, quizId: localId, masterQuizId: masterQuiz.id }).catch(() => {});
+            }
+          }
+        }).catch(err => console.warn("[MasterQuiz] Cache save warning:", err));
+      }
+
       if (firebaseUser && neonUserReadyRef.current) {
         createMobileQuiz({
           id: localId,
           userId: firebaseUser.uid,
+          masterQuizId: newQuiz.masterQuizId || null,
           title,
           category: "AI Generated",
           questionCount: newQuiz.questions,

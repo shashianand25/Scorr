@@ -78,7 +78,7 @@ function send(event: string, props: Record<string, string | number | boolean>) {
 
 /** A quiz was created (AI, manual draft, import, or shared-link save) */
 export function trackQuizCreated(props: {
-  source: "ai" | "manual" | "import" | "shared_link";
+  source: "ai" | "manual" | "import" | "shared_link" | "ai_cache_hit";
   questionCount: number;
   flashcardCount?: number;
 }) {

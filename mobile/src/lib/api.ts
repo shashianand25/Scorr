@@ -236,8 +236,22 @@ export async function fetchBattleHistory(
 
 // ── Mobile Quizzes ─────────────────────────────────────────────────────
 
+export interface MasterQuiz {
+  id: string;
+  title: string;
+  category: string;
+  questionCount: number;
+  flashcardCount: number;
+  sourceText: string;
+  language?: string;
+  isMaster?: boolean;
+  createdAt?: string;
+}
+
 export interface NeonMobileQuiz {
   id: string;
+  masterQuizId?: string | null;
+  master_quiz_id?: string | null;
   title: string;
   category: string;
   questionCount: number;
@@ -249,9 +263,49 @@ export interface NeonMobileQuiz {
   updatedAt: string;
 }
 
+/**
+ * Checks if a canonical quiz already exists in the backend for the given exact content hash.
+ */
+export async function checkMasterQuizCache(
+  contentHash: string,
+  lang: string = "en"
+): Promise<{ hit: boolean; masterQuiz: MasterQuiz | null; error: string | null }> {
+  const { data, error } = await apiFetch<{ hit: boolean; masterQuiz?: MasterQuiz }>(
+    "/api/master-quizzes/cache-check",
+    { method: "POST", body: JSON.stringify({ contentHash, lang }) }
+  );
+  return {
+    hit: !!data?.hit,
+    masterQuiz: data?.masterQuiz ?? null,
+    error,
+  };
+}
+
+/**
+ * Saves a newly generated canonical quiz into master_quizzes.
+ */
+export async function saveMasterQuiz(params: {
+  id?: string;
+  contentHash: string;
+  generationVersion?: string;
+  language?: string;
+  title: string;
+  category?: string;
+  questionCount?: number;
+  flashcardCount?: number;
+  sourceText: string;
+  userId?: string;
+}): Promise<{ masterQuiz: MasterQuiz | null; error: string | null }> {
+  const { data, error } = await apiFetch<{ masterQuiz: MasterQuiz }>(
+    "/api/master-quizzes",
+    { method: "POST", body: JSON.stringify(params) }
+  );
+  return { masterQuiz: data?.masterQuiz ?? null, error };
+}
+
 export async function fetchSharedQuiz(
   quizId: string
-): Promise<{ quiz: NeonMobileQuiz | null; error: string | null }> {
+): Promise<{ quiz: (NeonMobileQuiz & { isMaster?: boolean; flashcardCount?: number }) | null; error: string | null }> {
   const { data, error } = await apiFetch<{ quiz: any }>(
     `/api/share/quiz/${encodeURIComponent(quizId)}`
   );
@@ -287,6 +341,7 @@ export async function fetchMobileQuizzes(
 export async function createMobileQuiz(params: {
   id?: string;
   userId: string;
+  masterQuizId?: string | null;
   title: string;
   category: string;
   questionCount: number;
@@ -308,6 +363,7 @@ export async function createMobileQuiz(params: {
 export async function updateMobileQuiz(params: {
   userId: string;
   quizId: string;
+  masterQuizId?: string | null;
   title?: string;
   category?: string;
   questionCount?: number;
