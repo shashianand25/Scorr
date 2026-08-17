@@ -69,21 +69,19 @@ function NavigationLayout({ children }: { children: React.ReactNode }) {
             borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
           }}
         >
-          <div
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/logo.png"
+            alt="Scorr Logo"
             style={{
               width: 36,
               height: 36,
-              borderRadius: 12,
+              borderRadius: 10,
+              objectFit: "cover",
               flexShrink: 0,
-              background: "linear-gradient(135deg, #6366f1, #34d399)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              boxShadow: "0 8px 20px rgba(99, 102, 241, 0.3)",
+              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.4)",
             }}
-          >
-            <span style={{ color: "#fff", fontWeight: 900, fontSize: 18 }}>⚡</span>
-          </div>
+          />
           {!collapsed && (
             <span
               style={{

@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuthStore } from "@/store/auth";
 import { fetchQuizzes } from "@/lib/api";
-import { getLocalItem, SAMPLE_QUIZ } from "@/lib/storage";
+import { getLocalItem, setLocalItem, SAMPLE_QUIZ } from "@/lib/storage";
 import { isCardDue } from "@/lib/sm2";
 import { useTranslation } from "@/lib/i18n";
 import type { QuizRecord } from "@/lib/quizDeduplication";
@@ -21,13 +21,27 @@ export default function DashboardPage() {
 
     if (user?.uid) {
       fetchQuizzes(user.uid).then(({ quizzes: cloudQuizzes }) => {
-        const combined = [...local];
+        const mergedMap = new Map<string, QuizRecord>();
+        for (const l of local) {
+          mergedMap.set(l.id, l);
+        }
         for (const cq of cloudQuizzes || []) {
-          if (!combined.some((l) => l.id === cq.id || l.neonId === cq.id)) {
-            combined.push(cq as any);
+          const existing = mergedMap.get(cq.id) || mergedMap.get((cq as any).neonId);
+          if (existing) {
+            mergedMap.set(cq.id, {
+              ...existing,
+              ...cq,
+              questionsList: cq.questionsList?.length ? cq.questionsList : existing.questionsList,
+              flashcards: cq.flashcards?.length ? cq.flashcards : existing.flashcards,
+              sourceText: cq.sourceText || existing.sourceText,
+            } as any);
+          } else {
+            mergedMap.set(cq.id, cq as any);
           }
         }
+        const combined = Array.from(mergedMap.values());
         setQuizzes(combined);
+        setLocalItem("quizzes", combined);
         setLoading(false);
       });
     } else {

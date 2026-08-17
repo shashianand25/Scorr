@@ -61,7 +61,6 @@ export default function CreateQuizPage() {
     const fileName = file.name.replace(/\.[^.]+$/, "");
     if (!title) setTitle(fileName);
 
-    const isImage = file.type.startsWith("image/");
     const isText = file.type.includes("text") || file.name.endsWith(".txt") || file.name.endsWith(".md");
 
     if (isText) {
@@ -69,40 +68,16 @@ export default function CreateQuizPage() {
       setSourceText(text);
       setCharCount(text.length);
       setFileBase64(null);
-    } else if (isImage) {
+    } else {
+      // PDF, Images, PPT, DOCX -> convert to base64 for Gemini inlineData
       const reader = new FileReader();
       reader.onload = () => {
         const b64 = reader.result as string;
         setFileBase64(b64);
-        setSourceText(`[Visual Document: ${file.name}]`);
+        setSourceText(`[Document: ${file.name} (${(file.size / 1024).toFixed(1)} KB)]`);
         setCharCount(file.size);
       };
       reader.readAsDataURL(file);
-    } else {
-      // PDF, DOCX, PPT
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const arrayBuffer = reader.result as ArrayBuffer;
-        // Basic UTF-8 text extraction fallback
-        try {
-          const decoder = new TextDecoder("utf-8");
-          const extracted = decoder.decode(arrayBuffer);
-          const cleanText = extracted.replace(/[^\x20-\x7E\n\r\t\u00A0-\uFFFF]/g, " ");
-          if (cleanText.trim().length > 100) {
-            setSourceText(cleanText);
-            setCharCount(cleanText.length);
-          } else {
-            // Visual/binary document fallback
-            setFileBase64(reader.result as string);
-            setSourceText(`[Document: ${file.name}]`);
-            setCharCount(file.size);
-          }
-        } catch {
-          setSourceText(`[Document: ${file.name}]`);
-          setCharCount(file.size);
-        }
-      };
-      reader.readAsArrayBuffer(file);
     }
   };
 
@@ -241,16 +216,35 @@ export default function CreateQuizPage() {
       const { geminiKey, modelUrl, promptTemplate } = config.aiConfig;
 
       // 5. Build AI Prompt
-      const effectivePrompt = (promptTemplate || "")
-        .replace("{sourceText}", textContent.slice(0, 30000))
+      let effectivePrompt = (promptTemplate || "")
+        .replace("{sourceText}", fileBase64 ? "" : textContent.slice(0, 30000))
         .replace("{questionCount}", String(effectiveCount))
         .replace("{includeFlashcards}", String(includeFlashcards))
         .replace("{language}", activeLang);
 
+      if (!promptTemplate?.includes("{language}")) {
+        effectivePrompt += `\nImportant: Generate all questions, options, explanations, and flashcards in "${activeLang}" language.`;
+      }
+
+      const parts: any[] = [];
+      if (fileBase64) {
+        const mime = selectedFile?.type || (selectedFile?.name?.endsWith(".pdf") ? "application/pdf" : "image/jpeg");
+        const base64Data = fileBase64.includes(",") ? fileBase64.split(",")[1] : fileBase64;
+        parts.push({
+          inlineData: {
+            mimeType: mime,
+            data: base64Data,
+          },
+        });
+      }
+      parts.push({
+        text: effectivePrompt,
+      });
+
       const requestBody: any = {
         contents: [
           {
-            parts: [{ text: effectivePrompt }],
+            parts,
           },
         ],
         generationConfig: {
@@ -322,22 +316,32 @@ export default function CreateQuizPage() {
       const quizTitle = title.trim() || selectedFile?.name.replace(/\.[^.]+$/, "") || "Generated Quiz";
       const masterSourceText = questionsToSourceText(quizTitle, category, formattedQuestions, formattedFlashcards);
 
-      // 6. Save Master Quiz Cache asynchronously
-      saveMasterQuiz({
-        contentHash: computedHash,
-        language: activeLang,
-        title: quizTitle,
-        category,
-        questionCount: formattedQuestions.length,
-        flashcardCount: formattedFlashcards.length,
-        sourceText: masterSourceText,
-        userId: user?.uid,
-      }).catch((e) => console.warn("[MasterCache] Save failed:", e));
+      // 6. Save Master Quiz Cache
+      let masterQuizId: string | null = null;
+      try {
+        const masterRes = await saveMasterQuiz({
+          contentHash: computedHash,
+          language: activeLang,
+          title: quizTitle,
+          category,
+          questionCount: formattedQuestions.length,
+          flashcardCount: formattedFlashcards.length,
+          sourceText: masterSourceText,
+          userId: user?.uid,
+        });
+        if (masterRes.masterQuiz?.id) {
+          masterQuizId = masterRes.masterQuiz.id;
+        }
+      } catch (e) {
+        console.warn("[MasterCache] Save failed:", e);
+      }
 
       // 7. Save to User Library
       const localId = `ai_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const newQuiz: QuizRecord = {
         id: localId,
+        masterQuizId: masterQuizId || undefined,
+        master_quiz_id: masterQuizId || undefined,
         title: quizTitle,
         category,
         questions: formattedQuestions.length,
@@ -358,6 +362,7 @@ export default function CreateQuizPage() {
         createQuiz({
           id: localId,
           userId: user.uid,
+          masterQuizId,
           title: quizTitle,
           category,
           questionCount: formattedQuestions.length,

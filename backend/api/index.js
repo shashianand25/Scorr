@@ -568,7 +568,7 @@ app.get('/api/mobile-quizzes', async (req, res) => {
         COALESCE(mq.title, mq2.title) AS title,
         COALESCE(mq.category, mq2.category) AS category,
         COALESCE(mq.question_count, mq2.question_count) AS question_count,
-        COALESCE(mq.source_text, mq2.source_text) AS source_text,
+        COALESCE(NULLIF(mq.source_text, ''), mq2.source_text, '') AS source_text,
         mq.attempts,
         mq.wrong_questions,
         mq.unique_correct_ids,

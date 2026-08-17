@@ -28,13 +28,15 @@ export default function LibraryPage() {
   const { showToast } = useToast();
   const { t } = useTranslation();
 
-  const [quizzes, setQuizzes] = useState<QuizRecord[]>([]);
+  const [quizzes, setQuizzes] = useState<QuizRecord[]>(() =>
+    getLocalItem<QuizRecord[]>("quizzes", [SAMPLE_QUIZ])
+  );
   const [activeTab, setActiveTab] = useState<"quizzes" | "flashcards">("quizzes");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [activeMenuQuiz, setActiveMenuQuiz] = useState<QuizRecord | null>(null);
 
-  // Load and deduplicate library
+  // Load and deduplicate library in background
   useEffect(() => {
     async function loadLibrary() {
       const local = getLocalItem<QuizRecord[]>("quizzes", [SAMPLE_QUIZ]);
@@ -43,21 +45,30 @@ export default function LibraryPage() {
       if (user?.uid) {
         try {
           const { quizzes: cloudQuizzes } = await fetchQuizzes(user.uid);
+          const mergedMap = new Map<string, QuizRecord>();
+          for (const l of local) mergedMap.set(l.id, l);
           for (const cq of cloudQuizzes || []) {
-            if (!allQuizzes.some((l) => l.id === cq.id || l.neonId === cq.id)) {
-              allQuizzes.push(cq as any);
+            const existing = mergedMap.get(cq.id) || mergedMap.get((cq as any).neonId);
+            if (existing) {
+              mergedMap.set(cq.id, {
+                ...existing,
+                ...cq,
+                questionsList: cq.questionsList?.length ? cq.questionsList : existing.questionsList,
+                flashcards: cq.flashcards?.length ? cq.flashcards : existing.flashcards,
+                sourceText: cq.sourceText || existing.sourceText,
+              } as any);
+            } else {
+              mergedMap.set(cq.id, cq as any);
             }
           }
+          allQuizzes = Array.from(mergedMap.values());
         } catch (e) {
           console.warn("[Library] Cloud fetch warning:", e);
         }
       }
 
-      // Run automatic deduplication
-      const dedup = await deduplicateUserQuizzes(allQuizzes, { currentUserId: user?.uid });
-      setQuizzes(dedup.deduplicatedQuizzes);
-      setLocalItem("quizzes", dedup.deduplicatedQuizzes);
-      setLoading(false);
+      setQuizzes(allQuizzes);
+      setLocalItem("quizzes", allQuizzes);
     }
 
     loadLibrary();
@@ -222,9 +233,9 @@ export default function LibraryPage() {
         </div>
       </div>
 
-      {loading ? (
+      {loading && filteredItems.length === 0 ? (
         <div style={{ minHeight: "50vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ width: 40, height: 40, border: "3px solid #1f2937", borderTop: "3px solid #6366f1", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+          <div className="animate-spin" style={{ width: 36, height: 36, border: "3px solid #1f2937", borderTop: "3px solid #6366f1", borderRadius: "50%" }} />
         </div>
       ) : filteredItems.length === 0 ? (
         <div

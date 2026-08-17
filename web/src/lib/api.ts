@@ -240,13 +240,60 @@ export async function syncUser(params: {
   return { user: data?.user ?? null, error };
 }
 
+import { parseQstText, questionsToSourceText } from "./qstParser";
+
 // ── Quizzes (Neon) ─────────────────────────────────────────────────────
 
 export async function fetchQuizzes(userId: string): Promise<{ quizzes: Quiz[]; error: string | null }> {
-  const { data, error } = await apiFetch<{ quizzes: Quiz[] }>(
+  const { data, error } = await apiFetch<{ quizzes: any[] }>(
     `/api/mobile-quizzes?userId=${encodeURIComponent(userId)}`
   );
-  return { quizzes: data?.quizzes ?? [], error };
+  if (error || !data?.quizzes) {
+    return { quizzes: [], error };
+  }
+
+  const normalized: Quiz[] = data.quizzes.map((q) => {
+    let qList: Question[] = [];
+    let fList: Flashcard[] = [];
+
+    if (q.sourceText) {
+      try {
+        const parsedJson = JSON.parse(q.sourceText);
+        if (Array.isArray(parsedJson) && parsedJson.length > 0) {
+          qList = parsedJson;
+        }
+      } catch {}
+
+      if (qList.length === 0) {
+        try {
+          const parsed = parseQstText(q.sourceText);
+          qList = parsed.questions || [];
+          fList = parsed.flashcards || [];
+        } catch {}
+      }
+    }
+
+    return {
+      id: q.id,
+      neonId: q.id,
+      masterQuizId: q.masterQuizId || q.master_quiz_id || null,
+      master_quiz_id: q.masterQuizId || q.master_quiz_id || null,
+      userId: q.user_id || userId,
+      title: q.title || "Untitled Quiz",
+      category: q.category || "General",
+      questions: q.questionCount || qList.length || 0,
+      questionsList: qList,
+      flashcards: fList,
+      sourceText: q.sourceText || "",
+      attempts: q.attempts || [],
+      wrongQuestions: q.wrongQuestions || [],
+      uniqueCorrectIds: q.uniqueCorrectIds || [],
+      createdAt: q.created_at || Date.now(),
+      updatedAt: q.updated_at || Date.now(),
+    };
+  });
+
+  return { quizzes: normalized, error: null };
 }
 
 export async function createQuiz(params: {
@@ -256,16 +303,24 @@ export async function createQuiz(params: {
   title: string;
   category: string;
   questionCount: number;
-  sourceText: string;
+  sourceText?: string;
   questionsList?: Question[];
   flashcards?: Flashcard[];
   attempts?: Attempt[];
   wrongQuestions?: WrongQuestion[];
   uniqueCorrectIds?: string[];
 }): Promise<{ quiz: Quiz | null; error: string | null }> {
+  let sourceText = params.sourceText;
+  if (!sourceText && params.questionsList) {
+    sourceText = questionsToSourceText(params.title, params.category, params.questionsList, params.flashcards);
+  }
+
   const { data, error } = await apiFetch<{ quiz: Quiz }>("/api/mobile-quizzes", {
     method: "POST",
-    body: JSON.stringify(params),
+    body: JSON.stringify({
+      ...params,
+      sourceText: sourceText || "",
+    }),
   });
   return { quiz: data?.quiz ?? null, error };
 }
