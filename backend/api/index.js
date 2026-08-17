@@ -910,7 +910,8 @@ app.get('/api/app-config', (req, res) => {
     },
     appLinks: {
       shareBaseUrl: "https://scorrapp.com/share/quiz/",
-      playStoreUrl: "https://play.google.com/store/apps/details?id=com.radium230sorganization.quizforge",
+      playStoreUrl: "https://scorrapp.com/download",
+      downloadUrl: "https://scorrapp.com/download",
       tutorialUrl: "https://youtu.be/jLiU-vW5EuA"
     }
   });

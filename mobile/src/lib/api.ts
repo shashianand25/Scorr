@@ -435,6 +435,7 @@ export interface AppConfig {
   appLinks: {
     shareBaseUrl: string;
     playStoreUrl: string;
+    downloadUrl?: string;
     tutorialUrl: string;
   };
 }

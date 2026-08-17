@@ -9025,8 +9025,10 @@ export default function HomeScreen() {
                     <Pressable
                       onPress={async () => {
                         try {
+                          const downloadLink = appConfig?.appLinks?.downloadUrl || appConfig?.appLinks?.playStoreUrl || "https://scorrapp.com/download";
                           await Share.share({
-                            message: appConfig?.appLinks?.playStoreUrl || 'https://play.google.com/store/apps/details?id=com.radium230sorganization.quizforge'
+                            message: `Study smarter with Scorr! Create quizzes and flashcards with AI:\n${downloadLink}`,
+                            url: downloadLink,
                           });
                         } catch (error) {
                           console.log(error);
