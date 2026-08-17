@@ -3640,70 +3640,58 @@ export default function HomeScreen() {
         return;
       }
       
-      let shareId = quiz.masterQuizId || quiz.master_quiz_id;
-      const sourceText = quiz.sourceText || questionsToSourceText(quiz.title, quiz.category || "General", quiz.questionsList || [], quiz.flashcards || []);
-
-      // If this quiz doesn't have a canonical master ID yet, mint one so the link is permanent and universal
-      if (!shareId && sourceText) {
-        try {
-          const contentHash = await computeContentHash(sourceText, i18n.language || "en");
-          const { masterQuiz } = await saveMasterQuiz({
-            contentHash,
-            language: (i18n.language || "en").toLowerCase(),
-            title: quiz.title,
-            category: quiz.category || "General",
-            questionCount: quiz.questionsList?.length ?? quiz.questions ?? 0,
-            flashcardCount: quiz.flashcards?.length ?? 0,
-            sourceText,
-            userId: firebaseUser ? firebaseUser.uid : "guest_shared"
-          });
-          if (masterQuiz?.id) {
-            shareId = masterQuiz.id;
-            quiz.masterQuizId = masterQuiz.id;
-            setQuizzes((prev: any[]) => prev.map((q: any) => q.id === quiz.id ? { ...q, masterQuizId: masterQuiz.id } : q));
-            if (firebaseUser && neonUserReadyRef.current) {
-              updateMobileQuiz({ userId: firebaseUser.uid, quizId: quiz.id, masterQuizId: masterQuiz.id }).catch(() => {});
-            }
-          }
-        } catch (masterErr) {
-          console.warn("[ShareSync] master quiz creation warning:", masterErr);
-        }
-      }
-
-      const targetId = shareId || quiz.neonId || quiz.id;
-
-      // Fallback: sync legacy row if still no master ID
-      if (!shareId && targetId) {
-        try {
-          await createMobileQuiz({
-            id: targetId,
-            userId: firebaseUser ? firebaseUser.uid : "guest_shared",
-            title: quiz.title,
-            category: quiz.category || "General",
-            questionCount: quiz.questionsList?.length ?? quiz.questions ?? 0,
-            sourceText,
-            attempts: quiz.attempts || [],
-            wrongQuestions: quiz.wrongQuestions || [],
-            uniqueCorrectIds: quiz.uniqueCorrectIds || [],
-          });
-        } catch (syncErr) {
-          console.warn("[ShareSync] ensure sync failed:", syncErr);
-        }
-      }
-
       const shareBase = appConfig?.appLinks?.shareBaseUrl || "https://scorrapp.com/share/quiz/";
+      let targetId = quiz.masterQuizId || quiz.master_quiz_id || quiz.neonId;
+      if (!targetId) {
+        targetId = 'uq_' + Math.random().toString(36).substring(2, 8) + Date.now().toString(36).substring(4);
+        quiz.masterQuizId = targetId;
+        setQuizzes((prev: any[]) => prev.map((q: any) => q.id === quiz.id ? { ...q, masterQuizId: targetId } : q));
+      }
+
       const shareUrl = `${shareBase}${targetId}`;
       const message = `Check out this quiz on Scorr: ${quiz.title}\n\nTap this link to open it in the app:\n${shareUrl}`;
       
-      await Share.share({
+      // ── Open native share sheet IMMEDIATELY without waiting for network ──
+      Share.share({
         message,
         url: shareUrl,
         title: `Share ${quiz.title}`,
-      });
+      }).catch((err) => console.warn("[Share] Sheet error:", err));
+
       trackShareLinkTapped({
         questionCount: quiz.questions || quiz.questionCount || 0,
         isAiGenerated: quiz.category === "AI Generated",
       });
+
+      // ── Concurrently ensure server-side master quiz record exists in the background ──
+      (async () => {
+        try {
+          const sourceText = quiz.sourceText || questionsToSourceText(quiz.title, quiz.category || "General", quiz.questionsList || [], quiz.flashcards || []);
+          if (sourceText) {
+            const contentHash = await computeContentHash(sourceText, i18n.language || "en");
+            const { masterQuiz } = await saveMasterQuiz({
+              id: targetId,
+              contentHash,
+              language: (i18n.language || "en").toLowerCase(),
+              title: quiz.title,
+              category: quiz.category || "General",
+              questionCount: quiz.questionsList?.length ?? quiz.questions ?? 0,
+              flashcardCount: quiz.flashcards?.length ?? 0,
+              sourceText,
+              userId: firebaseUser ? firebaseUser.uid : "guest_shared"
+            });
+            if (masterQuiz?.id && masterQuiz.id !== targetId) {
+              quiz.masterQuizId = masterQuiz.id;
+              setQuizzes((prev: any[]) => prev.map((q: any) => q.id === quiz.id ? { ...q, masterQuizId: masterQuiz.id } : q));
+            }
+            if (firebaseUser && neonUserReadyRef.current) {
+              updateMobileQuiz({ userId: firebaseUser.uid, quizId: quiz.id, masterQuizId: masterQuiz?.id || targetId }).catch(() => {});
+            }
+          }
+        } catch (syncErr) {
+          console.warn("[ShareSync] Background master quiz sync warning:", syncErr);
+        }
+      })();
       
     } catch (err: any) {
       console.warn("Share error:", err);
@@ -9778,7 +9766,7 @@ export default function HomeScreen() {
         battlePopup, setBattlePopup, settingsDarkMode, firebaseUser,
         quizzes, setQuizzes, flashcardDecks, setFlashcardDecks, sampleQuiz, setSampleDismissed,
         activeSession, setActiveSession, starredQuestions, setStarredQuestions,
-        handleOpenQuizOptions, handleShareQuiz, handleStartQuiz, handleFinishSession,
+        handleOpenQuizOptions, handleShareQuiz, handleStartQuiz, handleFinishSession, handleHostBattle,
         handleImportQst, handleDeleteAttemptOnMobile, saveAndExitQuizSession, handleClearHistoryOnMobile,
         setActiveTab, setViewingInsightsQuiz, setViewingInsightsDeck, setViewingInsightsQuizFromTab, viewingInsightsQuizFromTab,
         selectionMode, setSelectionMode, randomCount, setRandomCount,
