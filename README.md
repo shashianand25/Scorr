@@ -121,7 +121,7 @@ Contributions are always welcome! Feel free to open an issue or submit a pull re
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Copyright © 2026 Shashi Anand. All rights reserved. Proprietary software — see the [LICENSE](LICENSE) file for details.
 
 <div align="center">
   <sub>Built with ❤️ by Shashi Anand</sub>
