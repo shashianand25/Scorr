@@ -5,7 +5,8 @@
 export { AuthScreen } from './AuthScreen';
 export { InsightsTabScreen, DeckInsightsTab } from './InsightsTabScreen';
 export { ActiveSessionScreen, ResultsScreen } from './QuizSessionScreen';
-export { BattleLobbyScreen, FlashcardsScreen } from './BattleAndFlashcardScreens';
+export { BattleLobbyScreen } from './BattleScreen';
+export { FlashcardsScreen } from './FlashcardScreen';
 export { MainContentScreen } from './MainContentScreen';
 export { LibraryTab } from './LibraryTab';
 export { AddTab } from './AddTab';
