@@ -27,7 +27,7 @@ jobs:
 
       - name: Type check Mobile
         working-directory: mobile
-        run: npx tsc --noEmit
+        run: npm run typecheck
 
       - name: Run Mobile tests
         working-directory: mobile

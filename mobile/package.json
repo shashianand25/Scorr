@@ -76,7 +76,8 @@
     "lint": "eslint src --ext .ts,.tsx --max-warnings 0",
     "format": "prettier --write src",
     "test": "jest --watchAll=false",
-    "test:coverage": "jest --coverage --watchAll=false"
+    "test:coverage": "jest --coverage --watchAll=false",
+    "typecheck": "tsc --noEmit"
   },
   "private": true
 }
