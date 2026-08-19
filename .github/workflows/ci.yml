@@ -23,7 +23,7 @@ jobs:
 
       - name: Install Mobile dependencies
         working-directory: mobile
-        run: npm ci
+        run: npm install --no-audit
 
       - name: Type check Mobile
         working-directory: mobile
