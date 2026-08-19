@@ -23,10 +23,21 @@ import { renderFormattedText } from "../../utils/text";
 import { generateMockQuestionsForQuiz } from "../../utils/quiz";
 import { APP_LANGUAGES, SAMPLE_QUIZ } from "../../constants/sample-quiz";
 
+// ── Re-exports of split modal components (Phase 2b decomposition) ──
+export { QuizActionsModal } from "./QuizActionsModal";
+export { RenameQuizModal, ImportLoadingModal, ImportErrorModal, DeleteQuizModal } from "./RenameDeleteModals";
+export {
+  ResetStatsModal, LogoutConfirmModal, DeleteAccountModal,
+  QuitQuizModal, RestartQuizModal, QuizCreatedModal
+} from "./ConfirmationModals";
+
 const closeOrDismiss = (closeAction: () => void) => {
   if (Keyboard.isVisible()) { Keyboard.dismiss(); } else { closeAction(); }
 };
 const KeyboardWrapper = Platform.OS === "ios" ? KeyboardAvoidingView : View;
+
+
+
 
 
 
