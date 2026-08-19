@@ -77,13 +77,10 @@ import { FlashcardsScreen } from "../screens/FlashcardScreen";
 import { AuthScreen } from "../screens/AuthScreen";
 import { MainContentScreen } from "../screens/MainContentScreen";
 import { AIGeneratingScreen, FullscreenBattleCountdown } from "../components/AIGeneratingScreen";
+import { logger } from "../lib/logger";
 
 
 
-// ── Flashcard API stubs (feature removed — dead code references kept for safety) ──
-const createFlashcardDeck = async (..._args: any[]) => ({ deck: null, error: null });
-const updateFlashcardDeck = async (..._args: any[]) => ({ deck: null, error: null });
-const deleteFlashcardDeck = async (..._args: any[]) => ({ error: null });
 
 // Get screen width/height for layout sizing
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -145,7 +142,7 @@ export default function HomeScreen() {
       if (config) {
         setAppConfig(config);
       } else {
-        console.warn("[App Config] Failed to load config from backend:", error);
+        logger.warn("App Config",  Failed to load config from backend:", error);
       }
     });
   }, []);
@@ -163,7 +160,7 @@ export default function HomeScreen() {
       correctPlayer.seekTo(0);
       correctPlayer.play();
     } catch (error) {
-      console.warn("Failed to play correct sound effect:", error);
+      logger.warn("App", "Failed to play correct sound effect:", error);
     }
   };
 
@@ -173,7 +170,7 @@ export default function HomeScreen() {
       wrongPlayer.seekTo(0);
       wrongPlayer.play();
     } catch (error) {
-      console.warn("Failed to play wrong sound effect:", error);
+      logger.warn("App", "Failed to play wrong sound effect:", error);
     }
   };
 
@@ -192,7 +189,7 @@ export default function HomeScreen() {
         }
       }, 3000);
     } catch (error) {
-      console.warn("Failed to play success sound effect:", error);
+      logger.warn("App", "Failed to play success sound effect:", error);
     }
   };
   const [showLanding, setShowLanding] = useState(false);
@@ -282,7 +279,7 @@ export default function HomeScreen() {
         // main quizzes array, otherwise it appears twice in combinedQuizzes.
         await AsyncStorage.setItem("quizforge_sample_injected", "1");
       } catch (e) {
-        console.warn("[Sample] inject failed:", e);
+        logger.warn("Sample",  inject failed:", e);
       }
     })();
   }, [dataLoaded]);
@@ -577,7 +574,7 @@ export default function HomeScreen() {
         }
       }
     } catch (err) {
-      console.warn("[PullRefresh] failed:", err);
+      logger.warn("PullRefresh",  failed:", err);
     } finally {
       await minDelay;
       setPullRefreshing(false);
@@ -983,7 +980,7 @@ export default function HomeScreen() {
           allowsRecording: false,
         });
       } catch (err) {
-        console.warn("Failed to set audio mode:", err);
+        logger.warn("App", "Failed to set audio mode:", err);
       }
     };
     configureAudio();

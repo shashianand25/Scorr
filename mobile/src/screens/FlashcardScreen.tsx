@@ -13,6 +13,7 @@ import {
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
 import { styles } from "../styles/shared";
+import type { HomeScreenProps } from "../types/HomeScreenProps";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -20,7 +21,7 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
  * BattleLobbyScreen — multiplayer battle room UI.
  * Extracted from HomeScreen god-file (renderBattleLobbyView).
  */
-export function FlashcardsScreen({ p }: { p: any }) {
+export function FlashcardsScreen({ p }: { p: HomeScreenProps }) {
   const { t } = useTranslation();
   const {
     settingsDarkMode, firebaseUser,

@@ -9,6 +9,7 @@ import {
   parsePptFromBackend,
 } from "../lib/api";
 import { parseQstText, questionsToSourceText } from "../utils/quizParser";
+import { logger } from "../lib/logger";
 
 /**
  * handleGenerateWithAI — AI quiz generation pipeline.
@@ -192,7 +193,7 @@ export function createAIGenerationHandler(ctx: {
           }
         }
       } catch (cacheErr) {
-        console.warn("[AI Generation] Cache check warning, falling back to generation:", cacheErr);
+        logger.warn("AI Generation",  Cache check warning, falling back to generation:", cacheErr);
       }
     }
 
@@ -538,7 +539,7 @@ export function createAIGenerationHandler(ctx: {
               updateMobileQuiz({ userId: firebaseUser.uid, quizId: localId, masterQuizId: masterQuiz.id }).catch(() => {});
             }
           }
-        }).catch(err => console.warn("[MasterQuiz] Cache save warning:", err));
+        }).catch(err => logger.warn("MasterQuiz",  Cache save warning:", err));
       }
 
       if (firebaseUser && neonUserReadyRef.current) {
@@ -631,7 +632,7 @@ export function createAIGenerationHandler(ctx: {
                     quizId: targetNeonId,
                     questionCount: totalQuestionCount,
                     sourceText: cleanSourceText,
-                  }).catch(err => console.warn("[NeonSync-BGUpdate] failed:", err));
+                  }).catch(err => logger.warn("App", "[NeonSync-BGUpdate] failed:", err));
                 } else {
                   createMobileQuiz({
                     id: localId,
@@ -655,7 +656,7 @@ export function createAIGenerationHandler(ctx: {
               console.log(`[AI Background] Appended ${extraQuestions.length} extra question(s) to quiz ${localId}`);
             }
           } catch (bgErr) {
-            console.error("[AI Background] Background chunk generation failed:", bgErr);
+            logger.error("App", "[AI Background] Background chunk generation failed:", bgErr);
           }
         })();
       }

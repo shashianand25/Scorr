@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { deduplicateUserQuizzes } from '../lib/quizDeduplication';
 import { SAMPLE_QUIZ } from '../constants/sample-quiz';
+import { logger } from "../lib/logger";
 
 /**
  * useQuizData — owns quiz list, flashcard decks, tombstone ref, and
@@ -98,7 +99,7 @@ export function useQuizData() {
         if (already) return;
         await AsyncStorage.setItem('quizforge_sample_injected', '1');
       } catch (e) {
-        console.warn('[Sample] inject failed:', e);
+        logger.warn("App", '[Sample] inject failed:', e);
       }
     })();
   }, [dataLoaded]);

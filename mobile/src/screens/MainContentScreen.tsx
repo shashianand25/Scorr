@@ -9,13 +9,14 @@ import { FlashcardsTab } from "./FlashcardsTab";
 import { GuideTab } from "./GuideTab";
 import { MenuTab } from "./MenuTab";
 import { HomeTab } from "./HomeTab";
+import type { HomeScreenProps } from "../types/HomeScreenProps";
 
 /**
  * MainContentScreen — thin tab router.
  * Delegates rendering entirely to per-tab screen components.
  * All state and handlers flow through the p: any prop.
  */
-export function MainContentScreen({ p, overrideTab }: { p: any; overrideTab?: string }) {
+export function MainContentScreen({ p, overrideTab }: { p: HomeScreenProps; overrideTab?: string }) {
   const tabToRender = overrideTab || p.activeTab;
 
   // Active quiz session takes priority over tab routing

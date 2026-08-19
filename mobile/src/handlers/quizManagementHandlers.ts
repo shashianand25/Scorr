@@ -273,7 +273,7 @@
       updateMobileQuiz({
         userId: firebaseUser.uid, quizId: neonId,
         attempts: updatedQ.attempts, wrongQuestions: updatedQ.wrongQuestions, uniqueCorrectIds: updatedQ.uniqueCorrectIds,
-      }).catch((err) => console.warn("[NeonSync] quiz attempt update failed:", err));
+      }).catch((err) => logger.warn("NeonSync",  quiz attempt update failed:", err));
     }
   };
 
@@ -455,7 +455,7 @@
         // out of local state. Clearing tombstones here (even on success) caused a bug
         // where pressing R would reload stale local data but find no tombstone to filter it.
       }).catch((err: any) => {
-        console.warn("[NeonSync] quiz delete failed or offline — tombstone kept for next sync:", err);
+        logger.warn("NeonSync",  quiz delete failed or offline — tombstone kept for next sync:", err);
       });
     }
 

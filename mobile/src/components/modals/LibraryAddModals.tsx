@@ -4,6 +4,7 @@ import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
 import { styles } from "../../styles/shared";
 import { SafeAreaView } from "react-native-safe-area-context";
+import type { HomeScreenProps } from "../../types/HomeScreenProps";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const closeOrDismiss = (fn: () => void) => fn();
@@ -13,7 +14,7 @@ const KeyboardWrapper = Platform.OS === "ios" ? require("react-native").Keyboard
  * Add menu, deck report, flashcard options, language selector
  * Extracted from AppModals.tsx god-file.
  */
-export function LibraryAddModals({ p }: { p: any }) {
+export function LibraryAddModals({ p }: { p: HomeScreenProps }) {
   const { t } = useTranslation();
   return (
     <>

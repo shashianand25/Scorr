@@ -1,6 +1,7 @@
 import React from "react";
 import { QuizActionsSheet } from "./QuizActionsSheet";
 import { SessionConfirmationModals } from "./SessionConfirmationModals";
+import type { HomeScreenProps } from "../../types/HomeScreenProps";
 
 /**
  * QuizActionModals — compositor for quiz action + session confirmation modals.
@@ -8,7 +9,7 @@ import { SessionConfirmationModals } from "./SessionConfirmationModals";
  *   - QuizActionsSheet (381 lines) — bottom sheet + import loading
  *   - SessionConfirmationModals (529 lines) — reset/logout/quit/settings/report
  */
-export function QuizActionModals({ p }: { p: any }) {
+export function QuizActionModals({ p }: { p: HomeScreenProps }) {
   return (
     <>
       <QuizActionsSheet p={p} />

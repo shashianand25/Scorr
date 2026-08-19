@@ -5,8 +5,9 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AnimatedPressable } from '../ui/AnimatedPressable';
 import { styles } from '../../styles/shared';
+import type { HomeScreenProps } from "../../types/HomeScreenProps";
 
-export function QuizActionsModal({ p }: { p: any }) {
+export function QuizActionsModal({ p }: { p: HomeScreenProps }) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
 

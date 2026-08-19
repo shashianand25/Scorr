@@ -12,6 +12,7 @@ import {{ AppModals }} from "../components/modals/AppModals";
 import {{ MainContentScreen }} from "../screens/MainContentScreen";
 import {{ AIGeneratingScreen, FullscreenBattleCountdown }} from "../components/AIGeneratingScreen";
 import {{ AuthScreen }} from "../screens/AuthScreen";
+import type { HomeScreenProps } from "../types/HomeScreenProps";
 
 /**
  * HomeLayout — the root JSX shell of HomeScreen.

@@ -5,6 +5,7 @@ import { onAuth } from '../lib/firebase';
 import { syncUserToNeon, deleteMobileQuiz, fetchMobileQuizzes, createMobileQuiz, fetchBattleHistory } from '../lib/api';
 import { identifyUser, clearUser } from '../lib/analytics';
 import type { User } from 'firebase/auth';
+import { logger } from "../lib/logger";
 
 /**
  * useAuth — owns Firebase auth state, Neon sync on login/logout.
@@ -108,7 +109,7 @@ export function useAuth(deps: {
           });
 
           if (syncErr) {
-            console.warn('[NeonSync] user sync failed:', syncErr);
+            logger.warn("App", '[NeonSync] user sync failed:', syncErr);
             neonUserReadyRef.current = false;
           } else {
             neonUserReadyRef.current = true;
@@ -124,13 +125,13 @@ export function useAuth(deps: {
               for (const pid of allTombstoneIds) {
                 try {
                   const res = await deleteMobileQuiz(user.uid, pid);
-                  if (res.error) { console.warn('[NeonSync] pending delete failed:', res.error); remainingTombstones.push(pid); }
+                  if (res.error) { logger.warn("App", '[NeonSync] pending delete failed:', res.error); remainingTombstones.push(pid); }
                 } catch (err) { remainingTombstones.push(pid); }
               }
             }
 
             const quizzesRes = await fetchMobileQuizzes(user.uid);
-            if (quizzesRes.error) { console.warn('[NeonSync] fetch failed:', quizzesRes.error); }
+            if (quizzesRes.error) { logger.warn("App", '[NeonSync] fetch failed:', quizzesRes.error); }
 
             if (!quizzesRes.error && quizzesRes.quizzes) {
               quizzesRes.quizzes = quizzesRes.quizzes.filter((q: any) => !allTombstoneIds.has(q.id));
@@ -211,7 +212,7 @@ export function useAuth(deps: {
                     setQuizzes((prev: any[]) => prev.map((pq) => pq.id === q.id ? { ...pq, neonId: saved.id } : pq));
                     console.log(`[NeonSync] Backfilled quiz: ${saved.id}`);
                   }
-                }).catch((err) => console.warn('[NeonSync] backfill failed:', err));
+                }).catch((err) => logger.warn("App", '[NeonSync] backfill failed:', err));
               }
             } else if (!quizzesRes.error) {
               console.log(`[NeonSync] Neon empty, uploading ${quizzesRef.current.length} local quizzes`);
@@ -224,12 +225,12 @@ export function useAuth(deps: {
                   sourceText: questionsToSourceText(q.title, q.category || 'General', q.questionsList ?? [], q.flashcards ?? []),
                   attempts: q.attempts || [], wrongQuestions: q.wrongQuestions || [], uniqueCorrectIds: q.uniqueCorrectIds || [],
                 }).then(({ quiz: saved, error: saveErr }) => {
-                  if (saveErr) { console.warn('[NeonSync] upload failed:', saveErr); return; }
+                  if (saveErr) { logger.warn("App", '[NeonSync] upload failed:', saveErr); return; }
                   if (saved) {
                     setQuizzes((prev: any[]) => prev.map((pq) => pq.id === q.id ? { ...pq, neonId: saved.id } : pq));
                     console.log(`[NeonSync] Uploaded quiz to Neon: ${saved.id}`);
                   }
-                }).catch((err) => console.warn('[NeonSync] upload error:', err));
+                }).catch((err) => logger.warn("App", '[NeonSync] upload error:', err));
               }
             }
 
@@ -263,7 +264,7 @@ export function useAuth(deps: {
             }
           }
         } catch (e) {
-          console.warn('[NeonSync] sync pipeline failed:', e);
+          logger.warn("App", '[NeonSync] sync pipeline failed:', e);
         } finally {
           setIsSyncingData(false);
         }

@@ -41,7 +41,7 @@
         message,
         url: shareUrl,
         title: `Share ${quiz.title}`,
-      }).catch((err) => console.warn("[Share] Sheet error:", err));
+      }).catch((err) => logger.warn("Share",  Sheet error:", err));
 
       trackShareLinkTapped({
         questionCount: quiz.questions || quiz.questionCount || 0,
@@ -74,12 +74,12 @@
             }
           }
         } catch (syncErr) {
-          console.warn("[ShareSync] Background master quiz sync warning:", syncErr);
+          logger.warn("ShareSync",  Background master quiz sync warning:", syncErr);
         }
       })();
       
     } catch (err: any) {
-      console.warn("Share error:", err);
+      logger.warn("App", "Share error:", err);
       Alert.alert("Error", typeof __DEV__ !== 'undefined' && __DEV__ ? err.message : getUserErrorMessage(err));
     }
   };
@@ -222,13 +222,13 @@
             prev.map((q) => q.id === localId ? { ...q, neonId: saved.id } : q)
           );
         } else {
-          console.error("[NeonSync-Manual] POST request failed! Error message from server:", error);
+          logger.error("App", "[NeonSync-Manual] POST request failed! Error message from server:", error);
         }
       }).catch((err) => {
-        console.error("[NeonSync-Manual] POST request failed with network error:", err);
+        logger.error("App", "[NeonSync-Manual] POST request failed with network error:", err);
       });
     } else {
-      console.warn("[NeonSync-Manual] Upload skipped because user is not logged in OR backend registration is not ready.");
+      logger.warn("App", "[NeonSync-Manual] Upload skipped because user is not logged in OR backend registration is not ready.");
     }
   };
 

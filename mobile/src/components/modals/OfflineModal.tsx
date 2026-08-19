@@ -1,8 +1,9 @@
 import React from 'react';
 import { Modal, View, Text, Pressable, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import type { HomeScreenProps } from "../../types/HomeScreenProps";
 
-export function OfflineModal({ p }: { p: any }) {
+export function OfflineModal({ p }: { p: HomeScreenProps }) {
   if (!p.offlineModalParams) return null;
   return (
     <Modal visible={true} animationType="fade" transparent onRequestClose={() => (p.setOfflineModalParams || (() => {}))(null)}>

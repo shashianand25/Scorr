@@ -15,6 +15,7 @@ import { useTranslation } from "react-i18next";
 import { styles } from "../styles/shared";
 import { AnimatedPressable } from "../components/ui/AnimatedPressable";
 import { BattleTimer } from "../components/ui/BattleTimer";
+import type { HomeScreenProps } from "../types/HomeScreenProps";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -23,7 +24,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
  * Extracted from HomeScreen god-file (renderActiveSessionView + renderResultsView).
  * All state is received via p: any (same pattern as AppModals).
  */
-export function ActiveSessionScreen({ p }: { p: any }) {
+export function ActiveSessionScreen({ p }: { p: HomeScreenProps }) {
   const { t } = useTranslation();
   const {
     activeSession, setActiveSession,
@@ -445,7 +446,7 @@ export function ActiveSessionScreen({ p }: { p: any }) {
 
 }
 
-export function ResultsScreen({ p }: { p: any }) {
+export function ResultsScreen({ p }: { p: HomeScreenProps }) {
   const { t } = useTranslation();
   const {
     activeSession, setActiveSession,

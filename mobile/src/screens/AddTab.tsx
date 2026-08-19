@@ -3,6 +3,7 @@ import { View, Text, Pressable, ScrollView, FlatList, Modal, TextInput, Activity
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
 import { styles } from "../styles/shared";
+import type { HomeScreenProps } from "../types/HomeScreenProps";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -11,7 +12,7 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
  * Extracted from MainContentScreen/add case (~915 lines).
  * Receives all state and handlers via p: any.
  */
-export function AddTab({ p }: { p: any }) {
+export function AddTab({ p }: { p: HomeScreenProps }) {
   const { t } = useTranslation();
   const isDark = p.settingsDarkMode;
 

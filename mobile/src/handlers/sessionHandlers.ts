@@ -1,4 +1,5 @@
 /**
+import { logger } from "../lib/logger";
  * Quiz Session Handlers
  * handleCheckAnswer, handleAnswerSelect, handleNavigateSession,
  * handleFinishSession, handleImportQst
@@ -343,13 +344,13 @@
               prev.map((q) => q.id === localId ? { ...q, neonId: saved.id } : q)
             );
           } else {
-            console.error("[NeonSync-Import] POST request failed! Error message from server:", error);
+            logger.error("App", "[NeonSync-Import] POST request failed! Error message from server:", error);
           }
         }).catch((err) => {
-          console.error("[NeonSync-Import] POST request failed with network error:", err);
+          logger.error("App", "[NeonSync-Import] POST request failed with network error:", err);
         });
       } else {
-        console.warn("[NeonSync-Import] Upload skipped because user is not logged in OR backend registration is not ready.");
+        logger.warn("App", "[NeonSync-Import] Upload skipped because user is not logged in OR backend registration is not ready.");
       }
     } catch (err: any) {
       setImportErrorDetails({
@@ -397,7 +398,7 @@
     AsyncStorage.setItem(
       storageKey("quizzes"),
       JSON.stringify(quizzes)
-    ).catch(e => console.warn("[Persist] quiz save failed:", e));
+    ).catch(e => logger.warn("Persist",  quiz save failed:", e));
 
     // Schedule inactivity notifications
     const scheduleNotifications = async () => {
@@ -461,7 +462,7 @@
           });
         }
       } catch (err) {
-        console.warn("Failed to schedule inactivity notifications", err);
+        logger.warn("App", "Failed to schedule inactivity notifications", err);
       }
     };
 
@@ -475,7 +476,7 @@
     AsyncStorage.setItem(
       `quizforge_starred_${loadedUidRef.current ?? "guest"}`,
       JSON.stringify([...starredQuestions])
-    ).catch(e => console.warn("[Persist] starred save failed:", e));
+    ).catch(e => logger.warn("Persist",  starred save failed:", e));
   }, [starredQuestions, dataLoaded]);
 
   // ── Persist flashcard decks (SM2 ratings) ────────────────────────────────
@@ -484,7 +485,7 @@
     AsyncStorage.setItem(
       `quizforge_flashcard_decks`,
       JSON.stringify(flashcardDecks)
-    ).catch(e => console.warn("[Persist] flashcard decks save failed:", e));
+    ).catch(e => logger.warn("Persist",  flashcard decks save failed:", e));
   }, [flashcardDecks, dataLoaded]);
 
   const totalAttempts = quizzes.reduce((sum, q) => sum + (q.attempts || []).length, 0);

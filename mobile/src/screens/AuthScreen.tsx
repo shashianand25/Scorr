@@ -15,10 +15,11 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { styles } from "../styles/shared";
+import type { HomeScreenProps } from "../types/HomeScreenProps";
 
 const KeyboardWrapper = Platform.OS === "ios" ? KeyboardAvoidingView : View;
 
-export function AuthScreen({ p }: { p: any }) {
+export function AuthScreen({ p }: { p: HomeScreenProps }) {
   const {
     // Auth view state
     authView,

@@ -40,7 +40,7 @@ async function apiFetch<T>(
       json = await res.json();
     } catch (parseErr: any) {
       const text = await responseClone.text();
-      console.warn(`[API Parse Error] Failed to parse JSON from ${path}. Status: ${res.status}. Response text (first 800 chars):`, text.substring(0, 800));
+      logger.warn("App", `[API Parse Error] Failed to parse JSON from ${path}. Status: ${res.status}. Response text (first 800 chars):`, text.substring(0, 800));
       if (res.status === 404) {
         return { data: null, error: `Service endpoint not found (Status 404). Please ensure backend is updated on server.` };
       }
@@ -56,7 +56,7 @@ async function apiFetch<T>(
     let errMsg = err?.message ?? "Network error";
     
     if (err.name === 'AbortError' || errMsg.toLowerCase().includes('canceled') || errMsg.toLowerCase().includes('aborted')) {
-      console.warn("[API Timeout]", path);
+      logger.warn("API Timeout", ", path);
       return { data: null, error: "Network timeout: Server took too long to respond (might be a cold start). Please try again." };
     }
     
@@ -65,7 +65,7 @@ async function apiFetch<T>(
       errMsg = "Network error: Please check your internet connection.";
     }
     
-    console.warn("[API]", path, errMsg);
+    logger.warn("API", ", path, errMsg);
     return { data: null, error: errMsg };
   }
 }
@@ -466,6 +466,7 @@ export async function fetchVersionConfig(): Promise<{ config: VersionConfig | nu
 }
 
 import * as FileSystem from "expo-file-system/legacy";
+import { logger } from "../lib/logger";
 
 export async function parsePdfFromBackend(fileUri: string, fileName: string, fileSize: number = 0, extractThresholdMB: number): Promise<{ text: string; isVisual?: boolean; error?: string }> {
   try {

@@ -4,6 +4,7 @@ import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
 import { styles } from "../../styles/shared";
 import { SafeAreaView } from "react-native-safe-area-context";
+import type { HomeScreenProps } from "../../types/HomeScreenProps";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const closeOrDismiss = (fn: () => void) => fn();
@@ -12,7 +13,7 @@ const KeyboardWrapper = Platform.OS === "ios" ? require("react-native").Keyboard
 /**
  * Reset/logout/delete/quit/offline/settings/restart/attempt report modals
  */
-export function SessionConfirmationModals({ p }: { p: any }) {
+export function SessionConfirmationModals({ p }: { p: HomeScreenProps }) {
   const { t } = useTranslation();
   return (
     <>

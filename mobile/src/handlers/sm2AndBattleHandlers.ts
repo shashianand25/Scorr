@@ -47,7 +47,7 @@
       
       if (firebaseUser && updatedDeck.neonId) {
         updateFlashcardDeck({ userId: firebaseUser.uid, deckId: updatedDeck.neonId, cards: updatedDeck.cards })
-          .catch(err => console.error("Failed to sync SM-2 progress", err));
+          .catch(err => logger.error("App", "Failed to sync SM-2 progress", err));
       }
 
       setStudyQueue(newQueue);
