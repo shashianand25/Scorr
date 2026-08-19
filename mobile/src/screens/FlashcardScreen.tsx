@@ -1,3 +1,4 @@
+import { Easing } from "react-native";
 import React from "react";
 import {
   View,
@@ -21,7 +22,7 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
  * BattleLobbyScreen — multiplayer battle room UI.
  * Extracted from HomeScreen god-file (renderBattleLobbyView).
  */
-export function FlashcardsScreen({ p }: { p: HomeScreenProps }) {
+export function FlashcardsScreen({ p }: { p: any }) {
   const { t } = useTranslation();
   const {
     settingsDarkMode, firebaseUser,
@@ -32,8 +33,12 @@ export function FlashcardsScreen({ p }: { p: HomeScreenProps }) {
     fcFlipped, setFcFlipped,
     fcStarredIds, setFcStarredIds,
     viewingInsightsDeck, setViewingInsightsDeck,
+    viewingInsightsQuiz,
     setActiveTab, showBottomPillToast,
     startStudy, handleSM2Rating,
+    insightsSwipeX, insightsSwipeY, insightsFlipAnim,
+    insightsPanResponder, buttonSlideX, toggleSpeech, speakingText,
+    renderFormattedText, insets,
   } = p;
 
     if (!viewingInsightsQuiz) return null;
@@ -220,7 +225,7 @@ export function FlashcardsScreen({ p }: { p: HomeScreenProps }) {
             onPress={() => { 
               if (fcIndex > 0) { 
                 Animated.timing(buttonSlideX, { toValue: W, duration: 120, easing: Easing.in(Easing.quad), useNativeDriver: true }).start(() => {
-                  setFcIndex(i => i - 1); 
+                  setFcIndex((i: any) => i - 1); 
                   setFcFlipped(false); 
                   insightsFlipAnim.setValue(0); 
                   insightsSwipeX.setValue(0); 
@@ -246,7 +251,7 @@ export function FlashcardsScreen({ p }: { p: HomeScreenProps }) {
             onPress={() => { 
               if (fcIndex < cards.length - 1) { 
                 Animated.timing(buttonSlideX, { toValue: -W, duration: 120, easing: Easing.in(Easing.quad), useNativeDriver: true }).start(() => {
-                  setFcIndex(i => i + 1); 
+                  setFcIndex((i: any) => i + 1); 
                   setFcFlipped(false); 
                   insightsFlipAnim.setValue(0); 
                   insightsSwipeX.setValue(0); 
@@ -267,6 +272,4 @@ export function FlashcardsScreen({ p }: { p: HomeScreenProps }) {
         </View>
       </View>
     );
-  };
-
 }

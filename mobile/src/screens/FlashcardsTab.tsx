@@ -1,3 +1,4 @@
+import { AnimatedPressable } from "../components/ui/AnimatedPressable";
 import React from "react";
 import { View, Text, Pressable, ScrollView, FlatList, Modal, TextInput, ActivityIndicator, Animated, Image, Platform, Share, Dimensions } from "react-native";
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -12,15 +13,30 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
  * Extracted from MainContentScreen/flashcards case (~889 lines).
  * Receives all state and handlers via p: any.
  */
-export function FlashcardsTab({ p }: { p: HomeScreenProps }) {
+export function FlashcardsTab({ p }: { p: any }) {
   const { t } = useTranslation();
   const isDark = p.settingsDarkMode;
+  const {
+    settingsDarkMode, flashcardDecks, setFlashcardDecks, studyingDeck, setStudyingDeck,
+    studyQueue, setStudyQueue, isPreviewMode, setIsPreviewMode, fcIndex, setFcIndex,
+    fcCards, fcCurrentIdx, setFcCards, setFcCurrentIdx,
+    fcTitle, setFcTitle, editingDeckId, setEditingDeckId,
+    setActiveTab, startStudy,
+    studyFlipped, setStudyFlipped, toggleSpeech, speakingText,
+    renderFormattedText, studyTypedAnswer, setStudyTypedAnswer,
+    studyChecked, setStudyChecked, insets, flipAnim, swipeX,
+    previewSourceDeckRef, handleSM2Rating, selectedRating,
+    setCreationMode, setFcCategory, setDeckNameInput, setNameDeckAction, setShowNameDeckModal,
+    homeSearch, setHomeSearch, flashcardFilter, setFlashcardFilter, setShowFlashcardOptions,
+    viewingInsightsQuiz, setStudyQueueTotal, studyQueueTotal,
+    noDueAtStart, setNoDueAtStart, sessionRatings,
+    handleOpenQuizOptions, quizzes, studyTiltAnim,
+  } = p;
 
   // --- verbatim from case "flashcards" in MainContentScreen ---
-      case "flashcards" as any: {
         // ── Flashcard study mode ─────────────────────────────────────
         if (studyingDeck) {
-          const isDark  = settingsDarkMode;
+          
           const cardBg  = isDark ? "#334155" : "#475569";
           const pageBg  = isDark ? "#0f172a" : "#f4f4f8";
           
@@ -478,9 +494,9 @@ export function FlashcardsTab({ p }: { p: HomeScreenProps }) {
             }
           };
 
-          const newCount = studyQueue.filter(id => { const c = studyingDeck.cards.find((cd: any) => cd.id === id); return c && c.sm2_repetition === 0; }).length;
-          const learningCount = studyQueue.filter(id => { const c = studyingDeck.cards.find((cd: any) => cd.id === id); return c && c.sm2_repetition > 0 && c.sm2_interval < 2; }).length;
-          const reviewCount = studyQueue.filter(id => { const c = studyingDeck.cards.find((cd: any) => cd.id === id); return c && c.sm2_repetition > 0 && c.sm2_interval >= 2; }).length;
+          const newCount = studyQueue.filter((id: any) => { const c = studyingDeck.cards.find((cd: any) => cd.id === id); return c && c.sm2_repetition === 0; }).length;
+          const learningCount = studyQueue.filter((id: any) => { const c = studyingDeck.cards.find((cd: any) => cd.id === id); return c && c.sm2_repetition > 0 && c.sm2_interval < 2; }).length;
+          const reviewCount = studyQueue.filter((id: any) => { const c = studyingDeck.cards.find((cd: any) => cd.id === id); return c && c.sm2_repetition > 0 && c.sm2_interval >= 2; }).length;
 
           return (
             <View style={{ flex: 1, backgroundColor: isDark ? "#0d0f1a" : "#f4f4f8" }}>
@@ -658,7 +674,7 @@ export function FlashcardsTab({ p }: { p: HomeScreenProps }) {
                         const newPreviewIndex = studyingDeck.cards.length - newQueue.length;
                         const updatedDeck = { ...studyingDeck, previewIndex: newPreviewIndex };
                         setStudyingDeck(updatedDeck);
-                        setFlashcardDecks((prev) => prev.map(d => d.id === studyingDeck.id ? updatedDeck : d));
+                        setFlashcardDecks((prev: any) => prev.map((d: any) => d.id === studyingDeck.id ? updatedDeck : d));
                         
                         setStudyFlipped(false);
                         flipAnim.setValue(0);
@@ -732,7 +748,7 @@ export function FlashcardsTab({ p }: { p: HomeScreenProps }) {
         }
 
         const allDecks = flashcardDecks;
-        const isDark = settingsDarkMode;
+        
 
         const openNewDeck = () => {
           setCreationMode("pick");
@@ -789,7 +805,7 @@ export function FlashcardsTab({ p }: { p: HomeScreenProps }) {
                   { key: "due", label: t('flashcards.due') || "Due to Review" },
                   { key: "progress", label: t('flashcards.progress') || "In Progress" },
                   { key: "mastered", label: t('flashcards.mastered') || "Mastered" }
-                ].map(c => (
+                ].map((c: any) => (
                   <Pressable key={c.key} onPress={() => setFlashcardFilter(c.key as any)}
                     style={({ pressed }) => [{
                       paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20,
@@ -904,7 +920,4 @@ export function FlashcardsTab({ p }: { p: HomeScreenProps }) {
           </ScrollView>
           );
         })();
-      }
-
-
 }

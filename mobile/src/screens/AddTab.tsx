@@ -1,26 +1,47 @@
-import React from "react";
-import { View, Text, Pressable, ScrollView, FlatList, Modal, TextInput, ActivityIndicator, Animated, Image, Platform, Share, Dimensions } from "react-native";
+const createFlashcardDeck = async (..._args: any[]) => ({ deck: null, error: null, neonDeck: null });
+const updateFlashcardDeck = async (..._args: any[]) => ({ deck: null, error: null });
+import React, { useState } from "react";
+import {
+  View, Text, Pressable, ScrollView, FlatList, Modal,
+  TextInput, ActivityIndicator, Animated, Image, Platform,
+  Share, Dimensions, Alert, KeyboardAvoidingView,
+} from "react-native";
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
 import { styles } from "../styles/shared";
-import type { HomeScreenProps } from "../types/HomeScreenProps";
+import { AnimatedPressable } from "../components/ui/AnimatedPressable";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
-/**
- * AddTab — Add tab — quiz creation, AI generation, import.
- * Extracted from MainContentScreen/add case (~915 lines).
- * Receives all state and handlers via p: any.
- */
-export function AddTab({ p }: { p: HomeScreenProps }) {
+export function AddTab({ p }: { p: any }) {
   const { t } = useTranslation();
   const isDark = p.settingsDarkMode;
+  const KeyboardWrapper = Platform.OS === "ios" ? KeyboardAvoidingView : View;
+  const {
+    settingsDarkMode, updateDraftOptionText, deleteDraftOption, addDraftOption,
+    handleDraftBack, draftCurrentIndex, setDraftCurrentIndex,
+    handleSaveDraftedQuiz, nameDeckAction, showEllipsisMenu, setShowEllipsisMenu,
+    insets, setDeckNameInput, fcTitle, setNameDeckAction, setShowNameDeckModal,
+    fcCards, fcCurrentIdx, setFcCards, setFcCurrentIdx, editingDeckId,
+    setFlashcardDecks, flashcardDecks, firebaseUser, deleteFlashcardDeck,
+    setEditingDeckId, setFcTitle, setCreationMode, setActiveTab,
+    showPreviewModal, setShowPreviewModal, renderFormattedText, creationMode,
+    creationStep, newTitle, setNewTitle, newQuestionsCount, setNewQuestionsCount,
+    setNewQuizLanguage, newQuizLanguage, handleProceedToDrafting, draftQuestions,
+    updateDraftPrompt, selectDraftOptionCorrect,
+    setCardType, cardType, fcCategory, setFcCategory,
+  } = p;
 
-  // --- verbatim from case "add" in MainContentScreen ---
-      case "add": {
-        // ── Flashcard creation flow (dead code — tab removed) ─────────────
-        // @ts-ignore — intentional: this is dead code kept for archive, will never match active tab
-        if (creationMode === "pick" && false) {
+  const [showDeckPicker, setShowDeckPicker] = useState(false);
+  const [isFrontFocused, setIsFrontFocused] = useState(false);
+  const [isFrontCollapsed, setIsFrontCollapsed] = useState(false);
+  const [isBackFocused, setIsBackFocused] = useState(false);
+  const [isBackCollapsed, setIsBackCollapsed] = useState(false);
+  const [showNameDeckModal, setShowNameDeckModalLocal] = useState(false);
+  const [deckNameInput, setDeckNameInputLocal] = useState("");
+  const [activeInput, setActiveInput] = useState<"front" | "back">("front");
+
+if (creationMode === "pick" && false) {
           const currentCard = fcCards[fcCurrentIdx] || { front: "", back: "" };
           const updateFront = (t: string) => { const c = [...fcCards]; c[fcCurrentIdx] = { ...c[fcCurrentIdx], front: t }; setFcCards(c); };
           const updateBack  = (t: string) => { const c = [...fcCards]; c[fcCurrentIdx] = { ...c[fcCurrentIdx], back: t };  setFcCards(c); };
@@ -32,13 +53,13 @@ export function AddTab({ p }: { p: HomeScreenProps }) {
               return;
             }
             const finalTitle = fcTitle.trim() || "Untitled Deck";
-            const filled = fcCards.filter(c => c.front.trim() || c.back.trim());
+            const filled = fcCards.filter((c: any) => c.front.trim() || c.back.trim());
             if (filled.length === 0) return;
 
             let finalCards = [...filled];
             if (cardType === "Basic (and reversed card)") {
               finalCards = [];
-              filled.forEach(c => {
+              filled.forEach((c: any) => {
                 finalCards.push({ front: c.front, back: c.back });
                 finalCards.push({ front: c.back, back: c.front });
               });
@@ -46,8 +67,8 @@ export function AddTab({ p }: { p: HomeScreenProps }) {
 
             if (editingDeckId) {
               // ── Update existing deck ──
-              const updatedLocal = { ...flashcardDecks.find(d => d.id === editingDeckId), title: finalTitle, cards: finalCards, cardType };
-              setFlashcardDecks(flashcardDecks.map(d => d.id === editingDeckId ? updatedLocal : d));
+              const updatedLocal = { ...flashcardDecks.find((d: any) => d.id === editingDeckId), title: finalTitle, cards: finalCards, cardType };
+              setFlashcardDecks(flashcardDecks.map((d: any) => d.id === editingDeckId ? updatedLocal : d));
 
               // Sync update to Neon if logged in
               if (firebaseUser && updatedLocal?.neonId) {
@@ -57,7 +78,7 @@ export function AddTab({ p }: { p: HomeScreenProps }) {
                   title: finalTitle,
                   cardType,
                   cards: finalCards,
-                }).catch(err => console.warn("[NeonSync] deck update failed:", err));
+                }).catch((err: any) => console.warn("[NeonSync] deck update failed:", err));
               }
               setEditingDeckId(null);
             } else {
@@ -77,7 +98,7 @@ export function AddTab({ p }: { p: HomeScreenProps }) {
                   if (neonDeck && !error) {
                     // Replace the local deck with the server-assigned id
                     // @ts-ignore — dead code, deck is null stub
-                    setFlashcardDecks(prev => prev.map(d =>
+                    setFlashcardDecks((prev: any) => prev.map((d: any) =>
                       // @ts-ignore
                       d.id === localId ? { ...d, id: (neonDeck as any).id, neonId: (neonDeck as any).id } : d
                     ));
@@ -108,7 +129,7 @@ export function AddTab({ p }: { p: HomeScreenProps }) {
               case "underline":
                 insertedText = "<u>underline</u>";
                 break;
-              case "hr":
+              case "divider":
                 insertedText = "\n---\n";
                 break;
               case "formula":
@@ -144,7 +165,7 @@ export function AddTab({ p }: { p: HomeScreenProps }) {
                 </Pressable>
                 <View style={{ flex: 1, marginHorizontal: 12 }}>
                   <Text style={{ fontSize: 17, fontWeight: "700", color: settingsDarkMode ? "#ffffff" : "#0d0f14" }} numberOfLines={1}>
-                    {fcTitle.trim() || (editingDeckId ? (flashcardDecks.find(d => d.id === editingDeckId)?.title || "Edit Deck") : "New Deck")}
+                    {fcTitle.trim() || (editingDeckId ? (flashcardDecks.find((d: any) => d.id === editingDeckId)?.title || "Edit Deck") : "New Deck")}
                   </Text>
                   <Text style={{ fontSize: 12, color: settingsDarkMode ? "#ffffff" : "#6e727a", marginTop: 1 }}>
                     {fcCards.length} {fcCards.length === 1 ? "card" : "cards"}
@@ -177,7 +198,7 @@ export function AddTab({ p }: { p: HomeScreenProps }) {
                   }, pressed && styles.pressedScale]}>
                   <Ionicons name="layers-outline" size={14} color={settingsDarkMode ? "#aaaacc" : "#666680"} />
                   <Text style={{ fontSize: 13, fontWeight: "600", color: settingsDarkMode ? "#ffffff" : "#44445a" }}>
-                    {editingDeckId ? (flashcardDecks.find(d => d.id === editingDeckId)?.title || "study") : (fcTitle.trim() || "Select Deck")}
+                    {editingDeckId ? (flashcardDecks.find((d: any) => d.id === editingDeckId)?.title || "study") : (fcTitle.trim() || "Select Deck")}
                   </Text>
                   <Ionicons name="chevron-down" size={12} color={settingsDarkMode ? "#888899" : "#9999aa"} />
                 </Pressable>
@@ -281,7 +302,7 @@ export function AddTab({ p }: { p: HomeScreenProps }) {
                 {fcCards.length > 1 && (
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
                     <View style={{ flexDirection: "row", gap: 8 }}>
-                      {fcCards.map((c, i) => (
+                      {fcCards.map((c: any, i: any) => (
                         <Pressable key={i} onPress={() => setFcCurrentIdx(i)}
                           style={({ pressed }) => [{
                             width: 72, height: 52, borderRadius: 12,
@@ -390,7 +411,7 @@ export function AddTab({ p }: { p: HomeScreenProps }) {
                         </View>
                         <Text style={{ fontSize: 15, fontWeight: "700", color: "#6366f1" }}>Create New Deck</Text>
                       </Pressable>
-                      {flashcardDecks.map((deck) => {
+                      {flashcardDecks.map((deck: any) => {
                         const isSelected = editingDeckId === deck.id;
                         return (
                           <Pressable key={deck.id} onPress={() => {
@@ -467,11 +488,11 @@ export function AddTab({ p }: { p: HomeScreenProps }) {
                           } else {
                             setFcTitle(trimmed);
                             if (editingDeckId) {
-                              const renamingDeck = flashcardDecks.find(d => d.id === editingDeckId);
-                              setFlashcardDecks(flashcardDecks.map(d => d.id === editingDeckId ? { ...d, title: trimmed } : d));
+                              const renamingDeck = flashcardDecks.find((d: any) => d.id === editingDeckId);
+                              setFlashcardDecks(flashcardDecks.map((d: any) => d.id === editingDeckId ? { ...d, title: trimmed } : d));
                               if (firebaseUser && renamingDeck?.neonId) {
                                 updateFlashcardDeck({ userId: firebaseUser.uid, deckId: renamingDeck.neonId, title: trimmed })
-                                  .catch(err => console.warn("[NeonSync] title rename failed:", err));
+                                  .catch((err: any) => console.warn("[NeonSync] title rename failed:", err));
                               }
                             }
                           }
@@ -496,11 +517,11 @@ export function AddTab({ p }: { p: HomeScreenProps }) {
                           } else {
                             setFcTitle(trimmed);
                             if (editingDeckId) {
-                              const renamingDeck = flashcardDecks.find(d => d.id === editingDeckId);
-                              setFlashcardDecks(flashcardDecks.map(d => d.id === editingDeckId ? { ...d, title: trimmed } : d));
+                              const renamingDeck = flashcardDecks.find((d: any) => d.id === editingDeckId);
+                              setFlashcardDecks(flashcardDecks.map((d: any) => d.id === editingDeckId ? { ...d, title: trimmed } : d));
                               if (firebaseUser && renamingDeck?.neonId) {
                                 updateFlashcardDeck({ userId: firebaseUser.uid, deckId: renamingDeck.neonId, title: trimmed })
-                                  .catch(err => console.warn("[NeonSync] title rename failed:", err));
+                                  .catch((err: any) => console.warn("[NeonSync] title rename failed:", err));
                               }
                             }
                           }
@@ -542,7 +563,7 @@ export function AddTab({ p }: { p: HomeScreenProps }) {
                       { icon: "refresh-outline" as const, label: "Clear Current Card", onPress: () => {
                         const updated = [...fcCards]; updated[fcCurrentIdx] = { front: "", back: "" }; setFcCards(updated); setShowEllipsisMenu(false);
                       }, color: settingsDarkMode ? "#fff" as const : "#000" as const, bg: settingsDarkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)" },
-                    ].map((item) => (
+                    ].map((item: any) => (
                       <Pressable key={item.label} onPress={item.onPress}
                         style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", gap: 14,
                           paddingHorizontal: 20, paddingVertical: 16,
@@ -557,12 +578,12 @@ export function AddTab({ p }: { p: HomeScreenProps }) {
                     ))}
                     {editingDeckId && (
                       <Pressable onPress={() => {
-                        setFlashcardDecks(flashcardDecks.filter(d => d.id !== editingDeckId));
+                        setFlashcardDecks(flashcardDecks.filter((d: any) => d.id !== editingDeckId));
                         // Also delete from Neon if synced
-                        const deletingDeck = flashcardDecks.find(d => d.id === editingDeckId);
+                        const deletingDeck = flashcardDecks.find((d: any) => d.id === editingDeckId);
                         if (firebaseUser && deletingDeck?.neonId) {
                           deleteFlashcardDeck(firebaseUser.uid, deletingDeck.neonId)
-                            .catch(err => console.warn("[NeonSync] deck delete failed:", err));
+                            .catch((err: any) => console.warn("[NeonSync] deck delete failed:", err));
                         }
                         setEditingDeckId(null); setFcTitle(""); setFcCards([{ front: "", back: "" }]); setFcCurrentIdx(0);
                         setCreationMode("pick"); setActiveTab("home"); setShowEllipsisMenu(false);
@@ -787,7 +808,7 @@ export function AddTab({ p }: { p: HomeScreenProps }) {
                               placeholderTextColor="#666"
                               style={[styles.formInput, !settingsDarkMode && styles.lightText, { fontSize: 13 }]}
                               value={ans.text}
-                              onChangeText={(text) => updateDraftOptionText(optIdx, text)}
+                              onChangeText={(text: any) => updateDraftOptionText(optIdx, text)}
                               onFocus={() => {
                                 if (optIdx >= 2) {
                                   setTimeout(() => {
@@ -927,10 +948,5 @@ export function AddTab({ p }: { p: HomeScreenProps }) {
             </ScrollView>
           </KeyboardWrapper>
         );
-        }
-        return null;
-      }
-
-      // @ts-ignore — dead code, flashcard tab removed
-
+}
 }

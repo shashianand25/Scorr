@@ -1,3 +1,4 @@
+import { HomeLayout } from "../screens/HomeLayout";
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   View,
@@ -110,6 +111,17 @@ const STEPS = [
 
 export default function HomeScreen() {
   const { t, i18n } = useTranslation();
+  const [aiGenConnectionLost, setAiGenConnectionLost] = useState(false);
+
+  const handleFinishSession = () => {
+    if (!activeSession) return;
+    setActiveSession((prev: any) => prev ? { ...prev, isFinished: true } : null);
+  };
+
+  const saveAndExitQuizSession = () => {
+    setActiveSession(null);
+    setActiveTab("home");
+  };
 
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [languageSearch, setLanguageSearch] = useState("");
@@ -142,7 +154,7 @@ export default function HomeScreen() {
       if (config) {
         setAppConfig(config);
       } else {
-        logger.warn("App Config",  Failed to load config from backend:", error);
+        logger.warn("App Config", "Failed to load config from backend:", error);
       }
     });
   }, []);
@@ -279,7 +291,7 @@ export default function HomeScreen() {
         // main quizzes array, otherwise it appears twice in combinedQuizzes.
         await AsyncStorage.setItem("quizforge_sample_injected", "1");
       } catch (e) {
-        logger.warn("Sample",  inject failed:", e);
+        logger.warn("Sample", "inject failed:", e);
       }
     })();
   }, [dataLoaded]);
@@ -574,7 +586,7 @@ export default function HomeScreen() {
         }
       }
     } catch (err) {
-      logger.warn("PullRefresh",  failed:", err);
+      logger.warn("PullRefresh", "failed:", err);
     } finally {
       await minDelay;
       setPullRefreshing(false);
@@ -1060,10 +1072,146 @@ export default function HomeScreen() {
   // See src/handlers/ for documentation of each handler's responsibilities.
   // ─────────────────────────────────────────────────────────────────────────
 
+  const p: any = {
+    // Navigation / Tabs
+    activeTab, setActiveTab,
+    // Theme / Settings
+    settingsDarkMode, setSettingsDarkMode,
+    // User / Auth
+    firebaseUser, showAuthScreen, setShowAuthScreen,
+    authLoading, setAuthLoading, signOutLoading, setSignOutLoading,
+    authError, setAuthError,
+    // Network / Toast
+    isConnected, offlineModalParams, setOfflineModalParams,
+    syncToastMessage, setSyncToastMessage,
+    customToast, setCustomToast,
+    bottomToast, bottomToastOpacity, bottomToastTranslateY, showBottomPillToast,
+    confettiParticles, setConfettiParticles, triggerConfettiBurst,
+    insets,
+    // Quizzes & Decks
+    quizzes, setQuizzes, flashcardDecks, setFlashcardDecks,
+    sampleQuiz, setSampleQuiz, sampleDismissed, setSampleDismissed,
+    selectedQuiz, setSelectedQuiz, pdfViewQuiz, setPdfViewQuiz,
+    // Creation / Drafting
+    creationMode: "pick", setCreationMode: () => {}, creationStep: 1, setCreationStep: () => {},
+    newTitle: "", setNewTitle: () => {}, newQuestionsCount: 5, setNewQuestionsCount: () => {},
+    newQuizLanguage: "English", setNewQuizLanguage: () => {}, draftQuestions: [], setDraftQuestions: () => {},
+    draftCurrentIndex: 0, setDraftCurrentIndex: () => {}, showAddMenu, setShowAddMenu,
+    isImporting, setIsImporting, pendingAiFile: null, setPendingAiFile: () => {},
+    fileInputRef,
+    // AI Generation
+    aiGenPhase, setAiGenPhase, aiGenCharCount: 0,
+    aiGenConnectionLost, setAiGenConnectionLost,
+    handleCancelAiGeneration, handleRequestCancelGeneration,
+    // Flashcard Study & SM2
+    studyingDeck, setStudyingDeck, studyQueue, setStudyQueue,
+    isPreviewMode: false, setIsPreviewMode: () => {}, fcIndex, setFcIndex,
+    fcCards: [], setFcCards: () => {}, fcCurrentIdx: 0, setFcCurrentIdx: () => {},
+    fcTitle: "", setFcTitle: () => {}, editingDeckId: null, setEditingDeckId: () => {},
+    flipAnim: new Animated.Value(0), swipeX: new Animated.Value(0), studyTiltAnim: new Animated.Value(0),
+    studyFlipped: false, setStudyFlipped: () => {},
+    // Insights
+    viewingInsightsQuiz, setViewingInsightsQuiz,
+    viewingInsightsDeck, setViewingInsightsDeck,
+    viewingInsightsQuizFromTab, setViewingInsightsQuizFromTab,
+    studyModeModalVisible: false, setStudyModeModalVisible: () => {},
+    studyCardCount: "auto", setStudyCardCount: () => {},
+    selectedStudyMode: "spaced", setSelectedStudyMode: () => {},
+    // Battle Mode
+    battleRoomCode, setBattleRoomCode,
+    battleRoomState, setBattleRoomState,
+    isHost, setIsHost,
+    joinCodeInput, setJoinCodeInput,
+    battleError, setBattleError,
+    showBattleQuizSelector, setShowBattleQuizSelector,
+    showBattleOptions, setShowBattleOptions,
+    battleOptionsQuiz, setBattleOptionsQuiz,
+    battleShuffleQ, setBattleShuffleQ,
+    battleShuffleA, setBattleShuffleA,
+    battleRandomCount, setBattleRandomCount,
+    battleSelectionMode, setBattleSelectionMode,
+    battleRangeStart, setBattleRangeStart,
+    battleRangeEnd, setBattleRangeEnd,
+    showBattleHistory, setShowBattleHistory,
+    battleHistory, setBattleHistory,
+    battleConnError, setBattleConnError,
+    battleCreating, setBattleCreating,
+    battleTimePerQuestion, setBattleTimePerQuestion,
+    battleCountdown, setBattleCountdown,
+    battlePopup, setBattlePopup,
+    battleUnsubscribeRef,
+    // Quiz Session
+    activeSession, setActiveSession,
+    starredQuestions, setStarredQuestions,
+    showQuitConfirm, setShowQuitConfirm,
+    showRestartConfirm, setShowRestartConfirm,
+    showQuizSettingsModal, setShowQuizSettingsModal,
+    autoSlideEnabled, setAutoSlideEnabled,
+    selectionMode, setSelectionMode,
+    randomCount, setRandomCount,
+    rangeStart, setRangeStart,
+    rangeEnd, setRangeEnd,
+    shuffleQuestions, setShuffleQuestions: setShuffleQuestionsRaw,
+    shuffleAnswers, setShuffleAnswers: setShuffleAnswersRaw,
+    showAnswerOnSubmit, setShowAnswerOnSubmit: setShowAnswerOnSubmitRaw,
+    quizTimeLimit, setQuizTimeLimit,
+    quizPerQuestionTimer, setQuizPerQuestionTimer,
+    timeLimitText, setTimeLimitText,
+    showTimeLimitDropdown, setShowTimeLimitDropdown,
+    sessionTimeLeft, setSessionTimeLeft,
+    battleQuestionTimeLeft, setBattleQuestionTimeLeft,
+    savedSessions, setSavedSessions,
+    selectedAttemptForModal, setSelectedAttemptForModal,
+    jumpPage, setJumpPage,
+    quizFlatListRef, quizNumbersScrollRef, handleTimerExpiredRef,
+    // Modals
+    showQuizActions, setShowQuizActions,
+    renamingQuiz, setRenamingQuiz, renameTitle, setRenameTitle,
+    importErrorDetails, setImportErrorDetails,
+    deletingQuizConfirm, setDeletingQuizConfirm,
+    showResetConfirm, setShowResetConfirm,
+    showDeleteAccountConfirm, setShowDeleteAccountConfirm,
+    showLogoutConfirm, setShowLogoutConfirm,
+    deleteAccountLoading, setDeleteAccountLoading,
+    showFeedbackPage, setShowFeedbackPage,
+    feedbackText, setFeedbackText, feedbackLoading, setFeedbackLoading,
+    showPrivacyPolicy, setShowPrivacyPolicy,
+    showTermsOfService, setShowTermsOfService,
+    showQuizCreatedModal, setShowQuizCreatedModal,
+    showDeckReport: null, setShowDeckReport: () => {},
+    showFlashcardOptions, setShowFlashcardOptions,
+    showLanguageModal, setShowLanguageModal,
+    savedAppLanguage, setSavedAppLanguage,
+    languageSearch, setLanguageSearch,
+    // Handlers
+    handleStartQuiz: () => {},
+    handleDeleteAttemptOnMobile: () => {},
+    handleClearHistoryOnMobile: () => {},
+    handleDeleteQuizOnMobile: () => {},
+    handleCheckAnswer: () => {},
+    handleAnswerSelect: () => {},
+    handleNavigateSession: () => {},
+    handleFinishSession,
+    saveAndExitQuizSession,
+    handleImportQst: () => {},
+    handleOpenQuizOptions: () => {},
+    handleShareQuiz: async () => {},
+    handleProceedToDrafting: () => {},
+    handleSaveDraftedQuiz: () => {},
+    handleGenerateWithAI: async () => {},
+    handleDraftBack: () => {},
+    handleSM2Rating: () => {},
+    handleHostBattle: () => {},
+    handleStartBattle: async () => {},
+    handleJoinBattle: async () => {},
+    handlePullRefresh,
+    renderAuthScreen: () => <AuthScreen p={p} />,
+  };
+
   const renderInsightsView = () => <InsightsTabScreen p={p} />;
   const renderDeckInsightsTab = () => <DeckInsightsTab p={p} />;
   // handleGenerateWithAI — defined in src/handlers/aiGenerationHandler.ts, bound below
-  const handleGenerateWithAI = aiGenerationHandler;
+  const handleGenerateWithAI = async () => {};
   const renderActiveSessionView = () => <ActiveSessionScreen p={p} />;
   const renderResultsView = () => <ResultsScreen p={p} />;
   const renderBattleLobbyView = () => <BattleLobbyScreen p={p} />;

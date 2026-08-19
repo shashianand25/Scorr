@@ -1,4 +1,5 @@
-import { StyleSheet } from "react-native";
+import { StyleSheet, Platform, Dimensions } from "react-native";
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 /** Modals, inputs, buttons, badges */
 export const uiStyles = StyleSheet.create({
@@ -501,4 +502,4 @@ export const uiStyles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "500",
   },
-}});
+});

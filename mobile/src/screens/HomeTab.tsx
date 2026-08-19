@@ -1,5 +1,8 @@
+import { getUserInitial } from "../utils/user";
+import { AnimatedPressable } from "../components/ui/AnimatedPressable";
+import { Alert } from "react-native";
 import React from "react";
-import { View, Text, Pressable, ScrollView, FlatList, Modal, TextInput, ActivityIndicator, Animated, Image, Platform, Share, Dimensions } from "react-native";
+import { View, Text, Pressable, ScrollView, FlatList, Modal, TextInput, ActivityIndicator, Animated, Image, Platform, Share, Dimensions, RefreshControl } from "react-native";
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
 import { styles } from "../styles/shared";
@@ -12,12 +15,22 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
  * Extracted from MainContentScreen/home case (~469 lines).
  * Receives all state and handlers via p: any.
  */
-export function HomeTab({ p }: { p: HomeScreenProps }) {
+export function HomeTab({ p }: { p: any }) {
   const { t } = useTranslation();
   const isDark = p.settingsDarkMode;
+  const {
+    settingsDarkMode, quizzes, flashcardDecks,
+    sampleDismissed, setSampleDismissed, sampleQuiz,
+    firebaseUser, homeSearch, setHomeSearch,
+    jumpPage, setJumpPage, startStudy,
+    appConfig, setActiveTab, setShowAddMenu,
+    setShowFeedbackPage, openAuthScreen,
+    pullRefreshing, handlePullRefresh,
+    setViewingInsightsQuiz, setViewingInsightsQuizFromTab,
+    deleteQuiz, renameQuiz,
+  } = p;
 
   // --- verbatim from case "home" in MainContentScreen ---
-      default:
         // ── Home Screen (Hybrid Design) ──────────────────────────────
         return (() => {
           const bg         = "#0B0F1E";
@@ -37,8 +50,8 @@ export function HomeTab({ p }: { p: HomeScreenProps }) {
           // Filter tombstoned IDs at the source so deleted quizzes never appear in
           // Continue Learning, even if stale AsyncStorage data briefly re-hydrates them.
           const liveQuizzes = quizzes.filter((q: any) =>
-            !pendingDeleteIdsRef.current.has(q.id) &&
-            !pendingDeleteIdsRef.current.has(q.neonId)
+            !p.pendingDeleteIdsRef.current.has(q.id) &&
+            !p.pendingDeleteIdsRef.current.has(q.neonId)
           );
           const inProgressQuizzes = liveQuizzes.filter((q: any) => {
             const uniqueCount = (q.uniqueCorrectIds || []).length;
@@ -483,8 +496,4 @@ export function HomeTab({ p }: { p: HomeScreenProps }) {
             </View>
           );
         })();
-
-    }
-
-
 }

@@ -1,8 +1,8 @@
-import { StyleSheet } from "react-native";
+import { StyleSheet, Platform, Dimensions } from "react-native";
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 /** Layout, home, quiz card, quiz options */
 export const layoutStyles = StyleSheet.create({
-export const styles = StyleSheet.create({
   rootContainer: {
     flex: 1,
     backgroundColor: "#0B0F1E",
@@ -482,4 +482,4 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-}});
+});

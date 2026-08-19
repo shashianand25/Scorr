@@ -16,7 +16,7 @@ export { OfflineModal } from "./OfflineModal";
  * AppModals — thin compositor for all modal groups.
  * Delegates to focused modal group components.
  */
-export function AppModals({ p }: { p: HomeScreenProps }) {
+export function AppModals({ p }: { p: any }) {
   return (
     <>
       <QuizActionModals p={p} />

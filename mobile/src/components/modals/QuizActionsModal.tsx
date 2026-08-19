@@ -7,7 +7,7 @@ import { AnimatedPressable } from '../ui/AnimatedPressable';
 import { styles } from '../../styles/shared';
 import type { HomeScreenProps } from "../../types/HomeScreenProps";
 
-export function QuizActionsModal({ p }: { p: HomeScreenProps }) {
+export function QuizActionsModal({ p }: { p: any }) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
 

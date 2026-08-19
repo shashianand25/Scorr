@@ -14,7 +14,7 @@ const KeyboardWrapper = Platform.OS === "ios" ? require("react-native").Keyboard
  * Battle result popup with confetti
  * Extracted from AppModals.tsx god-file.
  */
-export function BattleResultModal({ p }: { p: HomeScreenProps }) {
+export function BattleResultModal({ p }: { p: any }) {
   const { t } = useTranslation();
   return (
     <>
@@ -109,8 +109,6 @@ export function BattleResultModal({ p }: { p: HomeScreenProps }) {
       </Modal>
       )}
 
-    </>
-  );
     </>
   );
 }

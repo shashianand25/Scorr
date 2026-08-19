@@ -8,9 +8,9 @@ import { authStyles } from "./authStyles";
  * Shared styles barrel — merged from domain-split style files.
  * Import from this file to get all styles as before: import { styles } from "../styles/shared"
  */
-export const styles = {
+export const styles: Record<string, any> = {
   ...layoutStyles,
   ...sessionStyles,
   ...uiStyles,
   ...authStyles,
-} as ReturnType<typeof StyleSheet.create>;
+};

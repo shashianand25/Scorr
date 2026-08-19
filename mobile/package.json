@@ -78,8 +78,5 @@
     "test": "jest --watchAll=false",
     "test:coverage": "jest --coverage --watchAll=false"
   },
-  "private": true,
-  "jest": {
-    "preset": "jest-expo"
-  }
+  "private": true
 }

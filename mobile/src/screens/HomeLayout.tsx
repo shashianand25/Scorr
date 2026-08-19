@@ -1,17 +1,24 @@
+import { FontAwesome6 } from "@expo/vector-icons";
+import { AnimatedPressable } from "../components/ui/AnimatedPressable";
+import { ActiveSessionScreen } from "./QuizSessionScreen";
 import React from "react";
-import {{
+import {
   View, Text, Pressable, ScrollView, Animated,
   Platform, TouchableOpacity, Modal, ActivityIndicator,
-  Dimensions, StatusBar,
-}} from "react-native";
-import {{ SafeAreaView, useSafeAreaInsets }} from "react-native-safe-area-context";
-import {{ Ionicons, Feather }} from "@expo/vector-icons";
-import {{ useTranslation }} from "react-i18next";
-import {{ styles }} from "../styles/shared";
-import {{ AppModals }} from "../components/modals/AppModals";
-import {{ MainContentScreen }} from "../screens/MainContentScreen";
-import {{ AIGeneratingScreen, FullscreenBattleCountdown }} from "../components/AIGeneratingScreen";
-import {{ AuthScreen }} from "../screens/AuthScreen";
+  Dimensions, StatusBar, KeyboardAvoidingView,
+  TextInput, FlatList, Alert,
+} from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { ToggleSwitch } from "../components/ui/ToggleSwitch";
+import { CardState } from "../utils/sm2";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
+import { styles } from "../styles/shared";
+import { AppModals } from "../components/modals/AppModals";
+import { MainContentScreen } from "../screens/MainContentScreen";
+import { AIGeneratingScreen, FullscreenBattleCountdown } from "../components/AIGeneratingScreen";
+import { AuthScreen } from "../screens/AuthScreen";
 import type { HomeScreenProps } from "../types/HomeScreenProps";
 
 /**
@@ -20,17 +27,45 @@ import type { HomeScreenProps } from "../types/HomeScreenProps";
  * Extracted from index.tsx to reduce god-file size.
  * Receives ALL HomeScreen state and handlers via p: any.
  */
-export function HomeLayout({{ p }}: {{ p: any }}) {{
-  const {{ t }} = useTranslation();
-  const {{
+export function HomeLayout({ p }: { p: any }) {
+  const { t } = useTranslation();
+  const isDark = p.settingsDarkMode;
+  const {
     settingsDarkMode, activeTab, setActiveTab,
     showAuthScreen, aiGenPhase, battleCountdown,
     battlePopup, screenFadeAnim, insets,
     bottomToast, bottomToastOpacity, bottomToastTranslateY,
-    confettiParticles,
-  }} = p;
+    confettiParticles, renderAuthScreen, syncToastMessage,
+    battleShuffleQ, setBattleShuffleQ,
+    battleShuffleA, setBattleShuffleA,
+    battleError, handleStartBattle, battleCreating,
+    showBattleHistory, setShowBattleHistory, battleHistory,
+    quizzes, sampleQuiz, setViewingReportCardData,
+    studyModeModalVisible, setStudyModeModalVisible,
+    viewingInsightsQuiz, studyCardCount, selectedStudyMode, setSelectedStudyMode,
+    flashcardDecks, setFlashcardDecks,
+    setStudyingDeck, setStudyQueue, setIsPreviewMode,
+    flipAnim, swipeX, setFcIndex, setFcFlipped,
+    insightsFlipAnim, insightsSwipeX, insightsSwipeY,
+    setNoDueAtStart, startStudy,
+    customToast, activeSession, creationMode, viewingInsightsQuizFromTab,
+    setShowAddMenu, fileInputRef, handleImportQst,
+    showWrongReview, viewingReportCardData, setShowWrongReview, setSnapshotReviewData,
+    reportCardQs, snapshotReviewData,
+    handleCancelAiGeneration, aiGenCharCount, appConfig, aiGenConnectionLost,
+    showBattleQuizSelector, setShowBattleQuizSelector, handleHostBattle, sampleDismissed,
+    showBattleOptions, setShowBattleOptions, battleOptionsQuiz,
+    battleSelectionMode, setBattleSelectionMode,
+    battleRandomCount, setBattleRandomCount,
+    battleRangeStart, setBattleRangeStart,
+    battleRangeEnd, setBattleRangeEnd,
+    battleTimePerQuestion, setBattleTimePerQuestion,
+  } = p;
 
-  return (
+  const KeyboardWrapper = Platform.OS === "ios" ? KeyboardAvoidingView : View;
+
+  if (showAuthScreen) {
+    return (
       <SafeAreaView style={[styles.landingSafeArea]} edges={["top", "left", "right", "bottom"]}>
         <KeyboardWrapper
           style={{ flex: 1 }}
@@ -71,12 +106,12 @@ export function HomeLayout({{ p }}: {{ p: any }}) {{
 
     <SafeAreaView style={[styles.rootContainer, !settingsDarkMode && styles.lightRootContainer]} edges={["top", "left", "right"]}>
       {activeSession ? (
-        renderActiveSessionView()
+        <ActiveSessionScreen p={p} />
       ) : (
         <>
           <View style={styles.screenContainer}>
             <Animated.View style={{ flex: 1, opacity: screenFadeAnim }}>
-              {renderContent()}
+              <MainContentScreen p={p} />
             </Animated.View>
           </View>
 
@@ -300,51 +335,7 @@ export function HomeLayout({{ p }}: {{ p: any }}) {{
       </Modal>
 
       {/* ── All Modals ── outside SafeAreaView so they never affect flex layout ── */}
-      <AppModals p={{
-        appConfig, showQuizActions, setShowQuizActions, renamingQuiz, setRenamingQuiz, renameTitle, setRenameTitle,
-        isImporting, importErrorDetails, setImportErrorDetails, deletingQuizConfirm, setDeletingQuizConfirm,
-        showResetConfirm, setShowResetConfirm, showDeleteAccountConfirm, setShowDeleteAccountConfirm,
-        showLogoutConfirm, setShowLogoutConfirm,
-        deleteAccountLoading, setDeleteAccountLoading, showQuitConfirm, setShowQuitConfirm,
-        offlineModalParams, setOfflineModalParams, showQuizSettingsModal, setShowQuizSettingsModal,
-        showRestartConfirm, setShowRestartConfirm, selectedAttemptForModal, setSelectedAttemptForModal,
-        showFeedbackPage, setShowFeedbackPage, feedbackText, setFeedbackText, feedbackLoading, setFeedbackLoading,
-        showPrivacyPolicy, setShowPrivacyPolicy, showTermsOfService, setShowTermsOfService,
-        showQuizCreatedModal, setShowQuizCreatedModal, selectedQuiz, setSelectedQuiz,
-        pdfViewQuiz, setPdfViewQuiz, showDeckReport, setShowDeckReport,
-        showFlashcardOptions, setShowFlashcardOptions, showLanguageModal, setShowLanguageModal,
-        savedAppLanguage, setSavedAppLanguage, languageSearch, setLanguageSearch,
-        battlePopup, setBattlePopup, settingsDarkMode, firebaseUser,
-        quizzes, setQuizzes, flashcardDecks, setFlashcardDecks, sampleQuiz, setSampleDismissed,
-        activeSession, setActiveSession, starredQuestions, setStarredQuestions,
-        handleOpenQuizOptions, handleShareQuiz, handleStartQuiz, handleFinishSession, handleHostBattle,
-        handleImportQst, handleDeleteAttemptOnMobile, saveAndExitQuizSession, handleClearHistoryOnMobile,
-        setActiveTab, setViewingInsightsQuiz, setViewingInsightsDeck, setViewingInsightsQuizFromTab, viewingInsightsQuizFromTab,
-        selectionMode, setSelectionMode, randomCount, setRandomCount,
-        rangeStart, setRangeStart, rangeEnd, setRangeEnd,
-        shuffleQuestions, setShuffleQuestions, shuffleAnswers, setShuffleAnswers,
-        showAnswerOnSubmit, setShowAnswerOnSubmit, autoSlideEnabled, setAutoSlideEnabled,
-        quizTimeLimit, setQuizTimeLimit, quizPerQuestionTimer, setQuizPerQuestionTimer, timeLimitText, setTimeLimitText,
-        showTimeLimitDropdown, setShowTimeLimitDropdown, triggerConfettiBurst,
-        neonUserReadyRef, setCreationMode, setCreationStep, setFcTitle, setFcCards,
-        setFcCurrentIdx, setCardType, setEditingDeckId, updateMobileQuiz, deleteMobileQuiz,
-        sendFeedback, deleteAccount, deleteUserFromNeon, onViewReportCard, handleLogout: async () => {
-          setSignOutLoading(true);
-          await new Promise(r => setTimeout(r, 800));
-          setQuizzes([]);
-          quizzesRef.current = [];
-          await AsyncStorage.removeItem("quizforge_quizzes_global");
-          await AsyncStorage.removeItem("quizforge_starred_global");
-          await signOutUser();
-          setSignOutLoading(false);
-          setActiveTab("home");
-        },
-        confettiParticles, setConfettiParticles,
-        deleteFlashcardDeck, fileInputRef, isConnected, parsePdfFromBackend, parsePptFromBackend,
-        handleGenerateWithAI, aiGenPhase, setAiGenPhase,
-        quizFlatListRef, quizNumbersScrollRef, setIsImporting, pendingAiFile, setPendingAiFile,
-        showAddMenu, setShowAddMenu
-      }} />
+      <AppModals p={p} />
 
       {/* ── Battle Fullscreen Countdown ── */}
       {battleCountdown !== null && <FullscreenBattleCountdown count={battleCountdown} isDark={settingsDarkMode} />}
@@ -994,7 +985,5 @@ export function HomeLayout({{ p }}: {{ p: any }}) {{
         );
       })()}
     </View>
-  );
-
   );
 }

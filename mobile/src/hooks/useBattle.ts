@@ -166,7 +166,7 @@ export function useBattle(deps: {
     battleCreating, setBattleCreating,
     battleTimePerQuestion, setBattleTimePerQuestion,
     battleCountdown, setBattleCountdown,
-    battlePopup: battlePopupLocal, setBattlePopup: setBattlePopupLocal,
+    battlePopup, setBattlePopup: setBattlePopupLocal,
     // Refs
     battleUnsubscribeRef,
     battleStartedRef,

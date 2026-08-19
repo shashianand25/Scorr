@@ -1,4 +1,5 @@
-import { StyleSheet } from "react-native";
+import { StyleSheet, Platform, Dimensions } from "react-native";
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 /** Quiz session, flashcard, battle */
 export const sessionStyles = StyleSheet.create({
@@ -546,4 +547,4 @@ export const sessionStyles = StyleSheet.create({
     shadowRadius: 28,
     elevation: 16,
   },
-}});
+});

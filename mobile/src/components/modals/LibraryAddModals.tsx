@@ -1,3 +1,13 @@
+import * as DocumentPicker from "expo-document-picker";
+import { Buffer } from "buffer";
+import * as mammoth from "mammoth/mammoth.browser.js";
+import { Alert } from "react-native";
+import { APP_LANGUAGES } from "../../constants/sample-quiz";
+import * as FileSystem from "expo-file-system/legacy";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import i18n from "../../lib/i18n";
+import { AnimatedPressable } from "../ui/AnimatedPressable";
+const getUserErrorMessage = (e: any) => e?.message || "An error occurred";
 import React from "react";
 import { View, Text, Pressable, ScrollView, Modal, TextInput, ActivityIndicator, Animated, Image, Platform, FlatList, Share, Dimensions } from "react-native";
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -14,8 +24,9 @@ const KeyboardWrapper = Platform.OS === "ios" ? require("react-native").Keyboard
  * Add menu, deck report, flashcard options, language selector
  * Extracted from AppModals.tsx god-file.
  */
-export function LibraryAddModals({ p }: { p: HomeScreenProps }) {
+export function LibraryAddModals({ p }: { p: any }) {
   const { t } = useTranslation();
+  const insets = p.insets || { top: 0, bottom: 0, left: 0, right: 0 };
   return (
     <>
       {/* Add Test Bottom Sheet Modal */}

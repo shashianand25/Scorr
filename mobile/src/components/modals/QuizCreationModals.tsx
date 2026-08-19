@@ -1,3 +1,4 @@
+import { ToggleSwitch } from "../ui/ToggleSwitch";
 import React from "react";
 import { View, Text, Pressable, ScrollView, Modal, TextInput, ActivityIndicator, Animated, Image, Platform, FlatList, Share, Dimensions } from "react-native";
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -14,8 +15,16 @@ const KeyboardWrapper = Platform.OS === "ios" ? require("react-native").Keyboard
  * Quiz created, start quiz settings, time limit, PDF viewer
  * Extracted from AppModals.tsx god-file.
  */
-export function QuizCreationModals({ p }: { p: HomeScreenProps }) {
+export function QuizCreationModals({ p }: { p: any }) {
   const { t } = useTranslation();
+  const insets = p.insets || { top: 0, bottom: 0, left: 0, right: 0 };
+  const optionsScrollRef = p.optionsScrollRef || { current: null };
+  const setQuizPreset = p.setQuizPreset || (() => {});
+  const totalQuestions = p.totalQuestions || 10;
+  const unansweredCount = p.unansweredCount || 0;
+  const Stepper = p.Stepper || (({ value, onValueChange }: any) => null);
+
+  const { questionCount, quizPreset, wrongCount, setQuizSetupStep } = p;
   return (
     <>
       {/* ── Quiz Created Success Modal ── */}
@@ -199,15 +208,15 @@ export function QuizCreationModals({ p }: { p: HomeScreenProps }) {
                               {p.selectionMode === "random" ? (
                                 <>
                                   <Text style={{ fontSize: 15, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#334155" }}>{t('study_modes.random_count') || "Random Count"}</Text>
-                                  <Stepper value={p.randomCount} min={1} max={totalQuestions} onChange={(v) => (p.setRandomCount || (()=>{ }))(v)} darkMode={p.settingsDarkMode} />
+                                  <Stepper value={p.randomCount} min={1} max={totalQuestions} onChange={(v: any) => (p.setRandomCount || (()=>{ }))(v)} darkMode={p.settingsDarkMode} />
                                 </>
                               ) : p.selectionMode === "range" ? (
                                 <>
                                   <Text style={{ fontSize: 15, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#334155", marginRight: 6 }}>{t('study_modes.set_range') || "Set Range"}</Text>
                                   <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 }}>
-                                    <Stepper value={p.rangeStart} min={1} max={p.rangeEnd} onChange={(v) => (p.setRangeStart || (()=>{ }))(v)} darkMode={p.settingsDarkMode} compact={true} />
+                                    <Stepper value={p.rangeStart} min={1} max={p.rangeEnd} onChange={(v: any) => (p.setRangeStart || (()=>{ }))(v)} darkMode={p.settingsDarkMode} compact={true} />
                                     <Text style={{ fontSize: 13, fontWeight: "600", color: p.settingsDarkMode ? "#94a3b8" : "#64748b" }}>{t('study_modes.to') || "to"}</Text>
-                                    <Stepper value={p.rangeEnd} min={p.rangeStart} max={totalQuestions} onChange={(v) => (p.setRangeEnd || (()=>{ }))(v)} darkMode={p.settingsDarkMode} compact={true} />
+                                    <Stepper value={p.rangeEnd} min={p.rangeStart} max={totalQuestions} onChange={(v: any) => (p.setRangeEnd || (()=>{ }))(v)} darkMode={p.settingsDarkMode} compact={true} />
                                   </View>
                                 </>
                               ) : (

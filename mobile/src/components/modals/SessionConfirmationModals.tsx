@@ -1,3 +1,7 @@
+import { AnimatedPressable } from "../ui/AnimatedPressable";
+import { ToggleSwitch } from "../ui/ToggleSwitch";
+import { generateMockQuestionsForQuiz } from "../../utils/quiz";
+import { SAMPLE_QUIZ } from "../../constants/sample-quiz";
 import React from "react";
 import { View, Text, Pressable, ScrollView, Modal, TextInput, ActivityIndicator, Animated, Platform, FlatList, Dimensions } from "react-native";
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -13,8 +17,9 @@ const KeyboardWrapper = Platform.OS === "ios" ? require("react-native").Keyboard
 /**
  * Reset/logout/delete/quit/offline/settings/restart/attempt report modals
  */
-export function SessionConfirmationModals({ p }: { p: HomeScreenProps }) {
+export function SessionConfirmationModals({ p }: { p: any }) {
   const { t } = useTranslation();
+  const insets = p.insets || { top: 0, bottom: 0, left: 0, right: 0 };
   return (
     <>
       {!!p.showResetConfirm && (

@@ -1,3 +1,6 @@
+import { Alert } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { AnimatedPressable } from "../ui/AnimatedPressable";
 import React from "react";
 import { View, Text, Pressable, ScrollView, Modal, TextInput, ActivityIndicator, Animated, Image, Platform, FlatList, Share, Dimensions } from "react-native";
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -14,8 +17,9 @@ const KeyboardWrapper = Platform.OS === "ios" ? require("react-native").Keyboard
  * Feedback, privacy policy, terms of service
  * Extracted from AppModals.tsx god-file.
  */
-export function FeedbackLegalModals({ p }: { p: HomeScreenProps }) {
+export function FeedbackLegalModals({ p }: { p: any }) {
   const { t } = useTranslation();
+  const insets = p.insets || { top: 0, bottom: 0, left: 0, right: 0 };
   return (
     <>
       {/* ── Feedback — full-screen slide-up page ── */}

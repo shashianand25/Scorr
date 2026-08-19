@@ -1,3 +1,7 @@
+import { Alert } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as FileSystem from "expo-file-system/legacy";
+import { AnimatedPressable } from "../ui/AnimatedPressable";
 import React from "react";
 import { View, Text, Pressable, ScrollView, Modal, TextInput, ActivityIndicator, Animated, Platform, FlatList, Dimensions } from "react-native";
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -13,10 +17,13 @@ const KeyboardWrapper = Platform.OS === "ios" ? require("react-native").Keyboard
 /**
  * Quiz actions bottom sheet + import loading modal
  */
-export function QuizActionsSheet({ p }: { p: HomeScreenProps }) {
+export function QuizActionsSheet({ p }: { p: any }) {
   const { t } = useTranslation();
   return (
     <>
+      {p.showQuizActions != null && (
+      <Modal
+        visible={true}
         animationType="slide"
         transparent={true}
         onRequestClose={() => (p.setShowQuizActions || (() => {}))(null)}
@@ -148,7 +155,7 @@ export function QuizActionsSheet({ p }: { p: HomeScreenProps }) {
               style={{
                 flexDirection: "row", alignItems: "center", gap: 16,
                 paddingVertical: 14, paddingHorizontal: 24,
-                marginBottom: insets.bottom + 10
+                marginBottom: (p.insets?.bottom || 0) + 10
               }}
               scaleTo={0.97}
             >

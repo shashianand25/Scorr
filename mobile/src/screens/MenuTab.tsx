@@ -1,3 +1,6 @@
+import i18n from "../lib/i18n";
+import { getUserInitial, getUserFullName } from "../utils/user";
+import { AnimatedPressable } from "../components/ui/AnimatedPressable";
 import React from "react";
 import { View, Text, Pressable, ScrollView, FlatList, Modal, TextInput, ActivityIndicator, Animated, Image, Platform, Share, Dimensions } from "react-native";
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -12,12 +15,19 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
  * Extracted from MainContentScreen/menu case (~199 lines).
  * Receives all state and handlers via p: any.
  */
-export function MenuTab({ p }: { p: HomeScreenProps }) {
+export function MenuTab({ p }: { p: any }) {
   const { t } = useTranslation();
   const isDark = p.settingsDarkMode;
+  const {
+    settingsDarkMode, setSettingsDarkMode,
+    firebaseUser, signOutLoading, handleSignOut,
+    openAuthScreen, setShowLanguageModal,
+    setActiveTab, setShowFeedbackPage,
+    setShowPrivacyPolicy, setShowTermsOfService,
+    setShowLogoutConfirm, setShowDeleteAccountConfirm,
+  } = p;
 
   // --- verbatim from case "menu" in MainContentScreen ---
-      case "menu":
         return (() => {
           const isDark  = true; // Forced dark theme
           const bg      = "#0B0F1E";

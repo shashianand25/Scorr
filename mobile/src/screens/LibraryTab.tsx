@@ -1,3 +1,4 @@
+import { RefreshControl } from "react-native";
 import React from "react";
 import { View, Text, Pressable, ScrollView, FlatList, Modal, TextInput, ActivityIndicator, Animated, Image, Platform, Share, Dimensions } from "react-native";
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -12,12 +13,20 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
  * Extracted from MainContentScreen/library case (~254 lines).
  * Receives all state and handlers via p: any.
  */
-export function LibraryTab({ p }: { p: HomeScreenProps }) {
+export function LibraryTab({ p }: { p: any }) {
   const { t } = useTranslation();
   const isDark = p.settingsDarkMode;
+  const {
+    settingsDarkMode, libraryTab, setLibraryTab,
+    quizzes, flashcardDecks,
+    librarySearch, setLibrarySearch,
+    setViewingInsightsQuiz, setViewingInsightsQuizFromTab,
+    setActiveTab, startStudy,
+    pullRefreshing, handlePullRefresh,
+    setShowAddMenu,
+  } = p;
 
   // --- verbatim from case "library" in MainContentScreen ---
-      case "library": {
         // ── My Library ────────────────────────────────────────────
         const bg       = "#0B0F1A";
         const toggleBg = "#1A1E2E";
@@ -268,8 +277,4 @@ export function LibraryTab({ p }: { p: HomeScreenProps }) {
             </ScrollView>
           </View>
         );
-      }
-
-
-
 }

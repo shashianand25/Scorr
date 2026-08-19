@@ -1,3 +1,5 @@
+import YoutubeIframe from "react-native-youtube-iframe";
+import { Linking } from "react-native";
 import React from "react";
 import { View, Text, Pressable, ScrollView, FlatList, Modal, TextInput, ActivityIndicator, Animated, Image, Platform, Share, Dimensions } from "react-native";
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -12,12 +14,12 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
  * Extracted from MainContentScreen/guide case (~100 lines).
  * Receives all state and handlers via p: any.
  */
-export function GuideTab({ p }: { p: HomeScreenProps }) {
+export function GuideTab({ p }: { p: any }) {
   const { t } = useTranslation();
   const isDark = p.settingsDarkMode;
+  const { settingsDarkMode, setActiveTab, appConfig } = p;
 
   // --- verbatim from case "guide" in MainContentScreen ---
-      case "guide":
         return (
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 }}>

@@ -8,8 +8,10 @@ import {
   FlatList,
   ActivityIndicator,
   Share,
-  Dimensions,
+  Dimensions, Image,
 } from "react-native";
+import { generateMockQuestionsForQuiz } from "../utils/quiz";
+import { finishBattle, listenToBattleRoom, getBattleRoom } from "../lib/multiplayer";
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
 import { styles } from "../styles/shared";
@@ -24,14 +26,14 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
  * Extracted from HomeScreen god-file (renderActiveSessionView + renderResultsView).
  * All state is received via p: any (same pattern as AppModals).
  */
-export function ActiveSessionScreen({ p }: { p: HomeScreenProps }) {
+export function ActiveSessionScreen({ p }: { p: any }) {
   const { t } = useTranslation();
   const {
     activeSession, setActiveSession,
     settingsDarkMode,
     isConnected, showReconnectedToast, offlineModalParams,
     battleRoomState, firebaseUser,
-    sessionTimeLeft, battleQuestionTimeLeft,
+    sessionTimeLeft, battleQuestionTimeLeft, battleTimePerQuestion,
     starredQuestions, setStarredQuestions,
     showQuitConfirm, setShowQuitConfirm,
     showQuizSettingsModal, setShowQuizSettingsModal,
@@ -44,12 +46,13 @@ export function ActiveSessionScreen({ p }: { p: HomeScreenProps }) {
     handleFinishSession, saveAndExitQuizSession,
     toggleSpeech, speakingText,
     renderFormattedText, screenFadeAnim,
+    insets,
   } = p;
 
     if (!activeSession) return null;
 
     if (activeSession.isFinished) {
-      return renderResultsView();
+      return <ResultsScreen p={p} />;
     }
 
     const currentIndex = activeSession.currentIndex;
@@ -189,7 +192,7 @@ export function ActiveSessionScreen({ p }: { p: HomeScreenProps }) {
               <Pressable
                 onPress={() => {
                   const qId = currentQuestion.id;
-                  setStarredQuestions(prev => {
+                  setStarredQuestions((prev: any) => {
                     const next = new Set(prev);
                     if (next.has(qId)) next.delete(qId); else next.add(qId);
                     return next;
@@ -442,17 +445,20 @@ export function ActiveSessionScreen({ p }: { p: HomeScreenProps }) {
         </View>
       </View>
     );
-  };
-
 }
 
-export function ResultsScreen({ p }: { p: HomeScreenProps }) {
+export function ResultsScreen({ p }: { p: any }) {
   const { t } = useTranslation();
   const {
     activeSession, setActiveSession,
     settingsDarkMode,
     battleRoomState, firebaseUser,
     battleHistory,
+    insets, quizzes, isHost,
+    battleFinishedCalledRef, battleUnsubscribeRef,
+    saveBattleResult, setBattlePopup,
+    setBattleRoomCode, setBattleRoomState,
+    setIsHost, setJoinCodeInput, setActiveTab,
     starredQuestions, setStarredQuestions,
     viewingReportCardData, setViewingReportCardData,
     showWrongReview, setShowWrongReview,
@@ -900,6 +906,4 @@ export function ResultsScreen({ p }: { p: HomeScreenProps }) {
         </View>
       </View>
     );
-  };
-
 }

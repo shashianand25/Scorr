@@ -56,7 +56,7 @@ async function apiFetch<T>(
     let errMsg = err?.message ?? "Network error";
     
     if (err.name === 'AbortError' || errMsg.toLowerCase().includes('canceled') || errMsg.toLowerCase().includes('aborted')) {
-      logger.warn("API Timeout", ", path);
+      logger.warn("API Timeout", path);
       return { data: null, error: "Network timeout: Server took too long to respond (might be a cold start). Please try again." };
     }
     
@@ -65,7 +65,7 @@ async function apiFetch<T>(
       errMsg = "Network error: Please check your internet connection.";
     }
     
-    logger.warn("API", ", path, errMsg);
+    logger.warn("API", path, errMsg);
     return { data: null, error: errMsg };
   }
 }

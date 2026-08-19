@@ -9,7 +9,10 @@ import {
   ActivityIndicator,
   Dimensions,
   FlatList,
+  Platform,
+  KeyboardAvoidingView,
 } from "react-native";
+import { AnimatedPressable } from "../components/ui/AnimatedPressable";
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
 import { styles } from "../styles/shared";
@@ -21,10 +24,11 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
  * BattleLobbyScreen — multiplayer battle room UI.
  * Extracted from HomeScreen god-file (renderBattleLobbyView).
  */
-export function BattleLobbyScreen({ p }: { p: HomeScreenProps }) {
+export function BattleLobbyScreen({ p }: { p: any }) {
+  const KeyboardWrapper = Platform.OS === "ios" ? KeyboardAvoidingView : View;
   const { t } = useTranslation();
   const {
-    settingsDarkMode, firebaseUser,
+    settingsDarkMode, firebaseUser, setShowAuthScreen, battleUnsubscribeRef,
     battleRoomCode, setBattleRoomCode,
     battleRoomState, setBattleRoomState,
     isHost, setIsHost,
@@ -85,14 +89,14 @@ export function BattleLobbyScreen({ p }: { p: HomeScreenProps }) {
     const sepColor = isDark ? "rgba(255,255,255,0.07)" : "#e2e8f0";
 
     // ── Dynamic stats from history ────────────────────────────────────
-    const totalWins = battleHistory.filter(h => h.won).length;
+    const totalWins = battleHistory.filter((h: any) => h.won).length;
     const totalBattles = battleHistory.length;
     const winRate = totalBattles > 0 ? Math.round((totalWins / totalBattles) * 100) : 0;
     // Compute current day streak (consecutive days played)
     let dayStreak = 0;
     if (battleHistory.length > 0) {
       const sortedHistory = [...battleHistory].sort((a, b) => b.date - a.date);
-      const uniqueDays = new Set(sortedHistory.map(h => new Date(h.date).toDateString()));
+      const uniqueDays = new Set(sortedHistory.map((h: any) => new Date(h.date).toDateString()));
       
       const today = new Date();
       const yesterday = new Date(today);
@@ -247,7 +251,7 @@ export function BattleLobbyScreen({ p }: { p: HomeScreenProps }) {
                     placeholderTextColor={mutedSub}
                     maxLength={5}
                     value={joinCodeInput}
-                    onChangeText={(text) => {
+                    onChangeText={(text: any) => {
                       setJoinCodeInput(text);
                       if (battleError) setBattleError("");
                     }}
@@ -362,7 +366,7 @@ export function BattleLobbyScreen({ p }: { p: HomeScreenProps }) {
                 }}>
                   <Text style={{ fontSize: 11, color: mutedSub, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 14 }}>{t('battle.share_code') || "Share This Code"}</Text>
                   <View style={{ flexDirection: "row", gap: 8, marginBottom: 14 }}>
-                    {battleRoomCode.split("").map((ch, i) => (
+                    {battleRoomCode.split("").map((ch: any, i: any) => (
                       <View key={i} style={{
                         width: 44, height: 54, borderRadius: 12,
                         backgroundColor: isDark ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.1)",
@@ -397,7 +401,7 @@ export function BattleLobbyScreen({ p }: { p: HomeScreenProps }) {
                 </View>
               ) : (
                 <View style={{ flexDirection: "row", gap: 8, marginBottom: 28 }}>
-                  {[0,1,2].map(i => (
+                  {[0,1,2].map((i: any) => (
                     <View key={i} style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: isDark ? "#818cf8" : "#6366f1", opacity: 0.6 }} />
                   ))}
                 </View>
@@ -419,8 +423,6 @@ export function BattleLobbyScreen({ p }: { p: HomeScreenProps }) {
 
       </KeyboardWrapper>
     );
-  };
-
 }
 
 /**
