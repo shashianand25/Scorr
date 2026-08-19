@@ -110,7 +110,7 @@ export function HomeLayout({ p }: { p: any }) {
       ) : (
         <>
           <View style={styles.screenContainer}>
-            <Animated.View style={{ flex: 1, opacity: screenFadeAnim }}>
+            <Animated.View style={{ flex: 1, opacity: screenFadeAnim || 1 }}>
               <MainContentScreen p={p} />
             </Animated.View>
           </View>

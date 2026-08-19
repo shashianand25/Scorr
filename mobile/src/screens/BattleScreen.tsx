@@ -259,7 +259,7 @@ export function BattleLobbyScreen({ p }: { p: any }) {
                   />
                   <AnimatedPressable
                     onPress={handleJoinBattle}
-                    disabled={joinCodeInput.length !== 5 || battleCreating}
+                    disabled={(joinCodeInput || "").length !== 5 || battleCreating}
                     style={() => {
                       const isReady = joinCodeInput.length === 5 && !battleCreating;
                       return {

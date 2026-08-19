@@ -18,7 +18,7 @@ import type { HomeScreenProps } from "../types/HomeScreenProps";
  * All state and handlers flow through the p: any prop.
  */
 export function MainContentScreen({ p, overrideTab }: { p: HomeScreenProps; overrideTab?: string }) {
-  const tabToRender = overrideTab || p.activeTab;
+  const tabToRender = overrideTab || p?.activeTab || "home";
 
   // Active quiz session takes priority over tab routing
   if (p.activeSession && !p.activeSession.isFinished) {

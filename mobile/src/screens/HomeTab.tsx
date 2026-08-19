@@ -19,16 +19,16 @@ export function HomeTab({ p }: { p: any }) {
   const { t } = useTranslation();
   const isDark = p.settingsDarkMode;
   const {
-    settingsDarkMode, quizzes, flashcardDecks,
-    sampleDismissed, setSampleDismissed, sampleQuiz,
-    firebaseUser, homeSearch, setHomeSearch,
-    jumpPage, setJumpPage, startStudy,
-    appConfig, setActiveTab, setShowAddMenu,
-    setShowFeedbackPage, openAuthScreen,
-    pullRefreshing, handlePullRefresh,
-    setViewingInsightsQuiz, setViewingInsightsQuizFromTab,
-    deleteQuiz, renameQuiz,
-  } = p;
+    settingsDarkMode = true, quizzes = [], flashcardDecks = [],
+    sampleDismissed = false, setSampleDismissed = () => {}, sampleQuiz = null,
+    firebaseUser = null, homeSearch = "", setHomeSearch = () => {},
+    jumpPage = 0, setJumpPage = () => {}, startStudy = () => {},
+    appConfig = null, setActiveTab = () => {}, setShowAddMenu = () => {},
+    setShowFeedbackPage = () => {}, openAuthScreen = () => {},
+    pullRefreshing = false, handlePullRefresh = async () => {},
+    setViewingInsightsQuiz = () => {}, setViewingInsightsQuizFromTab = () => {},
+    deleteQuiz = () => {}, renameQuiz = () => {},
+  } = p || {};
 
   // --- verbatim from case "home" in MainContentScreen ---
         // ── Home Screen (Hybrid Design) ──────────────────────────────
@@ -49,9 +49,10 @@ export function HomeTab({ p }: { p: any }) {
           // ── Jump Back In data ─────────────────────────────────────
           // Filter tombstoned IDs at the source so deleted quizzes never appear in
           // Continue Learning, even if stale AsyncStorage data briefly re-hydrates them.
-          const liveQuizzes = quizzes.filter((q: any) =>
-            !p.pendingDeleteIdsRef.current.has(q.id) &&
-            !p.pendingDeleteIdsRef.current.has(q.neonId)
+          const tombstoneSet = p?.pendingDeleteIdsRef?.current || new Set();
+          const liveQuizzes = (quizzes || []).filter((q: any) =>
+            !tombstoneSet.has(q.id) &&
+            !tombstoneSet.has(q.neonId)
           );
           const inProgressQuizzes = liveQuizzes.filter((q: any) => {
             const uniqueCount = (q.uniqueCorrectIds || []).length;
@@ -161,7 +162,7 @@ export function HomeTab({ p }: { p: any }) {
                       onChangeText={setHomeSearch}
                       style={{ flex: 1, fontSize: 15, color: txt, padding: 0 }}
                     />
-                    {homeSearch.length > 0 && (
+                    {(homeSearch || "").length > 0 && (
                       <Pressable onPress={() => setHomeSearch("")}>
                         <Ionicons name="close-circle" size={17} color={muted} />
                       </Pressable>

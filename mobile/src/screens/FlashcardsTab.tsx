@@ -15,27 +15,38 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
  */
 export function FlashcardsTab({ p }: { p: any }) {
   const { t } = useTranslation();
-  const isDark = p.settingsDarkMode;
+  const isDark = p?.settingsDarkMode ?? true;
   const {
-    settingsDarkMode, flashcardDecks, setFlashcardDecks, studyingDeck, setStudyingDeck,
-    studyQueue, setStudyQueue, isPreviewMode, setIsPreviewMode, fcIndex, setFcIndex,
-    fcCards, fcCurrentIdx, setFcCards, setFcCurrentIdx,
-    fcTitle, setFcTitle, editingDeckId, setEditingDeckId,
-    setActiveTab, startStudy,
-    studyFlipped, setStudyFlipped, toggleSpeech, speakingText,
-    renderFormattedText, studyTypedAnswer, setStudyTypedAnswer,
-    studyChecked, setStudyChecked, insets, flipAnim, swipeX,
-    previewSourceDeckRef, handleSM2Rating, selectedRating,
-    setCreationMode, setFcCategory, setDeckNameInput, setNameDeckAction, setShowNameDeckModal,
-    homeSearch, setHomeSearch, flashcardFilter, setFlashcardFilter, setShowFlashcardOptions,
-    viewingInsightsQuiz, setStudyQueueTotal, studyQueueTotal,
-    noDueAtStart, setNoDueAtStart, sessionRatings,
-    handleOpenQuizOptions, quizzes, studyTiltAnim,
-  } = p;
+    settingsDarkMode = true, flashcardDecks = [], setFlashcardDecks = () => {},
+    studyingDeck = null, setStudyingDeck = () => {},
+    studyQueue = [], setStudyQueue = () => {},
+    isPreviewMode = false, setIsPreviewMode = () => {},
+    fcIndex = 0, setFcIndex = () => {},
+    fcCards = [], fcCurrentIdx = 0, setFcCards = () => {}, setFcCurrentIdx = () => {},
+    fcTitle = "", setFcTitle = () => {}, editingDeckId = null, setEditingDeckId = () => {},
+    setActiveTab = () => {}, startStudy = () => {},
+    studyFlipped = false, setStudyFlipped = () => {},
+    toggleSpeech = () => {}, speakingText = null,
+    renderFormattedText = (txt: string) => <Text>{txt}</Text>,
+    studyTypedAnswer = "", setStudyTypedAnswer = () => {},
+    studyChecked = false, setStudyChecked = () => {},
+    insets = { top: 0, bottom: 0, left: 0, right: 0 },
+    flipAnim = new Animated.Value(0), swipeX = new Animated.Value(0),
+    previewSourceDeckRef = { current: null },
+    handleSM2Rating = () => {}, selectedRating = null,
+    setCreationMode = () => {}, setFcCategory = () => {},
+    setDeckNameInput = () => {}, setNameDeckAction = () => {},
+    setShowNameDeckModal = () => {},
+    homeSearch = "", setHomeSearch = () => {},
+    flashcardFilter = "all", setFlashcardFilter = () => {},
+    setShowFlashcardOptions = () => {},
+    viewingInsightsQuiz = null, setStudyQueueTotal = () => {}, studyQueueTotal = 0,
+    noDueAtStart = false, setNoDueAtStart = () => {},
+    sessionRatings = { again: 0, hard: 0, good: 0, perfect: 0 },
+    handleOpenQuizOptions = () => {}, quizzes = [], studyTiltAnim = new Animated.Value(0),
+  } = p || {};
 
-  // --- verbatim from case "flashcards" in MainContentScreen ---
-        // ── Flashcard study mode ─────────────────────────────────────
-        if (studyingDeck) {
+if (studyingDeck) {
           
           const cardBg  = isDark ? "#334155" : "#475569";
           const pageBg  = isDark ? "#0f172a" : "#f4f4f8";

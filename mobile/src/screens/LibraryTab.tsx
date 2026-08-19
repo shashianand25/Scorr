@@ -17,14 +17,14 @@ export function LibraryTab({ p }: { p: any }) {
   const { t } = useTranslation();
   const isDark = p.settingsDarkMode;
   const {
-    settingsDarkMode, libraryTab, setLibraryTab,
-    quizzes, flashcardDecks,
-    librarySearch, setLibrarySearch,
-    setViewingInsightsQuiz, setViewingInsightsQuizFromTab,
-    setActiveTab, startStudy,
-    pullRefreshing, handlePullRefresh,
-    setShowAddMenu,
-  } = p;
+    settingsDarkMode = true, libraryTab = "courses", setLibraryTab = () => {},
+    quizzes = [], flashcardDecks = [],
+    librarySearch = "", setLibrarySearch = () => {},
+    setViewingInsightsQuiz = () => {}, setViewingInsightsQuizFromTab = () => {},
+    setActiveTab = () => {}, startStudy = () => {},
+    pullRefreshing = false, handlePullRefresh = async () => {},
+    setShowAddMenu = () => {},
+  } = p || {};
 
   // --- verbatim from case "library" in MainContentScreen ---
         // ── My Library ────────────────────────────────────────────
@@ -230,7 +230,7 @@ export function LibraryTab({ p }: { p: any }) {
                 onChangeText={setLibrarySearch}
                 style={{ flex: 1, fontSize: 15, color: txt, padding: 0 }}
               />
-              {librarySearch.length > 0 && (
+              {(librarySearch || "").length > 0 && (
                 <Pressable onPress={() => setLibrarySearch("")}>
                   <Ionicons name="close-circle" size={18} color={muted} />
                 </Pressable>
