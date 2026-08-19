@@ -1,12 +1,23 @@
 {
-  "name": "scorr-monorepo",
+  "name": "scorr",
   "version": "1.0.0",
+  "description": "Scorr - AI-Powered MCQ Generator, Flashcard Mastery & Spaced Repetition Platform",
   "private": true,
+  "author": "Shashi Anand",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shashianand25/Scorr.git"
+  },
   "workspaces": [
     "mobile",
     "web",
     "backend"
   ],
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=9.0.0"
+  },
   "scripts": {
     "test": "npm --prefix mobile test",
     "test:mobile": "npm --prefix mobile test",
@@ -17,7 +28,12 @@
     "lint": "npm --prefix mobile run lint",
     "typecheck": "./mobile/node_modules/.bin/tsc --project mobile/tsconfig.json --noEmit"
   },
+  "dependencies": {
+    "firebase": "^12.14.0"
+  },
   "devDependencies": {
-    "jest": "^30.4.1"
+    "jest": "^30.4.1",
+    "typescript": "~6.0.3",
+    "prettier": "^3.3.3"
   }
 }

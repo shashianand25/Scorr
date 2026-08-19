@@ -1,0 +1,17 @@
+{
+  "": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "packageRules": [
+    {
+      "matchPackagePatterns": ["*"],
+      "semanticCommitType": "chore",
+      "semanticCommitScope": "deps"
+    }
+  ],
+  "npm": {
+    "enabled": true
+  },
+  "schedule": ["before 6am on monday"]
+}
