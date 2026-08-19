@@ -23,7 +23,7 @@ jobs:
 
       - name: Install Mobile dependencies
         working-directory: mobile
-        run: npm install --no-audit
+        run: npm install --no-audit --legacy-peer-deps
 
       - name: Type check Mobile
         working-directory: mobile
