@@ -238,7 +238,7 @@ export function HomeLayout({ p }: { p: any }) {
     </SafeAreaView>
 
       {/* ── Report Card Modal ── */}
-      <Modal visible={showWrongReview || !!viewingReportCardData} animationType="slide" transparent={true} statusBarTranslucent={true} onRequestClose={() => { setShowWrongReview(false); setViewingReportCardData(null); setSnapshotReviewData([]); }}>
+      <Modal visible={showWrongReview || !!viewingReportCardData} animationType="slide" transparent={true} statusBarTranslucent={true} onRequestClose={() => { (setShowWrongReview || (() => {}))(false); (setViewingReportCardData || (() => {}))(null); (setSnapshotReviewData || (() => {}))([]); }}>
         <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#0b1021" : "#f8fafc" }}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 24, paddingTop: Math.max(insets.top, 16) + 12, paddingBottom: 20, borderBottomWidth: 1, borderBottomColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
             <View style={{ flex: 1, marginRight: 12 }}>
@@ -251,7 +251,7 @@ export function HomeLayout({ p }: { p: any }) {
                 </Text>
               )}
             </View>
-            <Pressable onPress={() => { setShowWrongReview(false); setViewingReportCardData(null); setSnapshotReviewData([]); }} style={{ padding: 8 }}>
+            <Pressable onPress={() => { (setShowWrongReview || (() => {}))(false); (setViewingReportCardData || (() => {}))(null); (setSnapshotReviewData || (() => {}))([]); }} style={{ padding: 8 }}>
               <Ionicons name="close" size={28} color={settingsDarkMode ? "#ffffff" : "#111827"} />
             </Pressable>
           </View>
@@ -259,7 +259,8 @@ export function HomeLayout({ p }: { p: any }) {
             {(() => {
               // Live session review uses the snapshot captured at press time.
               // History report card uses reportCardQs from useMemo.
-              const displayQs = viewingReportCardData ? reportCardQs : snapshotReviewData;
+              const rawQs = viewingReportCardData ? reportCardQs : snapshotReviewData;
+              const displayQs = Array.isArray(rawQs) ? rawQs : [];
               return (
                 <>
                   {displayQs.length === 0 && (
@@ -667,7 +668,7 @@ export function HomeLayout({ p }: { p: any }) {
                 <Ionicons name="close" size={20} color={muted} />
               </Pressable>
             </View>
-            {battleHistory.length === 0 ? (
+            {(battleHistory || []).length === 0 ? (
               <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 14 }}>
                 <Text style={{ fontSize: 48 }}>⚔️</Text>
                 <Text style={{ fontSize: 18, fontWeight: "800", color: txt }}>No battles yet</Text>
