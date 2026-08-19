@@ -60,6 +60,11 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "eslint": "^8.57.0",
+    "eslint-config-expo": "^7.0.0",
+    "prettier": "^3.3.3",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -68,7 +73,8 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "eslint src --ext .ts,.tsx --max-warnings 0",
+    "format": "prettier --write src"
   },
   "private": true
 }
