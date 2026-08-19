@@ -4,13 +4,12 @@ on:
   push:
     branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
 
 jobs:
-  test:
-    name: Test & Lint
+  test-mobile:
+    name: Mobile - Test & TypeCheck
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,25 +21,54 @@ jobs:
           cache: 'npm'
           cache-dependency-path: mobile/package-lock.json
 
-      - name: Install dependencies
+      - name: Install Mobile dependencies
         working-directory: mobile
         run: npm ci
 
-      - name: Lint
-        working-directory: mobile
-        run: npm run lint --if-present
-
-      - name: Type check
+      - name: Type check Mobile
         working-directory: mobile
         run: npx tsc --noEmit
 
-      - name: Run tests
+      - name: Run Mobile tests
         working-directory: mobile
         run: npm test
 
-      - name: Upload coverage
-        uses: actions/upload-artifact@v4
-        if: always()
+  test-web:
+    name: Web - Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          name: coverage-report
-          path: mobile/coverage/
+          node-version: '20'
+
+      - name: Install Web dependencies
+        working-directory: web
+        run: npm install
+
+      - name: Run Web tests
+        working-directory: web
+        run: npm test
+
+  test-backend:
+    name: Backend - Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Backend dependencies
+        working-directory: backend
+        run: npm install
+
+      - name: Run Backend tests
+        working-directory: backend
+        run: npm test

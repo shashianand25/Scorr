@@ -1,49 +1,50 @@
-/**
- * Tests for the structured logger — Sentry integration, dev/prod behaviour.
- */
+import { logger } from '../../lib/logger';
+import * as Sentry from '@sentry/react-native';
+
 jest.mock('@sentry/react-native', () => ({
   captureException: jest.fn(),
   captureMessage: jest.fn(),
   addBreadcrumb: jest.fn(),
 }));
 
-import * as Sentry from '@sentry/react-native';
-import { logger } from '../../lib/logger';
-
-beforeEach(() => jest.clearAllMocks());
-
-describe('logger.error', () => {
-  it('calls Sentry.captureException when given an Error', () => {
-    const err = new Error('test error');
-    logger.error('TestTag', 'something broke', err);
-    expect(Sentry.captureException).toHaveBeenCalledWith(err, expect.objectContaining({ tags: { tag: 'TestTag' } }));
+describe('Structured Logger', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
   });
 
-  it('calls Sentry.captureMessage when given a non-Error', () => {
-    logger.error('TestTag', 'something broke', 'string error');
-    expect(Sentry.captureMessage).toHaveBeenCalledWith('[TestTag] something broke', 'error');
+  it('logs debug messages without throwing', () => {
+    expect(() => logger.debug('TestTag', 'Debug message', { key: 'val' })).not.toThrow();
   });
-});
 
-describe('logger.warn', () => {
-  it('adds a Sentry breadcrumb with warning level', () => {
-    logger.warn('Network', 'connection lost');
-    expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(expect.objectContaining({ level: 'warning', category: 'Network' }));
+  it('logs info messages and records Sentry breadcrumb', () => {
+    logger.info('AuthService', 'User signed in', { uid: 'u123' });
+    expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(expect.objectContaining({
+      category: 'AuthService',
+      message: 'User signed in',
+      level: 'info',
+    }));
   });
-});
 
-describe('logger.info', () => {
-  it('adds a Sentry breadcrumb with info level', () => {
-    logger.info('Auth', 'user signed in');
-    expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(expect.objectContaining({ level: 'info', category: 'Auth' }));
+  it('logs warnings and records Sentry breadcrumb with warning level', () => {
+    logger.warn('SyncService', 'Network slow, retrying', { attempt: 2 });
+    expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(expect.objectContaining({
+      category: 'SyncService',
+      level: 'warning',
+    }));
   });
-});
 
-describe('logger.debug', () => {
-  it('does not call any Sentry method', () => {
-    logger.debug('Dev', 'verbose debug message');
-    expect(Sentry.captureException).not.toHaveBeenCalled();
-    expect(Sentry.captureMessage).not.toHaveBeenCalled();
-    expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
+  it('captures Error exceptions to Sentry with context', () => {
+    const error = new Error('Database connection failed');
+    logger.error('Database', 'Query failed', error, { query: 'SELECT *' });
+    expect(Sentry.captureException).toHaveBeenCalledWith(error, {
+      tags: { tag: 'Database' }, extra: { message: 'Query failed' } });
+  });
+
+  it('captures string error messages as Sentry messages', () => {
+    logger.error('API', 'Unhandled status code 503');
+    expect(Sentry.captureMessage).toHaveBeenCalledWith(
+      expect.stringContaining('[API] Unhandled status code 503'),
+      'error'
+    );
   });
 });

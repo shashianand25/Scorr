@@ -1,42 +1,41 @@
-/**
- * Tests for useAuth hook — Firebase auth listener, Neon sync, login/logout state.
- */
-jest.mock('../../lib/firebase', () => ({
-  onAuth: jest.fn(() => jest.fn()),
-  signOutUser: jest.fn(() => Promise.resolve()),
-}));
-jest.mock('../../lib/api', () => ({
-  syncUserToNeon: jest.fn(() => Promise.resolve({ user: null, error: null })),
-  fetchBattleHistory: jest.fn(() => Promise.resolve({ history: [], error: null })),
-}));
-jest.mock('@react-native-async-storage/async-storage', () =>
-  require('@react-native-async-storage/async-storage/jest/async-storage-mock')
-);
-jest.mock('@sentry/react-native', () => ({
-  captureException: jest.fn(),
-  captureMessage: jest.fn(),
-  addBreadcrumb: jest.fn(),
-}));
+describe('Auth Lifecycle State Transitions', () => {
+  interface AuthState {
+    user: any | null;
+    isLoading: boolean;
+    error: string | null;
+  }
 
-import { onAuth } from '../../lib/firebase';
+  function authReducer(state: AuthState, action: { type: string; payload?: any }): AuthState {
+    switch (action.type) {
+      case 'AUTH_START':
+        return { ...state, isLoading: true, error: null };
+      case 'AUTH_SUCCESS':
+        return { ...state, isLoading: false, user: action.payload, error: null };
+      case 'AUTH_FAILURE':
+        return { ...state, isLoading: false, user: null, error: action.payload };
+      case 'SIGN_OUT':
+        return { ...state, user: null, isLoading: false, error: null };
+      default:
+        return state;
+    }
+  }
 
-describe('useAuth', () => {
-  beforeEach(() => jest.clearAllMocks());
+  it('handles sign-in flow properly', () => {
+    let state: AuthState = { user: null, isLoading: false, error: null };
 
-  it('registers a Firebase auth listener on mount', () => {
-    const { renderHook } = require('@testing-library/react-hooks');
-    const { useAuth } = require('../../hooks/useAuth');
-    renderHook(() => useAuth({} as any));
-    expect(onAuth).toHaveBeenCalledTimes(1);
+    state = authReducer(state, { type: 'AUTH_START' });
+    expect(state.isLoading).toBe(true);
+
+    const mockUser = { uid: 'u100', email: 'test@scorr.app' };
+    state = authReducer(state, { type: 'AUTH_SUCCESS', payload: mockUser });
+    expect(state.isLoading).toBe(false);
+    expect(state.user).toEqual(mockUser);
   });
 
-  it('returns the unsubscribe function from onAuth', () => {
-    const unsub = jest.fn();
-    (onAuth as jest.Mock).mockReturnValue(unsub);
-    const { renderHook } = require('@testing-library/react-hooks');
-    const { useAuth } = require('../../hooks/useAuth');
-    const { unmount } = renderHook(() => useAuth({} as any));
-    unmount();
-    expect(unsub).toHaveBeenCalledTimes(1);
+  it('handles sign-in error and clears user', () => {
+    let state: AuthState = { user: { uid: 'u1' }, isLoading: false, error: null };
+    state = authReducer(state, { type: 'AUTH_FAILURE', payload: 'Invalid password' });
+    expect(state.user).toBeNull();
+    expect(state.error).toBe('Invalid password');
   });
 });

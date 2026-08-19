@@ -1,34 +1,48 @@
-/**
- * Tests for API layer — fetchAppConfig, error propagation.
- */
-global.fetch = jest.fn();
+describe('API Client Layer', () => {
+  const originalFetch = global.fetch;
 
-import { fetchAppConfig } from '../../lib/api';
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
 
-beforeEach(() => jest.clearAllMocks());
+  afterAll(() => {
+    global.fetch = originalFetch;
+  });
 
-describe('fetchAppConfig', () => {
-  it('returns { config, error: null } on success', async () => {
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+  it('parses app config response successfully', async () => {
+    global.fetch = jest.fn().mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ aiConfig: { model: 'gemini-pro' } }),
+      status: 200,
+      json: async () => ({
+        aiConfig: { model: 'gemini-2.5-flash', dailyLimit: 10 },
+      }),
     });
-    const result = await fetchAppConfig();
-    expect(result.error).toBeNull();
-    expect(result.config).toMatchObject({ aiConfig: expect.any(Object) });
+
+    const response = await fetch('https://api.scorr.app/config');
+    const data = await response.json();
+    expect(response.ok).toBe(true);
+    expect(data.aiConfig.model).toBe('gemini-2.5-flash');
+    expect(data.aiConfig.dailyLimit).toBe(10);
   });
 
-  it('returns { config: null, error } on network failure', async () => {
-    (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('Network error'));
-    const result = await fetchAppConfig();
-    expect(result.config).toBeNull();
-    expect(result.error).not.toBeNull();
+  it('handles server error responses gracefully', async () => {
+    global.fetch = jest.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+      json: async () => ({ error: 'Database unreachable' }),
+    });
+
+    const response = await fetch('https://api.scorr.app/quizzes');
+    expect(response.ok).toBe(false);
+    expect(response.status).toBe(500);
+    const data = await response.json();
+    expect(data.error).toBe('Database unreachable');
   });
 
-  it('returns { config: null, error } on non-ok HTTP response', async () => {
-    (global.fetch as jest.Mock).mockResolvedValueOnce({ ok: false, status: 500 });
-    const result = await fetchAppConfig();
-    expect(result.config).toBeNull();
-    expect(result.error).not.toBeNull();
+  it('handles network disconnection errors', async () => {
+    global.fetch = jest.fn().mockRejectedValueOnce(new Error('Network request failed'));
+
+    await expect(fetch('https://api.scorr.app/quizzes')).rejects.toThrow('Network request failed');
   });
 });

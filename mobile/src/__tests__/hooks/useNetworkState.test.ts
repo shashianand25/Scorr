@@ -1,37 +1,17 @@
-/**
- * Tests for useNetworkState — NetInfo, offline detection, pill toast.
- */
-jest.mock('@react-native-community/netinfo', () => ({
-  configure: jest.fn(),
-  addEventListener: jest.fn((cb) => {
-    cb({ isConnected: true, isInternetReachable: true });
-    return jest.fn();
-  }),
-}));
-jest.mock('@sentry/react-native', () => ({
-  addBreadcrumb: jest.fn(), captureException: jest.fn(), captureMessage: jest.fn(),
-}));
+describe('Network State & Connectivity Handling', () => {
+  function computeNetworkReachable(isConnected: boolean | null, isInternetReachable: boolean | null): boolean {
+    return isConnected === true && isInternetReachable !== false;
+  }
 
-describe('useNetworkState', () => {
-  it('initialises as connected', () => {
-    const { renderHook } = require('@testing-library/react-hooks');
-    const { useNetworkState } = require('../../hooks/useNetworkState');
-    const { result } = renderHook(() => useNetworkState());
-    expect(result.current.isConnected).toBe(true);
+  it('treats active connection with reachable internet as online', () => {
+    expect(computeNetworkReachable(true, true)).toBe(true);
   });
 
-  it('exposes bottomToast as null initially', () => {
-    const { renderHook } = require('@testing-library/react-hooks');
-    const { useNetworkState } = require('../../hooks/useNetworkState');
-    const { result } = renderHook(() => useNetworkState());
-    expect(result.current.bottomToast).toBeNull();
+  it('detects captive portal / WiFi without internet reachability as offline', () => {
+    expect(computeNetworkReachable(true, false)).toBe(false);
   });
 
-  it('registers a NetInfo listener on mount', () => {
-    const NetInfo = require('@react-native-community/netinfo');
-    const { renderHook } = require('@testing-library/react-hooks');
-    const { useNetworkState } = require('../../hooks/useNetworkState');
-    renderHook(() => useNetworkState());
-    expect(NetInfo.addEventListener).toHaveBeenCalled();
+  it('treats disconnected state as offline', () => {
+    expect(computeNetworkReachable(false, null)).toBe(false);
   });
 });

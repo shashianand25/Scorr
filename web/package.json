@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --test src/__tests__/*.test.mjs && npx tsx src/lib/__tests__/webDeduplication.test.ts"
   },
   "dependencies": {
     "firebase": "^12.16.0",
