@@ -1,5 +1,5 @@
-import { initializeApp, getApps, getApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
+import { getFirestore, Firestore } from "firebase/firestore";
 import {
   getAuth,
   GoogleAuthProvider,
@@ -12,10 +12,11 @@ import {
   deleteUser as firebaseDeleteUser,
   sendPasswordResetEmail,
   type User,
+  type Auth,
 } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "mock-api-key-for-build",
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "",
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "sample-firebase-ai-app-228f1.firebaseapp.com",
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "sample-firebase-ai-app-228f1",
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "sample-firebase-ai-app-228f1.firebasestorage.app",
@@ -23,16 +24,75 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:767058687564:web:8e16972e2cf66f0ee826e9",
 };
 
-// Initialize Firebase
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+let cachedApp: FirebaseApp | null = null;
+let cachedAuth: Auth | null = null;
+let cachedDb: Firestore | null = null;
 
-export const auth = typeof window !== 'undefined' ? getAuth(app) : ({} as any);
-export const db = typeof window !== 'undefined' ? getFirestore(app) : ({} as any);
+function getFirebaseApp(): FirebaseApp | null {
+  if (cachedApp) return cachedApp;
+  try {
+    if (getApps().length > 0) {
+      cachedApp = getApp();
+      return cachedApp;
+    }
+    if (!firebaseConfig.apiKey) {
+      return null;
+    }
+    cachedApp = initializeApp(firebaseConfig);
+    return cachedApp;
+  } catch (err) {
+    return null;
+  }
+}
+
+function getSafeAuth(): Auth | null {
+  if (cachedAuth) return cachedAuth;
+  try {
+    const app = getFirebaseApp();
+    if (!app) return null;
+    cachedAuth = getAuth(app);
+    return cachedAuth;
+  } catch (err) {
+    return null;
+  }
+}
+
+function getSafeDb(): Firestore | null {
+  if (cachedDb) return cachedDb;
+  try {
+    const app = getFirebaseApp();
+    if (!app) return null;
+    cachedDb = getFirestore(app);
+    return cachedDb;
+  } catch (err) {
+    return null;
+  }
+}
+
+// Lazy safe proxies for auth and db so static SSR/prerender without live credentials never crashes
+export const auth: Auth = new Proxy({} as Auth, {
+  get(_, prop) {
+    const instance = getSafeAuth();
+    if (!instance) return undefined;
+    const val = (instance as any)[prop];
+    return typeof val === "function" ? val.bind(instance) : val;
+  },
+});
+
+export const db: Firestore = new Proxy({} as Firestore, {
+  get(_, prop) {
+    const instance = getSafeDb();
+    if (!instance) return undefined;
+    const val = (instance as any)[prop];
+    return typeof val === "function" ? val.bind(instance) : val;
+  },
+});
 
 // ── Google Sign-In ────────────────────────────────────────────────
 export async function signInWithGoogle(): Promise<User | null> {
+  const authInstance = getSafeAuth();
+  if (!authInstance) throw new Error("Firebase Auth is not initialized. Please configure NEXT_PUBLIC_FIREBASE_API_KEY.");
   try {
-    const authInstance = getAuth(app);
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: "select_account" });
     const result = await signInWithPopup(authInstance, provider);
@@ -53,8 +113,9 @@ export async function signUpWithEmail(
   password: string,
   displayName: string
 ): Promise<{ user: User | null; error: string | null }> {
+  const authInstance = getSafeAuth();
+  if (!authInstance) return { user: null, error: "Firebase Auth not configured." };
   try {
-    const authInstance = getAuth(app);
     const result = await createUserWithEmailAndPassword(authInstance, email, password);
     if (displayName.trim()) {
       await updateProfile(result.user, { displayName: displayName.trim() });
@@ -75,8 +136,9 @@ export async function signInWithEmail(
   email: string,
   password: string
 ): Promise<{ user: User | null; error: string | null }> {
+  const authInstance = getSafeAuth();
+  if (!authInstance) return { user: null, error: "Firebase Auth not configured." };
   try {
-    const authInstance = getAuth(app);
     const result = await signInWithEmailAndPassword(authInstance, email, password);
     return { user: result.user, error: null };
   } catch (err: any) {
@@ -92,8 +154,9 @@ export async function signInWithEmail(
 
 // ── Password Reset ────────────────────────────────────────────────
 export async function resetPassword(email: string): Promise<{ success: boolean; error: string | null }> {
+  const authInstance = getSafeAuth();
+  if (!authInstance) return { success: false, error: "Firebase Auth not configured." };
   try {
-    const authInstance = getAuth(app);
     await sendPasswordResetEmail(authInstance, email);
     return { success: true, error: null };
   } catch (err: any) {
@@ -107,14 +170,17 @@ export async function resetPassword(email: string): Promise<{ success: boolean; 
 
 // ── Sign Out ──────────────────────────────────────────────────────
 export async function signOutUser(): Promise<void> {
-  const authInstance = getAuth(app);
-  await firebaseSignOut(authInstance);
+  const authInstance = getSafeAuth();
+  if (authInstance) {
+    await firebaseSignOut(authInstance);
+  }
 }
 
 // ── Auth state listener ───────────────────────────────────────────
 export function onAuth(callback: (user: User | null) => void) {
   if (typeof window === 'undefined') return () => {};
-  const authInstance = getAuth(app);
+  const authInstance = getSafeAuth();
+  if (!authInstance) return () => {};
   return onAuthStateChanged(authInstance, callback);
 }
 
