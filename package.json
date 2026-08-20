@@ -44,7 +44,10 @@
     "test:backend": "npm --prefix backend test",
     "test:all": "npm --prefix mobile test && npm --prefix web test && npm --prefix backend test",
     "test:coverage": "npm --prefix mobile run test:coverage",
-    "lint": "npm --prefix mobile run lint",
+    "lint": "npm --prefix mobile run lint && npm --prefix web run lint",
+    "lint:mobile": "npm --prefix mobile run lint",
+    "lint:web": "npm --prefix web run lint",
+    "format": "prettier --write .",
     "typecheck": "npm --prefix mobile run typecheck",
     "audit:deps": "npm audit --audit-level=critical"
   },
