@@ -1,4 +1,4 @@
-import { initializeApp, getApps } from "firebase/app";
+import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import {
   getAuth,
@@ -15,7 +15,7 @@ import {
 } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "",
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "mock-api-key-for-build",
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "sample-firebase-ai-app-228f1.firebaseapp.com",
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "sample-firebase-ai-app-228f1",
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "sample-firebase-ai-app-228f1.firebasestorage.app",
@@ -24,16 +24,18 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-export const auth = getAuth(app);
-export const db = getFirestore(app);
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+
+export const auth = typeof window !== 'undefined' ? getAuth(app) : ({} as any);
+export const db = typeof window !== 'undefined' ? getFirestore(app) : ({} as any);
 
 // ── Google Sign-In ────────────────────────────────────────────────
 export async function signInWithGoogle(): Promise<User | null> {
   try {
+    const authInstance = getAuth(app);
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: "select_account" });
-    const result = await signInWithPopup(auth, provider);
+    const result = await signInWithPopup(authInstance, provider);
     return result.user;
   } catch (err: any) {
     const isCancelled = err.code === "auth/popup-closed-by-user" || err.code === "auth/cancelled-popup-request";
@@ -52,7 +54,8 @@ export async function signUpWithEmail(
   displayName: string
 ): Promise<{ user: User | null; error: string | null }> {
   try {
-    const result = await createUserWithEmailAndPassword(auth, email, password);
+    const authInstance = getAuth(app);
+    const result = await createUserWithEmailAndPassword(authInstance, email, password);
     if (displayName.trim()) {
       await updateProfile(result.user, { displayName: displayName.trim() });
     }
@@ -73,7 +76,8 @@ export async function signInWithEmail(
   password: string
 ): Promise<{ user: User | null; error: string | null }> {
   try {
-    const result = await signInWithEmailAndPassword(auth, email, password);
+    const authInstance = getAuth(app);
+    const result = await signInWithEmailAndPassword(authInstance, email, password);
     return { user: result.user, error: null };
   } catch (err: any) {
     const msg =
@@ -89,7 +93,8 @@ export async function signInWithEmail(
 // ── Password Reset ────────────────────────────────────────────────
 export async function resetPassword(email: string): Promise<{ success: boolean; error: string | null }> {
   try {
-    await sendPasswordResetEmail(auth, email);
+    const authInstance = getAuth(app);
+    await sendPasswordResetEmail(authInstance, email);
     return { success: true, error: null };
   } catch (err: any) {
     const msg = 
@@ -102,12 +107,15 @@ export async function resetPassword(email: string): Promise<{ success: boolean; 
 
 // ── Sign Out ──────────────────────────────────────────────────────
 export async function signOutUser(): Promise<void> {
-  await firebaseSignOut(auth);
+  const authInstance = getAuth(app);
+  await firebaseSignOut(authInstance);
 }
 
 // ── Auth state listener ───────────────────────────────────────────
 export function onAuth(callback: (user: User | null) => void) {
-  return onAuthStateChanged(auth, callback);
+  if (typeof window === 'undefined') return () => {};
+  const authInstance = getAuth(app);
+  return onAuthStateChanged(authInstance, callback);
 }
 
 export type { User };
