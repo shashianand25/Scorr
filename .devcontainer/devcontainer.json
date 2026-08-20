@@ -1,0 +1,24 @@
+{
+  "name": "Scorr Development Container",
+  "dockerComposeFile": ["../docker-compose.yml", "docker-compose.devcontainer.yml"],
+  "service": "workspace",
+  "workspaceFolder": "/workspace",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+      },
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "orta.vscode-jest",
+        "bierner.markdown-mermaid",
+        "expo.vscode-expo-tools"
+      ]
+    }
+  },
+  "forwardPorts": [3000, 3001, 8081, 5432],
+  "postCreateCommand": "npm install && npm run test:all"
+}

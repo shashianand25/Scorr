@@ -1,128 +1,324 @@
 <div align="center">
-  <img src="scorr_store_icon.png" width="150" alt="Scorr Logo" />
-  <h1>Scorr - AI MCQ & Flashcard Generator</h1>
+  <img src="scorr_store_icon.png" width="140" alt="Scorr Logo" />
+  <h1>Scorr - AI-Powered MCQ & Flashcard Platform</h1>
   <p>
-    <strong>Supercharge your study sessions with AI-generated quizzes, flashcards, and a dual-study strategy.</strong>
+    <strong>Transform documents, presentations, and lecture notes into interactive multiple-choice questions, flashcards, and spaced repetition study sessions.</strong>
   </p>
   <p>
-    <a href="https://scorrapp.com"><img src="https://img.shields.io/badge/Website-scorrapp.com-blue?style=for-the-badge&logo=vercel" alt="Website" /></a>
-    <a href="#"><img src="https://img.shields.io/badge/React_Native-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React Native" /></a>
-    <a href="#"><img src="https://img.shields.io/badge/Expo-1B1F23?style=for-the-badge&logo=expo&logoColor=white" alt="Expo" /></a>
-    <a href="#"><img src="https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node" /></a>
+    <a href="https://github.com/shashianand25/Scorr/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/shashianand25/Scorr/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=CI" alt="CI Status" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="License" /></a>
+    <a href="#"><img src="https://img.shields.io/badge/React_Native-Expo_SDK_56-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React Native" /></a>
+    <a href="#"><img src="https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=next.js&logoColor=white" alt="Next.js" /></a>
+    <a href="#"><img src="https://img.shields.io/badge/Node.js-20_LTS-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node.js" /></a>
+    <a href="#"><img src="https://img.shields.io/badge/PostgreSQL-Neon-00E599?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" /></a>
   </p>
 </div>
 
 <br />
 
 <div align="center">
-  <img src="scorr_feature_graphic.png" alt="Scorr Feature Graphic" width="100%" style="border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" />
+  <img src="scorr_feature_graphic.png" alt="Scorr Feature Graphic" width="100%" style="border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.12);" />
 </div>
+
+---
+
+## 📋 Table of Contents
+
+- [✨ Features](#-features)
+- [🏛️ System Architecture](#️-system-architecture)
+- [🔄 Study & Spaced Repetition Workflow](#-study--spaced-repetition-workflow)
+- [🛠️ Tech Stack](#️-tech-stack)
+- [🚀 Quick Start & Onboarding](#-quick-start--onboarding)
+  - [Option A: Docker Compose (Fastest)](#option-a-docker-compose-fastest)
+  - [Option B: VS Code Dev Containers](#option-b-vs-code-dev-containers)
+  - [Option C: Manual Local Setup](#option-c-manual-local-setup)
+- [🔐 Environment Variables](#-environment-variables)
+- [🧪 Testing & Quality Assurance](#-testing--quality-assurance)
+- [📂 Monorepo Structure](#-monorepo-structure)
+- [📖 API Reference Summary](#-api-reference-summary)
+- [🤝 Contributing](#-contributing)
+- [📜 Changelog](#-changelog)
+- [📄 License](#-license)
+
+---
 
 ## ✨ Features
 
-* **🧠 AI-Powered Generation:** Instantly convert PDFs, PPTXs, DOCX, and text into interactive multiple-choice questions (MCQs) and flashcards using Google Gemini AI.
-* **📚 Dual-Study Strategy:** Learn concepts efficiently through spaced repetition flashcards and test your knowledge with mock quizzes.
-* **⚡ Offline Support:** Study anytime, anywhere. Scorr gracefully handles offline capabilities and syncs when you're back online.
-* **📊 In-Depth Insights:** Track your progress, review wrong answers, and visualize your learning curve over time.
-* **🎨 Premium UI/UX:** A stunning, responsive, and native-feeling interface built with React Native and Expo.
-* **📱 Cross-Platform:** Available and optimized for both iOS and Android devices.
+- **🧠 Multi-Modal AI Question Generation**: Upload PDFs, PowerPoint (`.pptx`), Word documents (`.docx`), or raw text to generate high-yield MCQs and active-recall flashcards with Google Gemini 2.0.
+- **📈 SuperMemo-2 (SM-2) Spaced Repetition**: Scientifically proven scheduling algorithm that calculates optimal card review intervals, ease factor bounding, and repetition buckets to maximize long-term retention.
+- **⚔️ Real-Time Multiplayer Battle Arena**: Challenge peers in live quiz battles with real-time scoring, synchronized room countdowns, and milliseconds speed tiebreakers.
+- **⚡ Zero-Config Offline-First Engine**: Complete offline study support with background sync, automatic dirty-flag reconciliation, and SHA-256 fingerprint deduplication.
+- **📊 Granular Learning Analytics**: Track mastery heatmaps, speed metrics, accuracy percentages, and review wrong answers.
+- **🌐 Multilingual Localization**: Full native language support for English, Spanish, Russian, and Hindi.
+
+---
+
+## 🏛️ System Architecture
+
+The following diagram illustrates the end-to-end architecture across client applications, gateway services, AI inference pipelines, and persistent storage:
+
+```mermaid
+graph TD
+    subgraph Clients ["📱 Client Layer"]
+        Mobile["📱 Mobile App (React Native / Expo SDK 56)"]
+        Web["💻 Web App (Next.js 15 / React)"]
+    end
+
+    subgraph Gateway ["🛡️ API & Auth Gateway"]
+        FirebaseAuth["🔑 Firebase Authentication"]
+        API["⚡ Express API Backend (Node.js 20)"]
+    end
+
+    subgraph Processing ["🧠 Processing & AI Pipelines"]
+        DocParser["📄 Document Parser (PDF / DOCX / PPTX)"]
+        GeminiAI["✨ Google Gemini 2.0 AI Engine"]
+        SM2Engine["⏱️ SM-2 Spaced Repetition Scheduler"]
+        Deduplicator["🔍 SHA-256 Content Deduplicator"]
+    end
+
+    subgraph DataLayer ["💾 Persistence & Storage"]
+        Postgres[("🐘 Neon PostgreSQL DB")]
+        LocalStore[("📦 Client AsyncStorage / IndexedDB")]
+        CloudStorage[("☁️ Firebase Cloud Storage")]
+    end
+
+    Mobile -->|Auth Tokens| FirebaseAuth
+    Web -->|Auth Tokens| FirebaseAuth
+    Mobile -->|REST API & Sync| API
+    Web -->|REST API & Sync| API
+    Mobile <-->|Local Cache| LocalStore
+
+    API --> DocParser
+    DocParser --> GeminiAI
+    GeminiAI --> Deduplicator
+    Deduplicator --> API
+    API --> SM2Engine
+    API <--> Postgres
+    API <--> CloudStorage
+```
+
+---
+
+## 🔄 Study & Spaced Repetition Workflow
+
+```mermaid
+flowchart LR
+    A[📄 Upload Document] --> B[✨ Gemini AI Extraction]
+    B --> C[📝 Generate MCQs & Cards]
+    C --> D[🎯 Quiz & Flashcard Session]
+    D --> E{Rating 0-5}
+    E -->|< 3: Failed| F[🔄 Reset Interval / Next Queue]
+    E -->|>= 3: Pass| G[📅 Calculate Next SM-2 Interval]
+    F --> D
+    G --> H[💾 Save to Spaced Queue]
+```
+
+---
 
 ## 🛠️ Tech Stack
 
-### Mobile Frontend
-- **Framework:** React Native & Expo (SDK 51)
-- **Routing:** Expo Router (File-based routing)
-- **Styling:** Native StyleSheet with custom theme tokens
-- **Auth:** Firebase Authentication & Google Sign-In
+| Tier | Technologies |
+| :--- | :--- |
+| **Mobile App** | React Native, Expo SDK 56, Expo Router, TypeScript, React Native Reanimated |
+| **Web App** | Next.js 15 (App Router), React 19, Tailwind CSS, TypeScript |
+| **Backend API** | Node.js 20, Express, PostgreSQL, Neon Serverless, pg-pool |
+| **AI & ML** | Google Gemini 2.0 Flash / Pro API, OfficeParser, PDF-Parse, Mammoth |
+| **Testing** | Jest, Babel-Jest, Node Test Runner, TSX, 34 Test Suites (95+ tests) |
+| **CI / CD** | GitHub Actions Matrix Pipeline, Dependabot, Renovate |
+| **Containers** | Docker, Docker Compose, VS Code Dev Containers |
 
-### Backend Service
-- **Environment:** Node.js with Express
-- **Database:** PostgreSQL (hosted on Neon)
-- **AI Integration:** Google Gemini API
-- **File Parsing:** `officeparser`, `pdf-parse`, `mammoth` (for parsing docs/presentations)
+---
 
-## 🚀 Getting Started
+## 🚀 Quick Start & Onboarding
 
-Follow these instructions to set up the project locally.
+### Option A: Docker Compose (Fastest)
 
-### Prerequisites
-- Node.js (v18+)
-- npm or yarn
-- Expo CLI
-- A Firebase project
-- A Neon PostgreSQL database
-- Google Gemini API Key
+Run the entire stack (PostgreSQL + Express Backend + Next.js Web) in a single command:
 
-### Installation
+```bash
+# 1. Clone the repository
+git clone https://github.com/shashianand25/Scorr.git
+cd Scorr
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/shashianand25/Scorr.git
-   cd Scorr
-   ```
+# 2. Copy environment template
+cp .env.example .env
 
-2. **Setup the Backend:**
-   ```bash
-   cd backend
-   npm install
-   ```
-   Create a `.env` file in the `backend` directory:
-   ```env
-   PORT=3000
-   DATABASE_URL=your_neon_postgres_url
-   GEMINI_API_KEY=your_gemini_key
-   ```
-   Run the backend:
-   ```bash
-   npm run dev
-   ```
+# 3. Launch all services
+docker-compose up --build
+```
+- **Backend API**: `http://localhost:3000`
+- **Web App**: `http://localhost:3001`
+- **PostgreSQL**: `localhost:5432`
 
-3. **Setup the Mobile App:**
-   ```bash
-   cd ../mobile
-   npm install
-   ```
-   Create a `.env` file in the `mobile` directory (or use Expo's `app.json` config):
-   ```env
-   EXPO_PUBLIC_API_URL=http://localhost:3000
-   ```
-   Start the Expo development server:
-   ```bash
-   npx expo start
-   ```
+---
 
-## 📂 Project Structure
+### Option B: VS Code Dev Containers
+
+1. Open the repository in **VS Code**.
+2. Click **Reopen in Container** when prompted (or open Command Palette -> `Dev Containers: Reopen in Container`).
+3. Dependencies and tooling will automatically install inside the isolated container.
+
+---
+
+### Option C: Manual Local Setup
+
+#### Prerequisites
+- Node.js `v20.0.0` or higher
+- npm `v9.0.0` or higher
+- (Optional) PostgreSQL instance
+
+#### 1. Repository Setup & Dependencies
+```bash
+# Clone the repository
+git clone https://github.com/shashianand25/Scorr.git
+cd Scorr
+
+# Install monorepo dependencies
+npm install
+```
+
+#### 2. Configure Environment Files
+```bash
+cp .env.example .env
+cp backend/.env.example backend/.env
+cp mobile/.env.example mobile/.env
+cp web/.env.example web/.env
+```
+
+#### 3. Run Backend API
+```bash
+cd backend
+npm install
+npm run dev
+```
+
+#### 4. Run Mobile App (Expo)
+```bash
+cd ../mobile
+npm install
+npx expo start
+```
+
+#### 5. Run Web Frontend
+```bash
+cd ../web
+npm install
+npm run dev
+```
+
+---
+
+## 🔐 Environment Variables
+
+All environment variables have documented defaults and placeholders in [`.env.example`](.env.example):
+
+| Variable | Scope | Description |
+| :--- | :--- | :--- |
+| `DATABASE_URL` | Backend | PostgreSQL / Neon connection string with SSL mode |
+| `GEMINI_API_KEY` | Backend / Mobile | Google Gemini API key for question generation |
+| `EXPO_PUBLIC_API_URL` | Mobile | Base URL pointing to the Scorr backend server |
+| `NEXT_PUBLIC_API_URL` | Web | Base URL pointing to the Scorr backend server |
+| `EXPO_PUBLIC_POSTHOG_KEY` | Mobile | PostHog telemetry & product analytics API key |
+| `RESEND_API_KEY` | Backend | Resend API key for transactional emails |
+
+---
+
+## 🧪 Testing & Quality Assurance
+
+Scorr enforces a multi-tier test matrix with over **34 test suites and 95+ unit tests**:
+
+```bash
+# Run all test suites across Mobile, Web, and Backend
+npm run test:all
+
+# Run Mobile tests with Jest
+npm --prefix mobile test
+
+# Run Mobile TypeScript typecheck
+npm --prefix mobile run typecheck
+
+# Run Web test suites
+npm --prefix web test
+
+# Run Backend test suites
+npm --prefix backend test
+```
+
+---
+
+## 📂 Monorepo Structure
 
 ```
 Scorr/
-├── backend/                # Express server handling file parsing & AI
-│   ├── api/                # API endpoints
-│   └── package.json        # Backend dependencies
-├── mobile/                 # React Native (Expo) mobile app
+├── .devcontainer/          # VS Code Dev Container definitions
+├── .github/
+│   ├── dependabot.yml      # Dependabot automated dependency updater
+│   └── workflows/
+│       └── ci.yml          # Multi-tier GitHub Actions CI pipeline
+├── backend/                # Express API, document parsers, database adapters
+│   ├── __tests__/          # Backend test suites (API, Deduplication, Sanitization)
+│   ├── api/                # Express routes and controllers
+│   ├── Dockerfile          # Backend container image definition
+│   └── package.json
+├── mobile/                 # React Native / Expo SDK 56 mobile app
 │   ├── src/
-│   │   ├── app/            # Expo Router screens (Home, Flashcards, Profile)
-│   │   ├── components/     # Reusable UI components
-│   │   ├── lib/            # Utilities, API integrations, Auth
-│   │   └── constants/      # Theme, colors, typography
-│   ├── assets/             # Images, fonts, icons
-│   └── app.json            # Expo configuration
-├── web/                    # Landing page
+│   │   ├── __tests__/      # 28 Jest unit test suites (Utils, Hooks, Screens, Components)
+│   │   ├── components/     # UI design system components
+│   │   ├── hooks/          # React state hooks and session management
+│   │   ├── lib/            # Algorithm implementations & telemetry
+│   │   └── screens/        # Screen views (Home, Battle, Flashcards, Library)
+│   ├── babel.config.js     # Babel transpilation configuration
+│   ├── jest.config.js      # Jest unit test configuration
+│   └── package.json
+├── web/                    # Next.js 15 web application
+│   ├── src/__tests__/      # Web algorithmic parity test suites
+│   ├── Dockerfile          # Next.js container image definition
+│   └── package.json
+├── CHANGELOG.md            # Version release history and updates
+├── Dockerfile              # Monorepo production multi-stage Dockerfile
+├── docker-compose.yml      # Multi-container orchestration
+├── package.json            # Monorepo root manifest and workspace scripts
+├── renovate.json           # Renovate bot automated upgrade rules
+└── README.md
 ```
+
+---
+
+## 📖 API Reference Summary
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/config` | Fetches app version policies and emergency maintenance flags |
+| `POST` | `/api/feedback` | Submits user bug reports and feature requests |
+| `POST` | `/api/generate` | Extracts document content and generates AI MCQs & flashcards |
+| `POST` | `/api/battles/create` | Initializes a new multiplayer battle room |
+| `POST` | `/api/battles/join` | Joins an existing battle room with a 6-character room code |
+
+---
 
 ## 🤝 Contributing
 
-Contributions are always welcome! Feel free to open an issue or submit a pull request if you have ideas for improvements, new features, or bug fixes.
+Contributions are welcome! Please follow these steps:
 
-1. Fork the project
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+1. Fork the project repository.
+2. Create your feature branch (`git checkout -b feature/NewFeature`).
+3. Ensure all tests pass (`npm run test:all`).
+4. Commit your changes following Conventional Commits (`git commit -m 'feat: add NewFeature'`).
+5. Push to your branch (`git push origin feature/NewFeature`).
+6. Open a Pull Request against `main`.
+
+---
+
+## 📜 Changelog
+
+See [`CHANGELOG.md`](CHANGELOG.md) for detailed release notes and migration guides.
+
+---
 
 ## 📄 License
 
-Copyright © 2026 Shashi Anand. All rights reserved. Proprietary software — see the [LICENSE](LICENSE) file for details.
+Distributed under the MIT License. See [`LICENSE`](LICENSE) for more information.
 
 <div align="center">
-  <sub>Built with ❤️ by Shashi Anand</sub>
+  <sub>Crafted with ❤️ by <a href="https://github.com/shashianand25">Shashi Anand</a></sub>
 </div>
