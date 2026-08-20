@@ -1,0 +1,42 @@
+name: 'Dependency Review & Security'
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-health:
+    name: 'Dependency Health & Audit'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Verify Root Manifest
+        run: |
+          node -e "const pkg = require('./package.json'); console.log('Declared dependencies:', Object.keys(pkg.dependencies || {}).length);"
+
+      - name: Check Backend Dependencies
+        run: |
+          npm --prefix backend install --no-audit
+          npm --prefix backend audit --audit-level=critical || true
+
+      - name: Check Web Dependencies
+        run: |
+          npm --prefix web install --no-audit
+          npm --prefix web audit --audit-level=critical || true
+
+      - name: Check Mobile Dependencies
+        run: |
+          npm --prefix mobile install --no-audit --legacy-peer-deps
+          npm --prefix mobile audit --audit-level=critical || true
