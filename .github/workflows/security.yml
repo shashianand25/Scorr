@@ -1,0 +1,32 @@
+name: 'Security & Code Scanning'
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 0 * * 0' # Weekly scan
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  security-audit:
+    name: 'Security Vulnerability Audit'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run Dependency Audit
+        run: |
+          npm --prefix backend audit --audit-level=critical || true
+          npm --prefix web audit --audit-level=critical || true
+          npm --prefix mobile audit --audit-level=critical || true

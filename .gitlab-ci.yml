@@ -1,0 +1,43 @@
+# Scorr - GitLab CI/CD Pipeline Configuration
+image: node:20-alpine
+
+stages:
+  - test
+  - build
+  - security
+
+cache:
+  paths:
+    - node_modules/
+    - mobile/node_modules/
+    - web/node_modules/
+    - backend/node_modules/
+
+test:backend:
+  stage: test
+  script:
+    - cd backend && npm install --no-audit && npm test
+
+test:web:
+  stage: test
+  script:
+    - cd web && npm install --no-audit && npm test
+
+test:mobile:
+  stage: test
+  script:
+    - cd mobile && npm install --no-audit --legacy-peer-deps && npm run typecheck && npm test
+
+build:web:
+  stage: build
+  script:
+    - cd web && npm install --no-audit && npm run build
+  only:
+    - main
+    - develop
+
+security:audit:
+  stage: security
+  script:
+    - npm --prefix backend audit --audit-level=critical || true
+    - npm --prefix web audit --audit-level=critical || true

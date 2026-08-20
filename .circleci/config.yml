@@ -1,0 +1,50 @@
+# Scorr - CircleCI Pipeline Configuration
+version: 2.1
+
+executors:
+  node-executor:
+    docker:
+      - image: cimg/node:20.14.0
+    working_directory: ~/repo
+
+jobs:
+  test-all:
+    executor: node-executor
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - v1-dependencies-{{ checksum "package-lock.json" }}
+            - v1-dependencies-
+      - run:
+          name: Install and Test Backend
+          command: |
+            cd backend
+            npm install --no-audit
+            npm test
+      - run:
+          name: Install and Test Web
+          command: |
+            cd web
+            npm install --no-audit
+            npm test
+      - run:
+          name: Install, Typecheck, and Test Mobile
+          command: |
+            cd mobile
+            npm install --no-audit --legacy-peer-deps
+            npm run typecheck
+            npm test
+      - save_cache:
+          paths:
+            - node_modules
+            - mobile/node_modules
+            - web/node_modules
+            - backend/node_modules
+          key: v1-dependencies-{{ checksum "package-lock.json" }}
+
+workflows:
+  version: 2
+  build_and_test:
+    jobs:
+      - test-all

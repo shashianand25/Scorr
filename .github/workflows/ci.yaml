@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test-mobile:
+    name: Mobile - Test & TypeCheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install Mobile dependencies
+        working-directory: mobile
+        run: npm install --no-audit --legacy-peer-deps
+
+      - name: Type check Mobile
+        working-directory: mobile
+        run: npm run typecheck
+
+      - name: Run Mobile tests
+        working-directory: mobile
+        run: npm test
+
+  test-web:
+    name: Web - Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Web dependencies
+        working-directory: web
+        run: npm install
+
+      - name: Run Web tests
+        working-directory: web
+        run: npm test
+
+  test-backend:
+    name: Backend - Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Backend dependencies
+        working-directory: backend
+        run: npm install
+
+      - name: Run Backend tests
+        working-directory: backend
+        run: npm test

@@ -1,0 +1,29 @@
+# Scorr - Azure DevOps Pipelines Configuration
+trigger:
+  - main
+  - develop
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+steps:
+  - task: NodeTool@0
+    inputs:
+      versionSpec: '20.x'
+    displayName: 'Install Node.js 20'
+
+  - script: |
+      npm --prefix backend install --no-audit
+      npm --prefix backend test
+    displayName: 'Backend Tests'
+
+  - script: |
+      npm --prefix web install --no-audit
+      npm --prefix web test
+    displayName: 'Web Tests'
+
+  - script: |
+      npm --prefix mobile install --no-audit --legacy-peer-deps
+      npm --prefix mobile run typecheck
+      npm --prefix mobile test
+    displayName: 'Mobile Tests & TypeCheck'
