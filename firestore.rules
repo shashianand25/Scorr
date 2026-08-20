@@ -1,0 +1,56 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Default: Deny all unmatched paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // User Profiles: Users can only read and write their own profile
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+      
+      // User Subcollections (e.g. settings, study history, decks)
+      match /{subcollection=**} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // Quizzes: Creators have full ownership; public shared quizzes are readable
+    match /quizzes/{quizId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || resource.data.isPublic == true);
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    // Battle Rooms: Real-time multiplayer synchronization
+    match /battles/{roomCode} {
+      // Any authenticated user can lookup rooms to join
+      allow read: if isAuthenticated();
+      
+      // Host creates room and binds their hostId
+      allow create: if isAuthenticated() && request.resource.data.hostId == request.auth.uid;
+      
+      // Updates permitted only for the host or the joined guest
+      allow update: if isAuthenticated() && (
+        resource.data.hostId == request.auth.uid ||
+        resource.data.guestId == request.auth.uid ||
+        (resource.data.status == 'waiting' && request.resource.data.guestId == request.auth.uid)
+      );
+      
+      // Only the host can cancel or delete a room
+      allow delete: if isAuthenticated() && resource.data.hostId == request.auth.uid;
+    }
+  }
+}
