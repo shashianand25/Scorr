@@ -29,7 +29,7 @@ if (Platform.OS !== "web") {
 }
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCxsSF2pL0uA7NkVPZcNwtjric6LVUGrK8",
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || "",
   authDomain: "sample-firebase-ai-app-228f1.firebaseapp.com",
   projectId: "sample-firebase-ai-app-228f1",
   storageBucket: "sample-firebase-ai-app-228f1.firebasestorage.app",

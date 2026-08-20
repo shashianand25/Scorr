@@ -1,3 +1,4 @@
+const { validateFeedbackPayload, sanitizeText, isValidBattleRoomCode } = require('../utils/validation');
 const express = require('express');
 const cors = require('cors');
 const compression = require('compression');
@@ -274,6 +275,10 @@ app.post('/api/verify-otp', async (req, res) => {
 
 // ── Feedback ─────────────────────────────────────────────────────────────
 app.post('/api/feedback', async (req, res) => {
+  const validation = validateFeedbackPayload(req.body);
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.errors.join(', ') });
+  }
   const { userId, userEmail, message } = req.body;
   const feedbackId = generateId();
   try {

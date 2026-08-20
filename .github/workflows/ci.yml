@@ -25,6 +25,10 @@ jobs:
         working-directory: mobile
         run: npm install --no-audit --legacy-peer-deps
 
+      - name: Dependency Vulnerability Audit
+        working-directory: mobile
+        run: npm audit --audit-level=critical || true
+
       - name: Type check Mobile
         working-directory: mobile
         run: npm run typecheck
@@ -49,6 +53,10 @@ jobs:
         working-directory: web
         run: npm install
 
+      - name: Dependency Vulnerability Audit
+        working-directory: web
+        run: npm audit --audit-level=critical || true
+
       - name: Run Web tests
         working-directory: web
         run: npm test
@@ -68,6 +76,10 @@ jobs:
       - name: Install Backend dependencies
         working-directory: backend
         run: npm install
+
+      - name: Dependency Vulnerability Audit
+        working-directory: backend
+        run: npm audit --audit-level=critical || true
 
       - name: Run Backend tests
         working-directory: backend
