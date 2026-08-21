@@ -25,7 +25,7 @@
     "expo-font": "~56.0.5",
     "expo-glass-effect": "~56.0.4",
     "expo-image": "~56.0.9",
-    "expo-linear-gradient": "~56.0.4",
+    "expo-linear-gradient": "~57.0.1",
     "expo-linking": "~56.0.12",
     "expo-localization": "~56.0.6",
     "expo-notifications": "~56.0.15",
