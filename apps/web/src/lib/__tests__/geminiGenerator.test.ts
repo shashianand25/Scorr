@@ -83,3 +83,19 @@ describe("geminiGenerator Service", () => {
     });
   });
 });
+
+  describe("generateQuizWithGemini", () => {
+    it("throws error when config is missing key or model url", async () => {
+      const { generateQuizWithGemini } = await import("../geminiGenerator");
+      await expect(
+        generateQuizWithGemini({
+          aiConfig: { geminiKey: "", modelUrl: "" },
+          textContent: "Some text",
+          fileBase64: null,
+          effectiveCount: 5,
+          includeFlashcards: false,
+          activeLang: "en",
+        })
+      ).rejects.toThrow("AI service temporarily unavailable");
+    });
+  });

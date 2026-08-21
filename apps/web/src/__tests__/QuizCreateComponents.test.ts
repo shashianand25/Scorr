@@ -31,5 +31,19 @@ describe("Quiz Creation Presentational Components", () => {
     });
 
     expect(element.props.children).toBeDefined();
+    
+    // Simulate clicking the 3 tabs
+    const tabContainer = element.props.children[1];
+    const [aiBtn, manualBtn, importBtn] = tabContainer.props.children;
+    
+    aiBtn.props.onClick();
+    expect(setActiveTab).toHaveBeenCalledWith("ai");
+    expect(setErrorMsg).toHaveBeenCalledWith(null);
+
+    manualBtn.props.onClick();
+    expect(setActiveTab).toHaveBeenCalledWith("manual");
+
+    importBtn.props.onClick();
+    expect(setActiveTab).toHaveBeenCalledWith("import");
   });
 });
