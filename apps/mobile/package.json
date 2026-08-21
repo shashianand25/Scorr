@@ -9,7 +9,7 @@
     "@react-native-community/netinfo": "^12.0.1",
     "@react-native-google-signin/google-signin": "^16.1.2",
     "@react-native-masked-view/masked-view": "^0.3.2",
-    "@sentry/react-native": "~7.11.0",
+    "@sentry/react-native": "~8.23.0",
     "buffer": "^6.0.3",
     "compare-versions": "^6.1.1",
     "expo": "~56.0.8",
