@@ -1,6 +1,5 @@
 import type React from "react";
 import type { QuizQuestion } from "./QuizSessionProps";
-import type { HomeScreenProps } from "./HomeScreenProps";
 
 export interface CreatedQuizInfo {
   title: string;
@@ -13,27 +12,26 @@ export interface SelectedQuizOption {
   category?: string;
   questions?: number;
   questionsList?: QuizQuestion[];
+  sourceText?: string;
   [key: string]: unknown;
 }
 
-/**
- * QuizCreationModalProps — dedicated prop surface for quiz creation/setup modals.
- * Structurally compatible with HomeScreenProps via the index signature.
- */
-export interface QuizCreationModalProps {
-  insets?: HomeScreenProps["insets"];
-  settingsDarkMode?: boolean;
-  optionsScrollRef?: React.RefObject<any>;
-  setQuizPreset?: (preset: string) => void;
-  totalQuestions?: number;
-  unansweredCount?: number;
-  Stepper?: React.ComponentType<any>;
-  questionCount?: number;
-  quizPreset?: string;
-  wrongCount?: number;
-  setQuizSetupStep?: (step: string) => void;
+export interface ModalInsets {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
+/** Success modal shown when a new quiz is generated from notes or documents */
+export interface QuizCreatedModalProps {
   showQuizCreatedModal?: CreatedQuizInfo | null;
   setShowQuizCreatedModal?: (modal: CreatedQuizInfo | null) => void;
+  settingsDarkMode?: boolean;
+}
+
+/** Configuration modal for starting a study session (question counts, subsets, shuffling) */
+export interface StartQuizSettingsModalProps {
   selectedQuiz?: SelectedQuizOption | null;
   setSelectedQuiz?: (quiz: SelectedQuizOption | null) => void;
   selectionMode?: string;
@@ -44,6 +42,24 @@ export interface QuizCreationModalProps {
   setRangeStart?: (start: number) => void;
   rangeEnd?: number;
   setRangeEnd?: (end: number) => void;
+  quizPreset?: string;
+  setQuizPreset?: (preset: string) => void;
+  totalQuestions?: number;
+  unansweredCount?: number;
+  wrongCount?: number;
+  shuffleQuestions?: boolean;
+  setShuffleQuestions?: (shuffle: boolean) => void;
+  shuffleAnswers?: boolean;
+  setShuffleAnswers?: (shuffle: boolean) => void;
+  showAnswerOnSubmit?: boolean;
+  setShowAnswerOnSubmit?: (show: boolean) => void;
+  handleStartQuiz?: () => void;
+  optionsScrollRef?: React.RefObject<any>;
+  Stepper?: React.ComponentType<any>;
+}
+
+/** Time constraints modal (overall quiz timer or countdown per question) */
+export interface TimeLimitModalProps {
   quizTimeLimit?: number | null;
   setQuizTimeLimit?: (limit: number | null) => void;
   quizPerQuestionTimer?: number | null;
@@ -52,16 +68,23 @@ export interface QuizCreationModalProps {
   setTimeLimitText?: (text: string) => void;
   showTimeLimitDropdown?: boolean;
   setShowTimeLimitDropdown?: (fn: boolean | ((prev: boolean) => boolean)) => void;
-  shuffleQuestions?: boolean;
-  setShuffleQuestions?: (shuffle: boolean) => void;
-  shuffleAnswers?: boolean;
-  setShuffleAnswers?: (shuffle: boolean) => void;
-  showAnswerOnSubmit?: boolean;
-  setShowAnswerOnSubmit?: (show: boolean) => void;
-  handleStartQuiz?: () => void;
+}
+
+/** Source document and raw text preview modal */
+export interface PdfPreviewModalProps {
   pdfViewQuiz?: SelectedQuizOption | null;
   setPdfViewQuiz?: (quiz: SelectedQuizOption | null) => void;
   starredQuestions?: any;
   setStarredQuestions?: (fn: any) => void;
+}
+
+/** Composite prop contract for QuizCreationModals */
+export interface QuizCreationModalProps
+  extends QuizCreatedModalProps,
+    StartQuizSettingsModalProps,
+    TimeLimitModalProps,
+    PdfPreviewModalProps {
+  insets?: ModalInsets;
+  settingsDarkMode?: boolean;
   [key: string]: unknown;
 }
