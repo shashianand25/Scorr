@@ -173,10 +173,10 @@ docker-compose up --build
 git clone https://github.com/shashianand25/Scorr.git
 cd Scorr
 
-# Install all monorepo workspace dependencies reproducibly
-npm install
+# Run automated one-step setup (installs workspace deps & configures .env files)
+npm run setup
 
-# Run the complete test suite (38 suites / 115+ tests)
+# Run the complete test suite (47 suites / 153+ tests)
 npm test
 
 # Build production assets

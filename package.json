@@ -34,6 +34,7 @@
     "npm": ">=9.0.0"
   },
   "scripts": {
+    "setup": "node scripts/setup.js",
     "start": "npm --prefix apps/api start",
     "dev": "npm --prefix apps/api run dev",
     "build": "npm --prefix apps/web run build",
