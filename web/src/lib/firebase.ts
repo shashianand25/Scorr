@@ -42,9 +42,6 @@ function getFirebaseApp(): FirebaseApp | null {
       return cachedApp;
     }
     if (!firebaseConfig.apiKey) {
-      if (typeof window !== "undefined") {
-        console.error("[Firebase Startup Error] Missing NEXT_PUBLIC_FIREBASE_API_KEY environment variable.");
-      }
       return null;
     }
     cachedApp = initializeApp(firebaseConfig);

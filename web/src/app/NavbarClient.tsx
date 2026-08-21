@@ -55,7 +55,7 @@ export default function NavbarClient() {
         {/* Nav links (Desktop) */}
         <nav className="nav-desktop-links" style={{ display: "flex", alignItems: "center", gap: 32 }}>
           {navItems.map((item) => {
-            const path = item === "Features" ? "/how-it-works" : `/${item.toLowerCase().replace(/ /g, "-")}`;
+            const path = item === "Features" || item === "How It Works" ? "/#how-it-works" : `/#${item.toLowerCase().replace(/ /g, "-")}`;
             return (
               <Link
                 key={item}
