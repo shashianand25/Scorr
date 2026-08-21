@@ -82,7 +82,7 @@ jobs:
         run: npx tsc --noEmit
 
   test:
-    name: Test (Monorepo Test Suites)
+    name: Test & Coverage Matrix
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -119,3 +119,22 @@ jobs:
       - name: Build Web Application
         working-directory: apps/web
         run: npm run build
+
+  security:
+    name: Dependency Audit & Security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run Security Audit
+        run: |
+          npm audit --audit-level=critical || true
+          cd apps/mobile && (npm audit --audit-level=critical || true) && cd ../..
+          cd apps/web && (npm audit --audit-level=critical || true) && cd ../..
+          cd apps/api && (npm audit --audit-level=critical || true) && cd ../..
