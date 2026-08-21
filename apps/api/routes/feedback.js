@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
 const { Resend } = require('resend');
-const { validateFeedbackPayload } = require('../utils/validation');
+const { feedbackSchema } = require('../schemas');
 
 // Lazy getter — instantiated on first use
 let _resend = null;
@@ -16,11 +16,12 @@ const generateId = () => Math.random().toString(36).substring(2) + Date.now().to
 
 // ── Feedback ─────────────────────────────────────────────────────────────
 router.post('/api/feedback', async (req, res) => {
-  const validation = validateFeedbackPayload(req.body);
-  if (!validation.valid) {
-    return res.status(400).json({ error: validation.errors.join(', ') });
+  const result = feedbackSchema.safeParse(req.body);
+  if (!result.success) {
+    const errorMessages = result.error.errors.map((e) => e.message).join(', ');
+    return res.status(400).json({ error: errorMessages });
   }
-  const { userId, userEmail, message } = req.body;
+  const { userId, userEmail, message } = result.data;
   const feedbackId = generateId();
   try {
     // Store in DB
