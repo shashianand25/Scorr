@@ -32,8 +32,21 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node-
 
-      - name: Install dependencies
-        run: npm install --legacy-peer-deps
+      # npm ci (not npm install) enforces exact lockfile versions — fails on drift
+      - name: Install root dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Install API dependencies
+        working-directory: apps/api
+        run: npm ci --legacy-peer-deps
+
+      - name: Install Web dependencies
+        working-directory: apps/web
+        run: npm ci --legacy-peer-deps
+
+      - name: Install Mobile dependencies
+        working-directory: apps/mobile
+        run: npm ci --legacy-peer-deps
 
       - name: Run Linter (Mobile, Web & Backend API)
         run: npm run lint
@@ -63,8 +76,20 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node-
 
-      - name: Install dependencies
-        run: npm install --legacy-peer-deps
+      - name: Install root dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Install API dependencies
+        working-directory: apps/api
+        run: npm ci --legacy-peer-deps
+
+      - name: Install Web dependencies
+        working-directory: apps/web
+        run: npm ci --legacy-peer-deps
+
+      - name: Install Mobile dependencies
+        working-directory: apps/mobile
+        run: npm ci --legacy-peer-deps
 
       - name: Run TypeCheck (Mobile)
         working-directory: apps/mobile
@@ -99,8 +124,20 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node-
 
-      - name: Install dependencies
-        run: npm install --legacy-peer-deps
+      - name: Install root dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Install API dependencies
+        working-directory: apps/api
+        run: npm ci --legacy-peer-deps
+
+      - name: Install Web dependencies
+        working-directory: apps/web
+        run: npm ci --legacy-peer-deps
+
+      - name: Install Mobile dependencies
+        working-directory: apps/mobile
+        run: npm ci --legacy-peer-deps
 
       - name: Run All Test Suites
         run: npm test
