@@ -10,18 +10,8 @@ import { getLocalItem, setLocalItem, SAMPLE_QUIZ } from "@/lib/storage";
 import { deduplicateUserQuizzes, QuizRecord } from "@/lib/quizDeduplication";
 import { isCardDue } from "@/lib/sm2";
 
-function getTimeGroup(timestamp: number | string | undefined): "This week" | "Last week" | "Older" {
-  if (!timestamp) return "Older";
-  const t = typeof timestamp === "number" ? timestamp : new Date(timestamp).getTime();
-  if (isNaN(t)) return "Older";
+import { getTimeGroup } from "@/lib/timeGroup";
 
-  const diffMs = Date.now() - t;
-  const days = diffMs / (1000 * 60 * 60 * 24);
-
-  if (days <= 7) return "This week";
-  if (days <= 14) return "Last week";
-  return "Older";
-}
 
 export default function LibraryPage() {
   const { user } = useAuthStore();
