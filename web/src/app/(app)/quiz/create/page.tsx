@@ -19,17 +19,14 @@ import { parseQstText, questionsToSourceText } from "@/lib/qstParser";
 import { getLocalItem, setLocalItem, SAMPLE_QUIZ } from "@/lib/storage";
 import { QuizRecord } from "@/lib/quizDeduplication";
 import AIGenerationModal from "@/components/ai/AIGenerationModal";
+import { useManualQuiz } from "@/hooks/useManualQuiz";
+import { CreateHeader } from "@/components/quiz/create/CreateHeader";
 import { AIGeneratorTab } from "@/components/quiz/create/AIGeneratorTab";
 import { ManualCreatorTab } from "@/components/quiz/create/ManualCreatorTab";
 import { ImportFileTab } from "@/components/quiz/create/ImportFileTab";
 
-type CreateTab = "ai" | "manual" | "import";
+export type CreateTab = "ai" | "manual" | "import";
 
-interface DraftQuestion {
-  id: string;
-  prompt: string;
-  answers: Array<{ id: string; text: string; isCorrect: boolean }>;
-}
 
 export default function CreateQuizPage() {
   const { user } = useAuthStore();
@@ -56,13 +53,14 @@ export default function CreateQuizPage() {
   const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // ── Manual Creation State ──────────────────────────────────────────────
-  const [manualStep, setManualStep] = useState<"setup" | "drafting">("setup");
-  const [manualTitle, setManualTitle] = useState("");
-  const [manualCount, setManualCount] = useState("5");
-  const [manualLanguage, setManualLanguage] = useState("English");
-  const [draftIndex, setDraftIndex] = useState(0);
-  const [draftQuestions, setDraftQuestions] = useState<DraftQuestion[]>([]);
+
+  // ── Manual Creation State + Handlers (useManualQuiz hook) ──────────────
+  const {
+    manualStep, setManualStep, manualTitle, setManualTitle, manualCount, setManualCount,
+    manualLanguage, setManualLanguage, draftIndex, setDraftIndex, draftQuestions, setDraftQuestions,
+    handleProceedToDrafting, updateDraftPrompt, updateDraftOptionText, selectDraftOptionCorrect,
+    addDraftOption, deleteDraftOption, handleNextDraftQuestion, handleSaveDraftedQuiz, handleImportFile,
+  } = useManualQuiz(user, setErrorMsg);
 
   useEffect(() => {
     fetchAppConfig().then(({ config }) => {
@@ -369,231 +367,7 @@ export default function CreateQuizPage() {
     }
   };
 
-  // ── Manual Creation Handlers ───────────────────────────────────────────
-  const handleProceedToDrafting = () => {
-    if (!manualTitle.trim()) {
-      setErrorMsg("Please enter a quiz title.");
-      return;
-    }
-    const count = parseInt(manualCount) || 5;
-    if (count <= 0 || count > 50) {
-      setErrorMsg("Please enter a question count between 1 and 50.");
-      return;
-    }
 
-    setErrorMsg(null);
-    const initialDrafts: DraftQuestion[] = Array.from({ length: count }, (_, i) => ({
-      id: `manual_q_${Date.now()}_${i + 1}`,
-      prompt: "",
-      answers: [
-        { id: `a_${i}_0`, text: "", isCorrect: true },
-        { id: `a_${i}_1`, text: "", isCorrect: false },
-        { id: `a_${i}_2`, text: "", isCorrect: false },
-        { id: `a_${i}_3`, text: "", isCorrect: false },
-      ],
-    }));
-
-    setDraftQuestions(initialDrafts);
-    setDraftIndex(0);
-    setManualStep("drafting");
-  };
-
-  const updateDraftPrompt = (text: string) => {
-    const updated = [...draftQuestions];
-    updated[draftIndex].prompt = text;
-    setDraftQuestions(updated);
-  };
-
-  const updateDraftOptionText = (optIdx: number, text: string) => {
-    const updated = [...draftQuestions];
-    updated[draftIndex].answers[optIdx].text = text;
-    setDraftQuestions(updated);
-  };
-
-  const selectDraftOptionCorrect = (optIdx: number) => {
-    const updated = [...draftQuestions];
-    updated[draftIndex].answers = updated[draftIndex].answers.map((a, i) => ({
-      ...a,
-      isCorrect: i === optIdx,
-    }));
-    setDraftQuestions(updated);
-  };
-
-  const addDraftOption = () => {
-    const updated = [...draftQuestions];
-    const curAnswers = updated[draftIndex].answers;
-    if (curAnswers.length >= 6) return;
-    updated[draftIndex].answers.push({
-      id: `a_${draftIndex}_${curAnswers.length}`,
-      text: "",
-      isCorrect: false,
-    });
-    setDraftQuestions(updated);
-  };
-
-  const deleteDraftOption = (optIdx: number) => {
-    const updated = [...draftQuestions];
-    const curAnswers = updated[draftIndex].answers;
-    if (curAnswers.length <= 2) return;
-    const wasCorrect = curAnswers[optIdx].isCorrect;
-    updated[draftIndex].answers.splice(optIdx, 1);
-    if (wasCorrect && updated[draftIndex].answers.length > 0) {
-      updated[draftIndex].answers[0].isCorrect = true;
-    }
-    setDraftQuestions(updated);
-  };
-
-  const handleNextDraftQuestion = () => {
-    const cur = draftQuestions[draftIndex];
-    if (!cur.prompt.trim()) {
-      setErrorMsg("Please enter a question prompt.");
-      return;
-    }
-    const filledOpts = cur.answers.filter((a) => a.text.trim());
-    if (filledOpts.length < 2) {
-      setErrorMsg("Please enter at least 2 non-empty options.");
-      return;
-    }
-    const hasCorrect = filledOpts.some((a) => a.isCorrect);
-    if (!hasCorrect) {
-      setErrorMsg("Please select a correct answer amongst non-empty options.");
-      return;
-    }
-
-    setErrorMsg(null);
-    if (draftIndex < draftQuestions.length - 1) {
-      setDraftIndex(draftIndex + 1);
-    }
-  };
-
-  const handleSaveDraftedQuiz = async () => {
-    const cur = draftQuestions[draftIndex];
-    if (!cur.prompt.trim()) {
-      setErrorMsg("Please enter a question prompt.");
-      return;
-    }
-    const filledOpts = cur.answers.filter((a) => a.text.trim());
-    if (filledOpts.length < 2) {
-      setErrorMsg("Please enter at least 2 non-empty options.");
-      return;
-    }
-
-    setErrorMsg(null);
-
-    const formattedQuestions = draftQuestions.map((q, i) => ({
-      id: `q_${Date.now()}_${i + 1}`,
-      question: q.prompt,
-      prompt: q.prompt,
-      explanation: "",
-      answers: q.answers
-        .filter((a) => a.text.trim())
-        .map((a, ai) => ({
-          id: `a_${i}_${ai}`,
-          text: a.text,
-          isCorrect: a.isCorrect,
-        })),
-    }));
-
-    const sourceText = questionsToSourceText(manualTitle, "Custom", formattedQuestions, []);
-    const localId = `manual_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-
-    const newQuiz: QuizRecord = {
-      id: localId,
-      title: manualTitle.trim() || "Custom Quiz",
-      category: "Custom",
-      questions: formattedQuestions.length,
-      questionsList: formattedQuestions,
-      flashcards: [],
-      sourceText,
-      attempts: [],
-      wrongQuestions: [],
-      uniqueCorrectIds: [],
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-
-    const localQuizzes = getLocalItem<QuizRecord[]>("quizzes", [SAMPLE_QUIZ]);
-    setLocalItem("quizzes", [newQuiz, ...localQuizzes.filter((q) => q.id !== localId)]);
-
-    if (user?.uid) {
-      createQuiz({
-        id: localId,
-        userId: user.uid,
-        title: newQuiz.title,
-        category: newQuiz.category || "Custom",
-        questionCount: newQuiz.questions || 5,
-        sourceText,
-        questionsList: formattedQuestions,
-        flashcards: [],
-      }).catch(() => {});
-    }
-
-    showToast("✍️ Custom quiz created successfully!", {
-      icon: "✍️",
-      color: "#10b981",
-    });
-
-    router.push(`/quiz/${localId}`);
-  };
-
-  // ── Import QST / Text Handler ─────────────────────────────────────────
-  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const text = await file.text();
-      const parsed = parseQstText(text);
-
-      if (!parsed.questions || parsed.questions.length === 0) {
-        setErrorMsg("No questions could be parsed from this file.");
-        return;
-      }
-
-      const quizTitle = parsed.title || file.name.replace(/\.[^.]+$/, "") || "Imported Quiz";
-      const localId = `import_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-
-      const newQuiz: QuizRecord = {
-        id: localId,
-        title: quizTitle,
-        category: parsed.category || "Imported",
-        questions: parsed.questions.length,
-        questionsList: parsed.questions,
-        flashcards: parsed.flashcards || [],
-        sourceText: text,
-        attempts: [],
-        wrongQuestions: [],
-        uniqueCorrectIds: [],
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      };
-
-      const localQuizzes = getLocalItem<QuizRecord[]>("quizzes", [SAMPLE_QUIZ]);
-      setLocalItem("quizzes", [newQuiz, ...localQuizzes.filter((q) => q.id !== localId)]);
-
-      if (user?.uid) {
-        createQuiz({
-          id: localId,
-          userId: user.uid,
-          title: newQuiz.title,
-          category: newQuiz.category || "Imported",
-          questionCount: newQuiz.questions || 5,
-          sourceText: text,
-          questionsList: parsed.questions,
-          flashcards: parsed.flashcards,
-        }).catch(() => {});
-      }
-
-      showToast("📁 Quiz imported successfully!", {
-        icon: "📁",
-        color: "#34d399",
-      });
-
-      router.push(`/quiz/${localId}`);
-    } catch (err: any) {
-      setErrorMsg("Failed to import file. Make sure it is a valid .qst or text format.");
-    }
-  };
 
   return (
     <div
@@ -612,112 +386,10 @@ export default function CreateQuizPage() {
         onCancel={handleCancelGeneration}
       />
 
-      {/* Header & Mode Switcher Tabs */}
-      <header style={{ marginBottom: 24 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
-          <div>
-            <h1
-              style={{
-                fontSize: "clamp(20px, 5vw, 28px)",
-                fontWeight: 800,
-                color: "#ffffff",
-                margin: 0,
-                letterSpacing: "-0.6px",
-              }}
-            >
-              {t("tabs.create") || "Create & Import"}
-            </h1>
-            <p style={{ color: "#9ca3af", fontSize: 13, margin: "3px 0 0" }}>
-              Generate with AI, write your own questions manually, or import study sets.
-            </p>
-          </div>
-        </div>
 
-        {/* 3 Creation Mode Tabs */}
-        <div
-          style={{
-            display: "flex",
-            gap: 6,
-            background: "#0d111d",
-            border: "1px solid rgba(255, 255, 255, 0.08)",
-            borderRadius: 14,
-            padding: 4,
-            overflowX: "auto",
-          }}
-        >
-          <button
-            onClick={() => { setActiveTab("ai"); setErrorMsg(null); }}
-            style={{
-              flex: 1,
-              minWidth: 120,
-              padding: "10px 14px",
-              borderRadius: 10,
-              border: "none",
-              background: activeTab === "ai" ? "rgba(99, 102, 241, 0.2)" : "transparent",
-              color: activeTab === "ai" ? "#ffffff" : "#9ca3af",
-              fontWeight: activeTab === "ai" ? 700 : 500,
-              fontSize: 13,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
-              whiteSpace: "nowrap",
-            }}
-          >
-            <span>✨</span>
-            <span>AI Generator</span>
-          </button>
+      {/* Header + Mode Tabs ── extracted to CreateHeader */}
+      <CreateHeader activeTab={activeTab} setActiveTab={setActiveTab} setErrorMsg={setErrorMsg} t={t as any} />
 
-          <button
-            onClick={() => { setActiveTab("manual"); setErrorMsg(null); }}
-            style={{
-              flex: 1,
-              minWidth: 120,
-              padding: "10px 14px",
-              borderRadius: 10,
-              border: "none",
-              background: activeTab === "manual" ? "rgba(99, 102, 241, 0.2)" : "transparent",
-              color: activeTab === "manual" ? "#ffffff" : "#9ca3af",
-              fontWeight: activeTab === "manual" ? 700 : 500,
-              fontSize: 13,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
-              whiteSpace: "nowrap",
-            }}
-          >
-            <span>✍️</span>
-            <span>Create Manually</span>
-          </button>
-
-          <button
-            onClick={() => { setActiveTab("import"); setErrorMsg(null); }}
-            style={{
-              flex: 1,
-              minWidth: 120,
-              padding: "10px 14px",
-              borderRadius: 10,
-              border: "none",
-              background: activeTab === "import" ? "rgba(99, 102, 241, 0.2)" : "transparent",
-              color: activeTab === "import" ? "#ffffff" : "#9ca3af",
-              fontWeight: activeTab === "import" ? 700 : 500,
-              fontSize: 13,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
-              whiteSpace: "nowrap",
-            }}
-          >
-            <span>📁</span>
-            <span>Import File</span>
-          </button>
-        </div>
-      </header>
 
       {errorMsg && (
         <div
@@ -740,7 +412,7 @@ export default function CreateQuizPage() {
       )}
 
 
-      {/* ── TAB 1: AI GENERATOR ─────────────────── (extracted to AIGeneratorTab) ── */
+      {/* ── TAB 1: AI GENERATOR ─────────────────── (extracted to AIGeneratorTab) ── */}
       {activeTab === "ai" && <AIGeneratorTab
         sourceText={sourceText} setSourceText={setSourceText}
         selectedFile={selectedFile} setSelectedFile={setSelectedFile}
@@ -763,7 +435,7 @@ export default function CreateQuizPage() {
 
 
 
-      {/* ── TAB 2: MANUAL CREATOR ────────────── (extracted to ManualCreatorTab) ── */
+      {/* ── TAB 2: MANUAL CREATOR ────────────── (extracted to ManualCreatorTab) ── */}
       {activeTab === "manual" && (
         <ManualCreatorTab
           manualStep={manualStep}
@@ -785,7 +457,7 @@ export default function CreateQuizPage() {
         />
       )}
 
-      {/* ── TAB 3: IMPORT FILE ──────────────────── (extracted to ImportFileTab) ── */
+      {/* ── TAB 3: IMPORT FILE ──────────────────── (extracted to ImportFileTab) ── */}
       {activeTab === "import" && (
         <ImportFileTab
           onImport={handleImportFile}

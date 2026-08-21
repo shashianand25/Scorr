@@ -338,7 +338,6 @@ export function ManualCreatorTab(s: ManualTabProps) {
               </div>
             </div>
           )}
-        </div>
     </div>
   );
 }
