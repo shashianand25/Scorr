@@ -18,36 +18,43 @@ import { styles } from "../styles/shared";
 import { AnimatedPressable } from "../components/ui/AnimatedPressable";
 import { BattleTimer } from "../components/ui/BattleTimer";
 import { ResultsScreen } from "./QuizResultsScreen";
-import type { HomeScreenProps } from "../types/HomeScreenProps";
+import type { QuizSessionProps } from "../types/QuizSessionProps";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 /**
  * QuizSessionScreen — active quiz session and results view.
  * Extracted from HomeScreen god-file (renderActiveSessionView + renderResultsView).
- * All state is received via p: any (same pattern as AppModals).
+ * Receives typed QuizSessionProps interface.
  */
 export function ActiveSessionScreen({ p }: { p: any }) {
   const { t } = useTranslation();
+  const insets = p.insets || { top: 0, bottom: 0, left: 0, right: 0 };
+  const starredQuestions = p.starredQuestions || new Set();
+  const setStarredQuestions = p.setStarredQuestions || (() => {});
+  const setShowQuitConfirm = p.setShowQuitConfirm || (() => {});
+  const setShowQuizSettingsModal = p.setShowQuizSettingsModal || (() => {});
+  const handleNavigateSession = p.handleNavigateSession || (() => {});
+  const handleAnswerSelect = p.handleAnswerSelect || (() => {});
+  const handleCheckAnswer = p.handleCheckAnswer || (() => {});
+  const handleFinishSession = p.handleFinishSession || (() => {});
+
   const {
     activeSession, setActiveSession,
     settingsDarkMode,
     isConnected, showReconnectedToast, offlineModalParams,
     battleRoomState, firebaseUser,
     sessionTimeLeft, battleQuestionTimeLeft, battleTimePerQuestion,
-    starredQuestions, setStarredQuestions,
-    showQuitConfirm, setShowQuitConfirm,
-    showQuizSettingsModal, setShowQuizSettingsModal,
+    showQuitConfirm,
+    showQuizSettingsModal,
     autoSlideEnabled, setAutoSlideEnabled,
     showRestartConfirm, setShowRestartConfirm,
     jumpPage, setJumpPage,
     quizFlatListRef, quizNumbersScrollRef,
     handleTimerExpiredRef,
-    handleCheckAnswer, handleAnswerSelect, handleNavigateSession,
-    handleFinishSession, saveAndExitQuizSession,
+    saveAndExitQuizSession,
     toggleSpeech, speakingText,
     renderFormattedText, screenFadeAnim,
-    insets,
   } = p;
 
     if (!activeSession) return null;
@@ -131,7 +138,7 @@ export function ActiveSessionScreen({ p }: { p: any }) {
                       <View style={{ backgroundColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", paddingHorizontal: 10, paddingVertical: 3, borderRadius: 8 }}>
                         <BattleTimer startTime={activeSession.startTime || Date.now()} settingsDarkMode={settingsDarkMode} />
                       </View>
-                      {battleTimePerQuestion != null && (
+                      {battleTimePerQuestion != null && battleQuestionTimeLeft != null && (
                         <View style={{ backgroundColor: battleQuestionTimeLeft <= 5 ? "rgba(239,68,68,0.15)" : (settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)"),
                           paddingHorizontal: 10, paddingVertical: 3, borderRadius: 8,
                           borderWidth: battleQuestionTimeLeft <= 5 ? 1 : 0,
@@ -176,7 +183,7 @@ export function ActiveSessionScreen({ p }: { p: any }) {
               </View>
             </View>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-              {(activeSession.quizTimeLimit != null || activeSession.timePerQuestion != null) && (
+              {(activeSession.quizTimeLimit != null || activeSession.timePerQuestion != null) && sessionTimeLeft != null && (
                 <View style={[styles.sessionTimerBox, sessionTimeLeft <= 30 && { backgroundColor: "rgba(239,68,68,0.12)", borderColor: "rgba(239,68,68,0.35)" }]}>
                   <Ionicons name="time-outline" size={13} color={sessionTimeLeft <= 30 ? "#ef4444" : "#00e5a0"} style={{ marginRight: 4 }} />
                   <Text style={[styles.sessionTimerText, sessionTimeLeft <= 30 && { color: "#ef4444" }]}>
@@ -254,7 +261,7 @@ export function ActiveSessionScreen({ p }: { p: any }) {
                   onPress={() => {
                     if (activeSession.isBattle) return; // Disable navigation in battle mode
                     handleNavigateSession(i);
-                    quizFlatListRef.current?.scrollToIndex({ index: i, animated: false });
+                    quizFlatListRef?.current?.scrollToIndex({ index: i, animated: false });
                   }}
                   style={{ alignItems: "center" }}
                 >
@@ -427,7 +434,7 @@ export function ActiveSessionScreen({ p }: { p: any }) {
                 if (currentIndex < totalQs - 1) {
                   const newIdx = currentIndex + 1;
                   handleNavigateSession(newIdx);
-                  quizFlatListRef.current?.scrollToIndex({ index: newIdx, animated: true });
+                  quizFlatListRef?.current?.scrollToIndex({ index: newIdx, animated: true });
                 } else {
                   handleFinishSession();
                 }

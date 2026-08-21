@@ -18,6 +18,7 @@ export function isValidBattleCode(code: string): boolean {
   if (!code || typeof code !== 'string') return false;
   return /^[A-Z0-9]{6}$/.test(code.trim().toUpperCase());
 }
+export const isValidBattleRoomCode = isValidBattleCode;
 
 /**
  * Sanitizes input strings by trimming and stripping dangerous control characters.

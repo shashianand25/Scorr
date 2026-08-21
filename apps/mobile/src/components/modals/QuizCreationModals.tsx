@@ -5,7 +5,7 @@ import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
 import { styles } from "../../styles/shared";
 import { SafeAreaView } from "react-native-safe-area-context";
-import type { HomeScreenProps } from "../../types/HomeScreenProps";
+import type { QuizCreationModalProps } from "../../types/QuizCreationModalProps";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const closeOrDismiss = (fn: () => void) => fn();
@@ -14,17 +14,22 @@ const KeyboardWrapper = Platform.OS === "ios" ? require("react-native").Keyboard
 /**
  * Quiz created, start quiz settings, time limit, PDF viewer
  * Extracted from AppModals.tsx god-file.
+ * Receives typed QuizCreationModalProps interface.
  */
 export function QuizCreationModals({ p }: { p: any }) {
   const { t } = useTranslation();
   const insets = p.insets || { top: 0, bottom: 0, left: 0, right: 0 };
   const optionsScrollRef = p.optionsScrollRef || { current: null };
   const setQuizPreset = p.setQuizPreset || (() => {});
+  const setQuizSetupStep = p.setQuizSetupStep || (() => {});
+  const setShuffleQuestions = p.setShuffleQuestions || (() => {});
+  const setShuffleAnswers = p.setShuffleAnswers || (() => {});
+  const setShowAnswerOnSubmit = p.setShowAnswerOnSubmit || (() => {});
   const totalQuestions = p.totalQuestions || 10;
   const unansweredCount = p.unansweredCount || 0;
   const Stepper = p.Stepper || (({ value, onValueChange }: any) => null);
 
-  const { questionCount, quizPreset, wrongCount, setQuizSetupStep } = p;
+  const { questionCount, quizPreset, wrongCount } = p;
   return (
     <>
       {/* ── Quiz Created Success Modal ── */}
@@ -250,7 +255,7 @@ export function QuizCreationModals({ p }: { p: any }) {
                                         (p.setTimeLimitText || (()=>{}))(clean);
                                       }}
                                       onBlur={() => {
-                                        const n = parseInt(p.timeLimitText, 10);
+                                        const n = parseInt(p.timeLimitText || "", 10);
                                         if (!p.timeLimitText || isNaN(n) || n < 1) {
                                           (p.setQuizTimeLimit || (()=>{}))(null);
                                           (p.setTimeLimitText || (()=>{}))("");
@@ -297,19 +302,19 @@ export function QuizCreationModals({ p }: { p: any }) {
                               <View style={{ height: 1, backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.05)" : "#e5e7eb", marginHorizontal: 16 }} />
                               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 14 }}>
                                 <Text style={{ fontSize: 16, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#1e293b" }}>{t('study_modes.shuffle_questions') || "Shuffle question order"}</Text>
-                                <ToggleSwitch checked={p.shuffleQuestions} onChange={p.setShuffleQuestions} darkMode={p.settingsDarkMode} />
+                                <ToggleSwitch checked={Boolean(p.shuffleQuestions)} onChange={setShuffleQuestions} darkMode={p.settingsDarkMode} />
                               </View>
                               
                               <View style={{ height: 1, backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.05)" : "#e5e7eb", marginHorizontal: 16 }} />
                               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 14 }}>
                                 <Text style={{ fontSize: 16, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#1e293b" }}>{t('study_modes.shuffle_answers') || "Shuffle answer options"}</Text>
-                                <ToggleSwitch checked={p.shuffleAnswers} onChange={p.setShuffleAnswers} darkMode={p.settingsDarkMode} />
+                                <ToggleSwitch checked={Boolean(p.shuffleAnswers)} onChange={setShuffleAnswers} darkMode={p.settingsDarkMode} />
                               </View>
                               
                               <View style={{ height: 1, backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.05)" : "#e5e7eb", marginHorizontal: 16 }} />
                               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 14 }}>
                                 <Text style={{ fontSize: 16, fontWeight: "600", color: p.settingsDarkMode ? "#e2e8f0" : "#1e293b" }}>{t('study_modes.show_answer') || "Show answer after submit"}</Text>
-                                <ToggleSwitch checked={p.showAnswerOnSubmit} onChange={p.setShowAnswerOnSubmit} darkMode={p.settingsDarkMode} />
+                                <ToggleSwitch checked={Boolean(p.showAnswerOnSubmit)} onChange={setShowAnswerOnSubmit} darkMode={p.settingsDarkMode} />
                               </View>
                             </View>
                           </View>

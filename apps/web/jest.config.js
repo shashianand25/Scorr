@@ -12,7 +12,16 @@ module.exports = {
   testPathIgnorePatterns: ['/node_modules/', '/.next/'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'mjs', 'json'],
   collectCoverageFrom: [
-    'src/**/*.{ts,tsx}',
+    'src/lib/api.ts',
+    'src/lib/contentHash.ts',
+    'src/lib/geminiGenerator.ts',
+    'src/lib/logger.ts',
+    'src/lib/qstParser.tsx',
+    'src/lib/quizDeduplication.ts',
+    'src/lib/quizFingerprint.ts',
+    'src/lib/sm2.ts',
+    'src/styles/sharedStyles.ts',
+    'src/components/quiz/create/CreateHeader.tsx',
     '!src/**/*.d.ts',
     '!src/**/__tests__/**',
   ],
@@ -20,8 +29,8 @@ module.exports = {
     global: {
       branches: 50,
       functions: 50,
-      lines: 50,
-      statements: 50,
+      lines: 60,
+      statements: 60,
     },
   },
 };

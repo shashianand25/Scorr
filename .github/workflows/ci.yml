@@ -105,6 +105,9 @@ jobs:
       - name: Run All Test Suites
         run: npm test
 
+      - name: Run Coverage Gate (Threshold Enforcement)
+        run: npm run test:coverage
+
       - name: Build Web Application
         working-directory: apps/web
         run: npm run build

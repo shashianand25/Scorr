@@ -43,7 +43,7 @@
     "test:web": "npm --prefix apps/web test",
     "test:backend": "npm --prefix apps/api test",
     "test:all": "npm --prefix apps/mobile test && npm --prefix apps/web test && npm --prefix apps/api test",
-    "test:coverage": "npm --prefix apps/mobile run test:coverage && npm --prefix apps/api run test:coverage",
+    "test:coverage": "npm --prefix apps/mobile run test:coverage && npm --prefix apps/web run test:coverage && npm --prefix apps/api run test:coverage",
     "lint": "npm --prefix apps/mobile run lint && npm --prefix apps/web run lint && npm --prefix apps/api run lint",
     "lint:mobile": "npm --prefix apps/mobile run lint",
     "lint:web": "npm --prefix apps/web run lint",

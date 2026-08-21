@@ -47,7 +47,7 @@ export interface HomeScreenProps {
   dataLoaded: boolean;
   sampleQuiz: any | null;
   setSampleDismissed: (v: boolean) => void;
-  starredQuestions: Record<string, string[]>;
+  starredQuestions: any;
   setStarredQuestions: (v: any) => void;
   savedSessions: any[];
   flashcardDecks: any[];

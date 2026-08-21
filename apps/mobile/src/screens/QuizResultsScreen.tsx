@@ -17,24 +17,26 @@ import { useTranslation } from "react-i18next";
 import { styles } from "../styles/shared";
 import { AnimatedPressable } from "../components/ui/AnimatedPressable";
 import { BattleTimer } from "../components/ui/BattleTimer";
-import type { HomeScreenProps } from "../types/HomeScreenProps";
+import type { QuizSessionProps } from "../types/QuizSessionProps";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 /**
  * QuizSessionScreen — active quiz session and results view.
  * Extracted from HomeScreen god-file (renderActiveSessionView + renderResultsView).
- * All state is received via p: any (same pattern as AppModals).
+ * Receives typed QuizSessionProps interface.
  */
 
-export function ResultsScreen({ p }: { p: any }) {
+export function ResultsScreen({ p }: { p: QuizSessionProps }) {
   const { t } = useTranslation();
+  const insets = p.insets || { top: 0, bottom: 0, left: 0, right: 0 };
+  const quizzes = p.quizzes || [];
   const {
     activeSession, setActiveSession,
     settingsDarkMode,
     battleRoomState, firebaseUser,
     battleHistory,
-    insets, quizzes, isHost,
+    isHost,
     battleFinishedCalledRef, battleUnsubscribeRef,
     saveBattleResult, setBattlePopup,
     setBattleRoomCode, setBattleRoomState,
@@ -68,16 +70,16 @@ export function ResultsScreen({ p }: { p: any }) {
       // (done via useEffect-like guard using a ref to avoid calling on every render)
       if (bothFinished && battleRoomState?.status !== "finished") {
         // This is in render — use a ref to ensure only called once
-        if (!battleFinishedCalledRef.current) {
+        if (battleFinishedCalledRef && !battleFinishedCalledRef.current) {
           battleFinishedCalledRef.current = true;
           finishBattle(activeSession.battleRoomCode || "").catch(console.error);
         }
-      } else if (!bothFinished) {
+      } else if (!bothFinished && battleFinishedCalledRef) {
         battleFinishedCalledRef.current = false;
       }
 
       const exitBattle = () => {
-        if (battleRoomState && (!battleRoomState.hostFinished || !battleRoomState.guestFinished)) {
+        if (battleRoomState?.id && (!battleRoomState.hostFinished || !battleRoomState.guestFinished)) {
           const code = battleRoomState.id;
           const host = isHost;
           const unsubscribe = listenToBattleRoom(code, (data) => {
@@ -94,21 +96,21 @@ export function ResultsScreen({ p }: { p: any }) {
               }
               const qList = activeSession.questions || [];
               const aMap = activeSession.answers || {};
-              saveBattleResult(code, myScore, oppScore, oppName, data.quizTitle || "", effectiveWin, myTime !== Infinity ? myTime : undefined, oppTime !== Infinity ? oppTime : undefined, qList, aMap);
-              setBattlePopup({ myScore, opponentScore: oppScore, opponentName: oppName, won: effectiveWin, myTime, opponentTime: oppTime });
-              if (effectiveWin) triggerConfettiBurst();
+              if (saveBattleResult) saveBattleResult(code, myScore, oppScore, oppName, data.quizTitle || "", effectiveWin, myTime !== Infinity ? myTime : undefined, oppTime !== Infinity ? oppTime : undefined, qList, aMap);
+              if (setBattlePopup) setBattlePopup({ myScore, opponentScore: oppScore, opponentName: oppName, won: effectiveWin, myTime, opponentTime: oppTime });
+              if (effectiveWin && triggerConfettiBurst) triggerConfettiBurst();
               unsubscribe();
             }
           });
         }
 
-        if (battleUnsubscribeRef.current) battleUnsubscribeRef.current();
-        setBattleRoomCode("");
-        setBattleRoomState(null);
+        if (battleUnsubscribeRef?.current) battleUnsubscribeRef.current();
+        if (setBattleRoomCode) setBattleRoomCode("");
+        if (setBattleRoomState) setBattleRoomState(null);
         setActiveSession(null);
-        setIsHost(false);
-        setJoinCodeInput("");
-        setActiveTab("battle");
+        if (setIsHost) setIsHost(false);
+        if (setJoinCodeInput) setJoinCodeInput("");
+        if (setActiveTab) setActiveTab("battle");
       };
 
       // ── WAITING FOR OPPONENT ────────────────────────────────────────
@@ -147,7 +149,7 @@ export function ResultsScreen({ p }: { p: any }) {
                 onPress={() => {
                   if (activeSession?.battleRoomCode) {
                     getBattleRoom(activeSession.battleRoomCode).then(data => {
-                      if (data) setBattleRoomState(data);
+                      if (data && setBattleRoomState) setBattleRoomState(data);
                     });
                   }
                 }}
@@ -268,7 +270,7 @@ export function ResultsScreen({ p }: { p: any }) {
                 const oppTimeMs = activeSession.isHost ? (battleRoomState?.guestTime ?? Infinity) : (battleRoomState?.hostTime ?? Infinity);
                 const qList = activeSession.questions || [];
                 const aMap = activeSession.answers || {};
-                saveBattleResult(activeSession.battleRoomCode, myScore, opponentScore, opponentName, activeSession.quizTitle || "", effectiveWin, myTimeMs !== Infinity ? myTimeMs : undefined, oppTimeMs !== Infinity ? oppTimeMs : undefined, qList, aMap);
+                if (saveBattleResult) saveBattleResult(activeSession.battleRoomCode, myScore, opponentScore, opponentName, activeSession.quizTitle || "", effectiveWin, myTimeMs !== Infinity ? myTimeMs : undefined, oppTimeMs !== Infinity ? oppTimeMs : undefined, qList, aMap);
                 exitBattle();
               }}
               style={({ pressed }) => [{
@@ -316,7 +318,7 @@ export function ResultsScreen({ p }: { p: any }) {
         isFinished: false,
         startedAt: Date.now()
       });
-      setShowWrongReview(false);
+      if (setShowWrongReview) setShowWrongReview(false);
     };
 
     const handleRetakeEntire = () => {
@@ -328,7 +330,7 @@ export function ResultsScreen({ p }: { p: any }) {
         : [...activeSession.questions];
         
       if (qsList.length === 0) {
-        qsList = generateMockQuestionsForQuiz(title, origQuiz ? origQuiz.questions : activeSession.questions.length);
+        qsList = generateMockQuestionsForQuiz(title, origQuiz?.questions || activeSession.questions.length);
       }
 
       if (activeSession.shuffleQuestions) {
@@ -360,7 +362,7 @@ export function ResultsScreen({ p }: { p: any }) {
         isFinished: false,
         startedAt: Date.now()
       });
-      setShowWrongReview(false);
+      if (setShowWrongReview) setShowWrongReview(false);
     };
 
     const wrongQuestionIds = wrongQsForQuiz.map((wq: any) => wq.id);
@@ -374,7 +376,7 @@ export function ResultsScreen({ p }: { p: any }) {
         {/* Header with Close Button */}
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 24, paddingTop: 20, paddingBottom: 0 }}>
           <Text style={{ fontSize: 24, fontWeight: "600", color: settingsDarkMode ? "#ffffff" : "#111827" }}>{t('quiz_results.title') || "Quiz Results"}</Text>
-          <Pressable onPress={() => saveAndExitQuizSession(true)} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 8 })}>
+          <Pressable onPress={() => saveAndExitQuizSession && saveAndExitQuizSession(true)} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 8 })}>
             <Ionicons name="close" size={28} color={settingsDarkMode ? "#ffffff" : "#111827"} />
           </Pressable>
         </View>
@@ -454,8 +456,8 @@ export function ResultsScreen({ p }: { p: any }) {
                   correctTexts: q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.text),
                 };
               });
-              setSnapshotReviewData(snapshot);
-              setShowWrongReview(true);
+              if (setSnapshotReviewData) setSnapshotReviewData(snapshot);
+              if (setShowWrongReview) setShowWrongReview(true);
             }}
             style={({pressed}) => ({ backgroundColor: settingsDarkMode ? "#172033" : "#ffffff", borderRadius: 16, padding: 20, flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16, borderWidth: 1, borderColor: settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", opacity: pressed ? 0.8 : 1 })}
           >
@@ -470,7 +472,7 @@ export function ResultsScreen({ p }: { p: any }) {
         {/* Bottom Pinned Continue Button */}
         <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingHorizontal: 24, paddingBottom: Math.max(insets.bottom, 16) + 16, paddingTop: 10, backgroundColor: settingsDarkMode ? "#0b1021" : "#f8fafc" }}>
           <Pressable
-            onPress={() => saveAndExitQuizSession(true)}
+            onPress={() => saveAndExitQuizSession && saveAndExitQuizSession(true)}
             style={({ pressed }) => ({
               backgroundColor: "#ffffff",
               borderRadius: 16,
