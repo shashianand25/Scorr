@@ -220,7 +220,7 @@ export function QuizActionsSheet({ p }: { p: HomeScreenProps }) {
                       // Sync rename to Neon if logged in
                       const neonId = p.renamingQuiz.neonId ?? p.renamingQuiz.id;
                       if (p.firebaseUser && neonId && !String(neonId).startsWith("local_")) {
-                        (p.updateMobileQuiz || (() => {}))({
+                        ((p.updateMobileQuiz || (async () => {})) as (payload: any) => Promise<void>)({
                           userId: p.firebaseUser?.uid,
                           quizId: neonId,
                           title: newTitle
@@ -367,7 +367,7 @@ export function QuizActionsSheet({ p }: { p: HomeScreenProps }) {
                     // Delete from Neon if logged in and quiz is synced
                     const neonId = p.deletingQuizConfirm.neonId ?? p.deletingQuizConfirm.id;
                     if (p.firebaseUser && neonId && !String(neonId).startsWith("local_")) {
-                      (p.deleteMobileQuiz || (() => {}))(p.firebaseUser?.uid, neonId).catch((err: any) =>
+                      ((p.deleteMobileQuiz || (async () => {})) as (uid: string, quizId: string) => Promise<void>)(p.firebaseUser?.uid, neonId).catch((err: any) =>
                         console.warn("[NeonSync] quiz delete failed:", err)
                       );
                     }

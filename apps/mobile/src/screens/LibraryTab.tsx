@@ -245,8 +245,7 @@ export function LibraryTab({ p }: { p: HomeScreenProps }) {
                   refreshing={pullRefreshing}
                   onRefresh={handlePullRefresh}
                   tintColor={settingsDarkMode ? "#818cf8" : "#4f46e5"}
-                  colors={["#4f46e5", "#818cf8"]}
-                  progressBackgroundColor={settingsDarkMode ? "#1e293b" : "#ffffff"}
+                  {...({ colors: ["#4f46e5", "#818cf8"], progressBackgroundColor: settingsDarkMode ? "#1e293b" : "#ffffff" } as any)}
                 />
               }
             >

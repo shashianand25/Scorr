@@ -52,14 +52,15 @@ export function AuthScreen({ p }: { p: HomeScreenProps }) {
     // Auth actions
     setShowAuthScreen,
     setCustomToast,
-    // Firebase / API
-    signInWithGoogle,
-    signInWithEmail,
-    signUpWithEmail,
-    resetPassword,
-    sendOtpEmail,
-    verifyOtpCode,
   } = p;
+
+  // Auth handlers — always provided when AuthScreen is mounted
+  const signInWithGoogle = p.signInWithGoogle!;
+  const signInWithEmail = p.signInWithEmail!;
+  const signUpWithEmail = p.signUpWithEmail!;
+  const resetPassword = p.resetPassword!;
+  const sendOtpEmail = p.sendOtpEmail!;
+  const verifyOtpCode = p.verifyOtpCode!;
 
   // ── Auth view: "landing" | "email" ──────────────────────────────
   useEffect(() => {
@@ -113,7 +114,7 @@ export function AuthScreen({ p }: { p: HomeScreenProps }) {
       return;
     }
 
-    if (devCode) setOtpDevCode(devCode);
+    if (devCode) setOtpDevCode?.(devCode);
     setSignupStep("otp");
     setOtpCode("");
     setOtpResendCountdown(30);
@@ -148,12 +149,12 @@ export function AuthScreen({ p }: { p: HomeScreenProps }) {
     setShowAuthScreen(false);
     setSignupStep("details");
     setOtpCode("");
-    setCustomToast({
+    setCustomToast?.({
       message: "Account created successfully! Welcome to Scorrapp.",
       icon: "checkmark-circle",
       color: "#10b981",
     });
-    setTimeout(() => setCustomToast(null), 4000);
+    setTimeout(() => setCustomToast?.(null), 4000);
   };
 
   const handleSigninSubmit = async () => {

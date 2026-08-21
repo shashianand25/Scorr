@@ -25,16 +25,21 @@ export function InsightsTabScreen({ p }: { p: HomeScreenProps }) {
     setShowQuizActions,
     settingsDarkMode,
     handleOpenQuizOptions,
-    setStudyModeModalVisible,
     savedSessions,
     setActiveSession,
     setViewingInsightsQuizFromTab,
     activeTab,
-    expandedAttemptsMap,
-    setExpandedAttemptsMap,
-    setSelectedAttemptForModal,
     handleShareQuiz,
   } = p;
+
+  // Optional fields with safe defaults
+  const setStudyModeModalVisible = p.setStudyModeModalVisible || ((_v: boolean) => {});
+  const expandedAttemptsMap: Record<string, boolean> = p.expandedAttemptsMap ?? {};
+  const setExpandedAttemptsMap = p.setExpandedAttemptsMap ||
+    ((_v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => {});
+  const setSelectedAttemptForModal = (p as any).setSelectedAttemptForModal || ((_v: any) => {});
+  const deleteFlashcardDeck: (uid: string, neonId: string) => Promise<void> =
+    (p.deleteFlashcardDeck as any) || (async () => {});
 
   if (!viewingInsightsQuiz) return null;
   const quiz = viewingInsightsQuiz;
@@ -233,12 +238,15 @@ export function DeckInsightsTab({ p }: { p: HomeScreenProps }) {
     viewingInsightsDeck,
     setActiveTab,
     settingsDarkMode,
-    startStudy,
     flashcardDecks,
     setFlashcardDecks,
     firebaseUser,
-    deleteFlashcardDeck,
   } = p;
+
+  // Optional fields with safe defaults
+  const startStudy = p.startStudy || ((_deck: any) => {});
+  const deleteFlashcardDeck: (uid: string, neonId: string) => Promise<void> =
+    (p.deleteFlashcardDeck as any) || (async () => {});
 
   const deck = viewingInsightsDeck;
   if (!deck) return null;

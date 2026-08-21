@@ -28,29 +28,53 @@ export function BattleLobbyScreen({ p }: { p: HomeScreenProps }) {
   const KeyboardWrapper = Platform.OS === "ios" ? KeyboardAvoidingView : View;
   const { t } = useTranslation();
   const {
-    settingsDarkMode, firebaseUser, setShowAuthScreen, battleUnsubscribeRef,
+    settingsDarkMode, firebaseUser, setShowAuthScreen,
     battleRoomCode, setBattleRoomCode,
-    battleRoomState, setBattleRoomState,
-    isHost, setIsHost,
-    joinCodeInput, setJoinCodeInput,
-    battleError, setBattleError,
-    showBattleQuizSelector, setShowBattleQuizSelector,
-    showBattleOptions, setShowBattleOptions,
-    battleOptionsQuiz, battleOptionsSource,
-    battleShuffleQ, setBattleShuffleQ,
-    battleShuffleA, setBattleShuffleA,
-    battleRandomCount, setBattleRandomCount,
-    battleSelectionMode, setBattleSelectionMode,
-    battleRangeStart, setBattleRangeStart,
-    battleRangeEnd, setBattleRangeEnd,
-    showBattleHistory, setShowBattleHistory,
-    battleHistory, battleConnError, battleCreating,
-    battleTimePerQuestion, setBattleTimePerQuestion,
-    battleCountdown, quizzes, isConnected,
-    handleCreateBattle, handleJoinBattle,
-    handleStartBattle, showBottomPillToast,
+    battleRoomState,
+    isConnected,
     setActiveTab,
   } = p;
+
+  // Optional battle fields with safe defaults — always provided when battle screen is active
+  const battleUnsubscribeRef = p.battleUnsubscribeRef;
+  const setBattleRoomState = p.setBattleRoomState || ((_v: any) => {});
+  const isHost = (p as any).isHost;
+  const setIsHost = (p as any).setIsHost || ((_v: boolean) => {});
+  const joinCodeInput = p.joinCodeInput ?? "";
+  const setJoinCodeInput = p.setJoinCodeInput || ((_v: string) => {});
+  const battleError = p.battleError;
+  const setBattleError = p.setBattleError || ((_v: string | null) => {});
+  const showBattleQuizSelector = p.showBattleQuizSelector;
+  const setShowBattleQuizSelector = p.setShowBattleQuizSelector || ((_v: boolean) => {});
+  const showBattleOptions = p.showBattleOptions;
+  const setShowBattleOptions = p.setShowBattleOptions || ((_v: boolean) => {});
+  const battleOptionsQuiz = p.battleOptionsQuiz;
+  const battleOptionsSource = (p as any).battleOptionsSource;
+  const battleShuffleQ = p.battleShuffleQ;
+  const setBattleShuffleQ = p.setBattleShuffleQ || ((_v: boolean) => {});
+  const battleShuffleA = p.battleShuffleA;
+  const setBattleShuffleA = p.setBattleShuffleA || ((_v: boolean) => {});
+  const battleRandomCount = p.battleRandomCount;
+  const setBattleRandomCount = p.setBattleRandomCount || ((_v: number) => {});
+  const battleSelectionMode = p.battleSelectionMode;
+  const setBattleSelectionMode = p.setBattleSelectionMode || ((_v: string) => {});
+  const battleRangeStart = p.battleRangeStart;
+  const setBattleRangeStart = p.setBattleRangeStart || ((_v: number) => {});
+  const battleRangeEnd = p.battleRangeEnd;
+  const setBattleRangeEnd = p.setBattleRangeEnd || ((_v: number) => {});
+  const showBattleHistory = p.showBattleHistory;
+  const setShowBattleHistory = p.setShowBattleHistory || ((_v: boolean) => {});
+  const battleHistory = p.battleHistory || [];
+  const battleConnError = (p as any).battleConnError;
+  const battleCreating = p.battleCreating;
+  const battleTimePerQuestion = p.battleTimePerQuestion;
+  const setBattleTimePerQuestion = p.setBattleTimePerQuestion || ((_v: number | null) => {});
+  const battleCountdown = p.battleCountdown;
+  const quizzes = p.quizzes || [];
+  const handleCreateBattle = (p as any).handleCreateBattle || (() => {});
+  const handleJoinBattle = p.handleJoinBattle || (async () => {});
+  const handleStartBattle = p.handleStartBattle || (async () => {});
+  const showBottomPillToast = (p as any).showBottomPillToast;
 
     const isDark = settingsDarkMode;
 
@@ -409,7 +433,7 @@ export function BattleLobbyScreen({ p }: { p: HomeScreenProps }) {
 
               <Pressable
                 onPress={() => {
-                  if (battleUnsubscribeRef.current) battleUnsubscribeRef.current();
+                  if (battleUnsubscribeRef?.current) battleUnsubscribeRef.current();
                   setBattleRoomCode("");
                   setBattleRoomState(null);
                 }}

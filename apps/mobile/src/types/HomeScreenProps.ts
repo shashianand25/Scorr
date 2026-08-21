@@ -15,8 +15,8 @@ export interface HomeScreenProps {
   setAuthView: (v: "landing" | "email") => void;
   authMode: "signin" | "signup";
   setAuthMode: (v: "signin" | "signup") => void;
-  signupStep: "form" | "otp";
-  setSignupStep: (v: "signup" | "form" | "otp") => void;
+  signupStep: "form" | "otp" | "details";
+  setSignupStep: (v: "signup" | "form" | "otp" | "details") => void;
   authEmail: string;
   setAuthEmail: (v: string) => void;
   authPassword: string;
@@ -32,7 +32,7 @@ export interface HomeScreenProps {
   otpCode: string;
   setOtpCode: (v: string) => void;
   otpResendCountdown: number;
-  setOtpResendCountdown: (v: number) => void;
+  setOtpResendCountdown: (v: number | ((prev: number) => number)) => void;
 
   // ── Navigation / Tabs ─────────────────────────────────────────────────────
   activeTab: string;
@@ -82,8 +82,12 @@ export interface HomeScreenProps {
 
   // ── Network ───────────────────────────────────────────────────────────────
   isConnected: boolean;
-  bottomToast: string | null;
+  bottomToast: { icon?: string; color?: string; message?: string } | null;
+  bottomToastOpacity?: any;
+  bottomToastTranslateY?: any;
   showReconnectedToast: boolean;
+  syncToastMessage?: string | null;
+  fileInputRef?: React.RefObject<HTMLInputElement>;
 
   // ── Battle ────────────────────────────────────────────────────────────────
   battlePopup: any | null;
@@ -128,11 +132,14 @@ export interface HomeScreenProps {
   setShowDeckReport: (v: any | null) => void;
   showLanguageModal: boolean;
   setShowLanguageModal: (v: boolean) => void;
+  setPdfViewQuiz?: (quiz: any | null) => void;
+  setSelectedQuiz?: (quiz: any | null) => void;
 
   // ── Handlers ─────────────────────────────────────────────────────────────
   handleStartQuiz: (quiz: any, options?: any) => void;
   handleOpenQuizOptions: (quiz: any) => void;
   handleShareQuiz: (quiz: any) => Promise<void>;
+  openAuthScreen?: () => void;
   handleDeleteQuizOnMobile: (quizId: string) => void;
   handleImportQst: (text: string, fileName: string, sourceUri?: string) => void;
   handleGenerateWithAI: (text: string, options?: any) => Promise<void>;
@@ -145,7 +152,7 @@ export interface HomeScreenProps {
   handleStartBattle: () => Promise<void>;
   handleJoinBattle: () => Promise<void>;
   handleCancelAiGeneration: () => void;
-  saveAndExitQuizSession: () => void;
+  saveAndExitQuizSession: (...args: any[]) => void;
   triggerConfettiBurst: () => void;
 
   // ── UI State ─────────────────────────────────────────────────────────────
@@ -192,7 +199,7 @@ export interface HomeScreenProps {
 
   // ── Flashcard / Insights ──────────────────────────────────────────────────
   fcIndex?: number;
-  setFcIndex?: (v: number) => void;
+  setFcIndex?: (v: number | ((prev: number) => number)) => void;
   fcFlipped?: boolean;
   setFcFlipped?: (v: boolean) => void;
   insightsFlipAnim?: any;
@@ -215,6 +222,7 @@ export interface HomeScreenProps {
   showBattleQuizSelector?: boolean;
   setShowBattleQuizSelector?: (v: boolean) => void;
   battleUnsubscribeRef?: React.RefObject<any>;
+  pendingDeleteIdsRef?: React.RefObject<Set<string>>;
 
   // ── Quiz Rename / Delete modals ───────────────────────────────────────────
   renamingQuiz?: any | null;
@@ -225,7 +233,7 @@ export interface HomeScreenProps {
   setRenameTitle?: (v: string) => void;
 
   // ── Account / Auth actions ────────────────────────────────────────────────
-  handleLogout?: () => Promise<void> | void;
+  handleLogout?: () => Promise<void>;
   deleteAccount?: () => Promise<void>;
   deleteAccountLoading?: boolean;
   setDeleteAccountLoading?: (v: boolean) => void;
@@ -236,16 +244,60 @@ export interface HomeScreenProps {
   setFeedbackText?: (v: string) => void;
   feedbackLoading?: boolean;
   setFeedbackLoading?: (v: boolean) => void;
-  sendFeedback?: () => Promise<void> | void;
+  sendFeedback?: (payload?: { userId?: any; userEmail?: any; message?: string }) => Promise<any>;
 
   // ── Import ────────────────────────────────────────────────────────────────
   isImporting?: boolean;
-  importErrorDetails?: string | null;
-  setImportErrorDetails?: (v: string | null) => void;
+  importErrorDetails?: { title?: string; message?: string; details?: string } | null;
+  setImportErrorDetails?: (v: { title?: string; message?: string; details?: string } | null) => void;
 
   // ── Neon / Remote sync ────────────────────────────────────────────────────
-  updateMobileQuiz?: (payload: any) => Promise<void> | void;
-  deleteMobileQuiz?: (quizId: string) => Promise<void> | void;
+  updateMobileQuiz?: (payload: any) => Promise<void>;
+  deleteMobileQuiz?: (uid: string, quizId: string) => Promise<void>;
+
+  // ── History / Session ─────────────────────────────────────────────────────
+  handleClearHistoryOnMobile?: (quizId: string) => void;
+
+  // ── HomeLayout extra fields ───────────────────────────────────────────────
+  battleShuffleQ?: boolean;
+  setBattleShuffleQ?: (v: boolean) => void;
+  battleShuffleA?: boolean;
+  setBattleShuffleA?: (v: boolean) => void;
+  battleError?: string | null;
+  battleCreating?: boolean;
+  studyModeModalVisible?: boolean;
+  studyCardCount?: number;
+  selectedStudyMode?: string | null;
+  setSelectedStudyMode?: (v: string | null) => void;
+  setStudyingDeck?: (v: any | null) => void;
+  setStudyQueue?: (v: any[]) => void;
+  setIsPreviewMode?: (v: boolean) => void;
+  flipAnim?: any;
+  swipeX?: any;
+  setNoDueAtStart?: (v: boolean) => void;
+  creationMode?: string | null;
+  showWrongReview?: boolean;
+  setShowWrongReview?: (v: boolean) => void;
+  viewingReportCardData?: any | null;
+  setViewingReportCardData?: (v: any | null) => void;
+  reportCardQs?: any[];
+  snapshotReviewData?: any | null;
+  setSnapshotReviewData?: (v: any | null) => void;
+  sampleDismissed?: boolean;
+  showBattleOptions?: boolean;
+  setShowBattleOptions?: (v: boolean) => void;
+  battleOptionsQuiz?: any | null;
+  battleSelectionMode?: string;
+  setBattleSelectionMode?: (v: string) => void;
+  battleRandomCount?: number;
+  setBattleRandomCount?: (v: number) => void;
+  battleRangeStart?: number;
+  setBattleRangeStart?: (v: number) => void;
+  battleRangeEnd?: number;
+  setBattleRangeEnd?: (v: number) => void;
+  battleTimePerQuestion?: number | null;
+  setBattleTimePerQuestion?: (v: number | null) => void;
+  aiConfig?: any | null;
 
   // Allow additional properties for backward compatibility during migration
   [key: string]: unknown;

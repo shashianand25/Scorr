@@ -27,19 +27,35 @@ export function FlashcardsScreen({ p }: { p: HomeScreenProps }) {
   const {
     settingsDarkMode, firebaseUser,
     flashcardDecks, setFlashcardDecks,
-    studyingDeck, setStudyingDeck,
-    studyQueue, setStudyQueue,
-    fcIndex, setFcIndex, fcIndexRef,
-    fcFlipped, setFcFlipped,
-    fcStarredIds, setFcStarredIds,
     viewingInsightsDeck, setViewingInsightsDeck,
     viewingInsightsQuiz,
-    setActiveTab, showBottomPillToast,
-    startStudy, handleSM2Rating,
-    insightsSwipeX, insightsSwipeY, insightsFlipAnim,
-    insightsPanResponder, buttonSlideX, toggleSpeech, speakingText,
-    renderFormattedText, insets,
+    setActiveTab, handleSM2Rating,
+    insets,
   } = p;
+
+  // Optional fields with safe defaults — always provided when flashcard screen is active
+  const fcIndex = p.fcIndex ?? 0;
+  const setFcIndex: (v: number | ((prev: number) => number)) => void =
+    p.setFcIndex || ((_v: number | ((prev: number) => number)) => {});
+  const fcFlipped = p.fcFlipped ?? false;
+  const setFcFlipped = p.setFcFlipped || ((_v: boolean) => {});
+  const studyingDeck = (p as any).studyingDeck;
+  const setStudyingDeck = (p as any).setStudyingDeck || (() => {});
+  const studyQueue = (p as any).studyQueue;
+  const setStudyQueue = (p as any).setStudyQueue || (() => {});
+  const fcIndexRef = (p as any).fcIndexRef;
+  const fcStarredIds = (p as any).fcStarredIds;
+  const setFcStarredIds = (p as any).setFcStarredIds || (() => {});
+  const showBottomPillToast = (p as any).showBottomPillToast;
+  const startStudy = p.startStudy || (() => {});
+  const insightsSwipeX = p.insightsSwipeX;
+  const insightsSwipeY = p.insightsSwipeY;
+  const insightsFlipAnim = p.insightsFlipAnim;
+  const insightsPanResponder = p.insightsPanResponder;
+  const buttonSlideX = p.buttonSlideX;
+  const toggleSpeech = p.toggleSpeech || ((_text: string) => {});
+  const speakingText = p.speakingText;
+  const renderFormattedText = p.renderFormattedText || ((text: string) => text);
 
     if (!viewingInsightsQuiz) return null;
     const quiz = viewingInsightsQuiz;

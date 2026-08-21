@@ -34,3 +34,8 @@ build/
 coverage/
 *.apk
 *.aab
+.cxx/
+local.properties
+*.keystore
+*.jks
+

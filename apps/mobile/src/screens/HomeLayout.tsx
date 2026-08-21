@@ -77,7 +77,7 @@ export function HomeLayout({ p }: { p: HomeScreenProps }) {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            {renderAuthScreen()}
+            {renderAuthScreen?.()}
           </ScrollView>
         </KeyboardWrapper>
       </SafeAreaView>
@@ -227,7 +227,7 @@ export function HomeLayout({ p }: { p: HomeScreenProps }) {
           }}
         >
           {!!bottomToast.icon && (
-            <Ionicons name={bottomToast.icon} size={14} color={bottomToast.color || "#38bdf8"} />
+            <Ionicons name={bottomToast.icon as any} size={14} color={bottomToast.color || "#38bdf8"} />
           )}
           <Text style={{ color: "#ffffff", fontSize: 13, fontWeight: "600", letterSpacing: 0.2 }}>
             {bottomToast.message}

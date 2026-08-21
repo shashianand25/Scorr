@@ -33,7 +33,7 @@ export function ResetStatsModal({ p }: { p: HomeScreenProps }) {
                   (p.quizzes || []).forEach((q: any) => {
                     const neonId = q.neonId ?? q.id;
                     if (neonId && !String(neonId).startsWith('local_')) {
-                      (p.updateMobileQuiz || (() => {}))({
+                      ((p.updateMobileQuiz || (async () => {})) as (payload: any) => Promise<void>)({
                         userId: p.firebaseUser?.uid,
                         quizId: neonId,
                         attempts: [],

@@ -64,7 +64,7 @@ export function RenameQuizModal({ p }: { p: HomeScreenProps }) {
                     (p.setQuizzes || (() => {}))((p.quizzes || []).map((q: any) => q.id === p.renamingQuiz.id ? { ...q, title: newTitle } : q));
                     const neonId = p.renamingQuiz.neonId ?? p.renamingQuiz.id;
                     if (p.firebaseUser && neonId && !String(neonId).startsWith('local_')) {
-                      (p.updateMobileQuiz || (() => {}))({
+                      ((p.updateMobileQuiz || (async () => {})) as (payload: any) => Promise<void>)({
                         userId: p.firebaseUser?.uid,
                         quizId: neonId,
                         title: newTitle,
@@ -207,7 +207,7 @@ export function DeleteQuizModal({ p }: { p: HomeScreenProps }) {
                   (p.setDeletingQuizConfirm || (() => {}))(null);
                   const neonId = p.deletingQuizConfirm.neonId ?? p.deletingQuizConfirm.id;
                   if (p.firebaseUser && neonId && !String(neonId).startsWith('local_')) {
-                    (p.deleteMobileQuiz || (() => {}))(p.firebaseUser?.uid, neonId).catch((err: any) =>
+                    ((p.deleteMobileQuiz || (async () => {})) as (uid: string, quizId: string) => Promise<void>)(p.firebaseUser?.uid, neonId).catch((err: any) =>
                       console.warn('[NeonSync] quiz delete failed:', err)
                     );
                   }
