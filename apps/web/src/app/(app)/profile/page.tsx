@@ -77,7 +77,6 @@ export default function ProfilePage() {
         {user ? (
           <>
             {user.photoURL ? (
-              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={user.photoURL}
                 alt="Avatar"

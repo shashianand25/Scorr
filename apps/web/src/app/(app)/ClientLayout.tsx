@@ -80,7 +80,6 @@ function NavigationLayout({ children }: { children: React.ReactNode }) {
             borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
           }}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/logo.png"
             alt="Scorr Logo"

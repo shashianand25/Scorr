@@ -95,7 +95,6 @@ export default function LoginPage() {
       >
         {/* Logo — pinned top-left */}
         <Link href="/" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 10, position: "absolute", top: 48, left: 56 }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/logo.png"
             alt="Scorr Logo"
@@ -141,8 +140,7 @@ export default function LoginPage() {
         {/* Mobile Header Logo */}
         <div className="login-mobile-logo" style={{ alignItems: "center", gap: 10 }}>
           <Link href="/" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 10 }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+              <img
               src="/logo.png"
               alt="Scorr Logo"
               style={{ width: 34, height: 34, borderRadius: 10, objectFit: "cover" }}
