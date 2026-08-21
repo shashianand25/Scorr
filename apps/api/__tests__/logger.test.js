@@ -42,4 +42,21 @@ test('Backend Structured JSON Logger Suite', async (t) => {
     assert.strictEqual(entry.level, 'error');
     assert.strictEqual(entry.context.error, 'Unauthorized');
   });
+
+  await t.test('logger.error dispatches to Sentry captureException when SENTRY_DSN is configured', () => {
+    process.env.SENTRY_DSN = 'https://fake@o0.ingest.sentry.io/0';
+    let captured = null;
+    global.__sentryCaptureException = (err, extra) => {
+      captured = { err, extra };
+    };
+
+    const entry = logger.error('Sync', 'User sync failed', new Error('Sync timeout'), { userId: 'u_999' });
+    assert.strictEqual(entry.level, 'error');
+    assert.strictEqual(entry.tag, 'Sync');
+    assert.ok(captured);
+    assert.strictEqual(captured.extra.tags.tag, 'Sync');
+
+    delete global.__sentryCaptureException;
+    delete process.env.SENTRY_DSN;
+  });
 });
