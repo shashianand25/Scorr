@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import { styles } from "../styles/shared";
 import { AnimatedPressable } from "../components/ui/AnimatedPressable";
 import { BattleTimer } from "../components/ui/BattleTimer";
+import { ResultsScreen } from "./QuizResultsScreen";
 import type { HomeScreenProps } from "../types/HomeScreenProps";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");

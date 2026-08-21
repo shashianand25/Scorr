@@ -6,7 +6,6 @@ import { BattleLobbyScreen } from "./BattleScreen";
 import { FlashcardsScreen } from "./FlashcardScreen";
 import { LibraryTab } from "./LibraryTab";
 import { AddTab } from "./AddTab";
-import { FlashcardsTab } from "./FlashcardsTab";
 import { GuideTab } from "./GuideTab";
 import { MenuTab } from "./MenuTab";
 import { HomeTab } from "./HomeTab";
@@ -46,7 +45,7 @@ export function MainContentScreen({ p, overrideTab }: { p: HomeScreenProps; over
       return <AddTab p={p} />;
 
     case "flashcards" as any:
-      return <FlashcardsTab p={p} />;
+      return <FlashcardsScreen p={p} />;
 
     case "guide":
       return <GuideTab p={p} />;

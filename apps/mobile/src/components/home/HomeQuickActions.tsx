@@ -1,12 +1,12 @@
-import { getUserInitial } from "../utils/user";
-import { AnimatedPressable } from "../components/ui/AnimatedPressable";
+import { getUserInitial } from "../../utils/user";
+import { AnimatedPressable } from "../ui/AnimatedPressable";
 import { Alert } from "react-native";
 import React from "react";
 import { View, Text, Pressable, ScrollView, FlatList, Modal, TextInput, ActivityIndicator, Animated, Image, Platform, Share, Dimensions, RefreshControl } from "react-native";
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
-import { styles } from "../styles/shared";
-import type { HomeScreenProps } from "../types/HomeScreenProps";
+import { styles } from "../../styles/shared";
+import type { HomeScreenProps } from "../../types/HomeScreenProps";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -29,41 +29,24 @@ export function HomeQuickActions({ p }: { p: any }) {
     deleteQuiz = () => {}, renameQuiz = () => {},
   } = p || {};
 
-  // --- verbatim from case "home" in MainContentScreen ---
-        // ── Home Screen (Hybrid Design) ──────────────────────────────
-        return (() => {
-          const bg         = "#0B0F1E";
-          const cardBg     = "#141930";
-          const searchBg   = "#1A1F38";
-          const accentBlue = "#4A6FFF";
-          const accentGrn  = "#4ADE80";
-          const accentOrng = "#F97316";
-          const accentPurp = "#B5A8FF";
-          const pillBg     = "#2B2560";
-          const muted      = "#8B8FA8";
-          const txt        = "#ffffff";
-          const border     = "rgba(255,255,255,0.07)";
-          const iconBg     = "#1C2448";
+  const bg         = "#0B0F1E";
+  const cardBg     = "#141930";
+  const searchBg   = "#1A1F38";
+  const accentBlue = "#4A6FFF";
+  const accentGrn  = "#4ADE80";
+  const accentOrng = "#F97316";
+  const accentPurp = "#B5A8FF";
+  const pillBg     = "#2B2560";
+  const muted      = "#8B8FA8";
+  const txt        = "#ffffff";
+  const border     = "rgba(255,255,255,0.07)";
+  const iconBg     = "#1C2448";
 
-          // ── Jump Back In data ─────────────────────────────────────
-          // Filter tombstoned IDs at the source so deleted quizzes never appear in
-          // Continue Learning, even if stale AsyncStorage data briefly re-hydrates them.
-          const tombstoneSet = p?.pendingDeleteIdsRef?.current || new Set();
-          const liveQuizzes = (quizzes || []).filter((q: any) =>
-            !tombstoneSet.has(q.id) &&
-            !tombstoneSet.has(q.neonId)
-          );
-          const inProgressQuizzes = liveQuizzes.filter((q: any) => {
-            const uniqueCount = (q.uniqueCorrectIds || []).length;
-            const qCount = q.questions || 1;
-            return uniqueCount < qCount;
-          });
-          const inProgressDecks = flashcardDecks.filter((d: any) => (d.cards || []).length > 0);
   return (
     <>
-                {/* ── Battle Arena Banner ── */}
-                {!homeSearch && (
-                  <View style={{ marginTop: jumpItems.length > 0 || !hasContent ? 20 : 16, paddingHorizontal: 20 }}>
+      {/* ── Battle Arena Banner ── */}
+      {!homeSearch && (
+        <View style={{ marginTop: 20, paddingHorizontal: 20 }}>
                     <Text style={{ fontSize: 16, fontWeight: "700", color: txt, marginBottom: 10 }}>{t('home.multiplayer') || "Multiplayer"}</Text>
                     
                     <Pressable
@@ -229,5 +212,4 @@ export function HomeQuickActions({ p }: { p: any }) {
                 )}
     </>
   );
-  })();
 }

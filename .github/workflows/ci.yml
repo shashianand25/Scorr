@@ -25,19 +25,19 @@ jobs:
         with:
           path: |
             node_modules
-            mobile/node_modules
-            web/node_modules
-            backend/node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json', 'mobile/package-lock.json', 'web/package-lock.json', 'backend/package-lock.json') }}
+            apps/mobile/node_modules
+            apps/web/node_modules
+            apps/api/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json', 'apps/mobile/package-lock.json', 'apps/web/package-lock.json', 'apps/api/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-node-
 
       - name: Install dependencies
         run: |
           npm install --legacy-peer-deps
-          cd apps/mobile && npm install --legacy-peer-deps && cd ..
-          cd apps/web && npm install && cd ..
-          cd apps/api && npm install && cd ..
+          cd apps/mobile && npm install --legacy-peer-deps && cd ../..
+          cd apps/web && npm install && cd ../..
+          cd apps/api && npm install && cd ../..
 
       - name: Run Linter (Mobile & Web)
         run: npm run lint
@@ -60,18 +60,18 @@ jobs:
         with:
           path: |
             node_modules
-            mobile/node_modules
-            web/node_modules
-            backend/node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json', 'mobile/package-lock.json', 'web/package-lock.json', 'backend/package-lock.json') }}
+            apps/mobile/node_modules
+            apps/web/node_modules
+            apps/api/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json', 'apps/mobile/package-lock.json', 'apps/web/package-lock.json', 'apps/api/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-node-
 
       - name: Install dependencies
         run: |
           npm install --legacy-peer-deps
-          cd apps/mobile && npm install --legacy-peer-deps && cd ..
-          cd apps/web && npm install && cd ..
+          cd apps/mobile && npm install --legacy-peer-deps && cd ../..
+          cd apps/web && npm install && cd ../..
 
       - name: Run TypeCheck (Mobile)
         working-directory: apps/mobile
@@ -99,19 +99,19 @@ jobs:
         with:
           path: |
             node_modules
-            mobile/node_modules
-            web/node_modules
-            backend/node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json', 'mobile/package-lock.json', 'web/package-lock.json', 'backend/package-lock.json') }}
+            apps/mobile/node_modules
+            apps/web/node_modules
+            apps/api/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json', 'apps/mobile/package-lock.json', 'apps/web/package-lock.json', 'apps/api/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-node-
 
       - name: Install dependencies
         run: |
           npm install --legacy-peer-deps
-          cd apps/mobile && npm install --legacy-peer-deps && cd ..
-          cd apps/web && npm install && cd ..
-          cd apps/api && npm install && cd ..
+          cd apps/mobile && npm install --legacy-peer-deps && cd ../..
+          cd apps/web && npm install && cd ../..
+          cd apps/api && npm install && cd ../..
 
       - name: Run All Test Suites
         run: npm test

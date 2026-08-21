@@ -238,10 +238,6 @@ export function HomeLayout({ p }: { p: any }) {
     </SafeAreaView>
 
 
-      {/* ── Report Card Modal ── extracted to ReportCardModal.tsx ── */}
-      <ReportCardModal p={p} />
-
-
       {/* ── All Modals ── outside SafeAreaView so they never affect flex layout ── */}
       <AppModals p={p} />
 
@@ -258,14 +254,6 @@ export function HomeLayout({ p }: { p: any }) {
           connectionLost={aiGenConnectionLost} 
         />
       )}
-
-
-      {/* ── Battle Modals ── extracted to BattleModals.tsx ── */}
-      <BattleModals p={p} />
-
-
-        {/* Battle History & Study Mode Modals — extracted to HomeModals.tsx */}
-        <HomeModals p={p} />
     </View>
   );
 }

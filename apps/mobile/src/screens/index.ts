@@ -10,7 +10,6 @@ export { FlashcardsScreen } from './FlashcardScreen';
 export { MainContentScreen } from './MainContentScreen';
 export { LibraryTab } from './LibraryTab';
 export { AddTab } from './AddTab';
-export { FlashcardsTab } from './FlashcardsTab';
 export { GuideTab } from './GuideTab';
 export { MenuTab } from './MenuTab';
 export { HomeTab } from './HomeTab';

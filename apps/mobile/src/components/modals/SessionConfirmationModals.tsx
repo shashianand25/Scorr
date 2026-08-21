@@ -1,19 +1,32 @@
-/**
- * SessionConfirmationModals — coordinator for session and account confirmation modals.
- * Modals split into session/AccountConfirmModals.tsx and session/SessionControlModals.tsx.
- */
 import React from "react";
-import { AccountConfirmModals } from "./session/AccountConfirmModals";
-import { SessionControlModals } from "./session/SessionControlModals";
+import {
+  ResetStatsModal,
+  LogoutConfirmModal,
+  DeleteAccountModal,
+  QuitQuizModal,
+  RestartQuizModal,
+  QuizCreatedModal,
+} from "./ConfirmationModals";
 
-export { AccountConfirmModals, SessionControlModals };
+export {
+  ResetStatsModal,
+  LogoutConfirmModal,
+  DeleteAccountModal,
+  QuitQuizModal,
+  RestartQuizModal,
+  QuizCreatedModal,
+};
 
-/** Renders all session confirmation modals: reset, logout, delete, quit, offline, settings, restart. */
+/** Renders all session confirmation modals: reset, logout, delete, quit, settings, restart. */
 export function SessionConfirmationModals({ p }: { p: any }) {
   return (
     <>
-      <AccountConfirmModals p={p} />
-      <SessionControlModals p={p} />
+      <ResetStatsModal p={p} />
+      <LogoutConfirmModal p={p} />
+      <DeleteAccountModal p={p} />
+      <QuitQuizModal p={p} />
+      <RestartQuizModal p={p} />
+      <QuizCreatedModal p={p} />
     </>
   );
 }
