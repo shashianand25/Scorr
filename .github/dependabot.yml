@@ -4,34 +4,34 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
     labels:
       - "dependencies"
-      - "javascript"
+      - "root"
 
   - package-ecosystem: "npm"
-    directory: "/mobile"
+    directory: "/apps/mobile"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
     labels:
       - "dependencies"
       - "mobile"
 
   - package-ecosystem: "npm"
-    directory: "/web"
+    directory: "/apps/web"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
     labels:
       - "dependencies"
       - "web"
 
   - package-ecosystem: "npm"
-    directory: "/backend"
+    directory: "/apps/api"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
     labels:
       - "dependencies"
       - "backend"
@@ -40,7 +40,7 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
     labels:
       - "dependencies"
       - "ci"
