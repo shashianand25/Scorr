@@ -10,7 +10,7 @@ const generateMasterQuizId = () => 'uq_' + Math.random().toString(36).substring(
 
 // ── Master Quizzes (Canonical Content & AI Cache) ─────────────────────────
 router.post('/api/master-quizzes/cache-check', async (req, res) => {
-  const { contentHash, lang } = req.body;
+  const { contentHash } = req.body;
   if (!contentHash) return res.status(400).json({ error: 'contentHash required' });
   try {
     const result = await pool.query(

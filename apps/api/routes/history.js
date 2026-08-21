@@ -23,7 +23,7 @@ router.post('/api/quiz-history', async (req, res) => {
     
     // Update user XP
     const xpGain = score; // simplified xp logic
-    const userUpdate = await pool.query(
+    await pool.query(
       `UPDATE users SET xp = xp + $1 WHERE id = $2 RETURNING xp, level`,
       [xpGain, userId]
     );

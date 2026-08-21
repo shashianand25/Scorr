@@ -6,8 +6,6 @@
 const express = require('express');
 const cors = require('cors');
 const compression = require('compression');
-const multer = require('multer');
-const { Resend } = require('resend');
 require('dotenv').config();
 
 const pool = require('../db/pool');

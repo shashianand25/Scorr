@@ -1,0 +1,15 @@
+node_modules/
+dist/
+build/
+.next/
+.expo/
+coverage/
+package-lock.json
+*.log
+*.md
+*.html
+*.json
+*.yml
+*.yaml
+*.css
+scripts/

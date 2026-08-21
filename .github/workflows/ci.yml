@@ -39,7 +39,7 @@ jobs:
           cd apps/web && npm install && cd ../..
           cd apps/api && npm install && cd ../..
 
-      - name: Run Linter (Mobile & Web)
+      - name: Run Linter (Mobile, Web & Backend API)
         run: npm run lint
 
   typecheck:

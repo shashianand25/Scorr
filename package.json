@@ -43,10 +43,12 @@
     "test:backend": "npm --prefix apps/api test",
     "test:all": "npm --prefix apps/mobile test && npm --prefix apps/web test && npm --prefix apps/api test",
     "test:coverage": "npm --prefix apps/mobile run test:coverage",
-    "lint": "npm --prefix apps/mobile run lint && npm --prefix apps/web run lint",
+    "lint": "npm --prefix apps/mobile run lint && npm --prefix apps/web run lint && npm --prefix apps/api run lint",
     "lint:mobile": "npm --prefix apps/mobile run lint",
     "lint:web": "npm --prefix apps/web run lint",
+    "lint:api": "npm --prefix apps/api run lint",
     "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "typecheck": "npm --prefix apps/mobile run typecheck",
     "audit:deps": "npm audit --audit-level=critical"
   },
