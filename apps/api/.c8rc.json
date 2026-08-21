@@ -1,0 +1,22 @@
+{
+  "all": true,
+  "include": [
+    "schemas.js",
+    "utils/**/*.js"
+  ],
+  "exclude": [
+    "__tests__/**",
+    "node_modules/**",
+    "db/migrations/**"
+  ],
+  "reporter": [
+    "text",
+    "text-summary",
+    "html"
+  ],
+  "check-coverage": true,
+  "lines": 70,
+  "functions": 70,
+  "branches": 60,
+  "statements": 70
+}

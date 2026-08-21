@@ -14,7 +14,10 @@ module.exports = {
   testMatch: ['**/__tests__/**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}'],
   testPathIgnorePatterns: ['/node_modules/', '/.expo/'],
   collectCoverageFrom: [
-    'src/**/*.{ts,tsx}',
+    'src/utils/**/*.{ts,tsx}',
+    'src/lib/quiz*.{ts,tsx}',
+    'src/lib/contentHash.ts',
+    'src/lib/logger.ts',
     '!src/**/*.d.ts',
     '!src/**/__tests__/**',
   ],

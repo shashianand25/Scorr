@@ -1,27 +1,37 @@
 const test = require('node:test');
 const assert = require('node:assert');
+const {
+  isValidEmail,
+  isValidBattleRoomCode,
+  sanitizeText,
+  validateFeedbackPayload,
+} = require('../utils/validation');
 
 test('Backend API Validation Suite', async (t) => {
   await t.test('Validates feedback submission payloads', () => {
-    function validateFeedback(body) {
-      if (!body || typeof body.feedback !== 'string' || !body.feedback.trim()) {
-        return { valid: false, error: 'Feedback message is required' };
-      }
-      return { valid: true };
-    }
-
-    assert.strictEqual(validateFeedback({ feedback: 'Loving the app!' }).valid, true);
-    assert.strictEqual(validateFeedback({ feedback: '   ' }).valid, false);
-    assert.strictEqual(validateFeedback({}).valid, false);
+    assert.strictEqual(
+      validateFeedbackPayload({ message: 'Loving the app!', email: 'test@scorrapp.com' }).valid,
+      true
+    );
+    assert.strictEqual(validateFeedbackPayload({ message: '   ' }).valid, false);
+    assert.strictEqual(validateFeedbackPayload({ message: 'Hello', email: 'invalid-email' }).valid, false);
+    assert.strictEqual(validateFeedbackPayload(null).valid, false);
   });
 
   await t.test('Validates battle room code format', () => {
-    function isValidRoomCode(code) {
-      return typeof code === 'string' && /^[A-Z0-9]{6}$/.test(code.trim().toUpperCase());
-    }
+    assert.strictEqual(isValidBattleRoomCode('BAT123'), true);
+    assert.strictEqual(isValidBattleRoomCode('123'), false);
+    assert.strictEqual(isValidBattleRoomCode(null), false);
+  });
 
-    assert.strictEqual(isValidRoomCode('BAT123'), true);
-    assert.strictEqual(isValidRoomCode('123'), false);
-    assert.strictEqual(isValidRoomCode(null), false);
+  await t.test('Validates email formatting helper', () => {
+    assert.strictEqual(isValidEmail('student@university.edu'), true);
+    assert.strictEqual(isValidEmail('plainaddress'), false);
+    assert.strictEqual(isValidEmail(null), false);
+  });
+
+  await t.test('Sanitizes text and removes null characters', () => {
+    assert.strictEqual(sanitizeText('Hello\0World'), 'HelloWorld');
+    assert.strictEqual(sanitizeText(null), '');
   });
 });

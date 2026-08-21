@@ -30,5 +30,6 @@ node_modules/
 dist/
 build/
 .expo/
+coverage/
 *.apk
 *.aab
