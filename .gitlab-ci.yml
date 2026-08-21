@@ -39,5 +39,5 @@ build:web:
 security:audit:
   stage: security
   script:
-    - npm --prefix apps/api audit --audit-level=critical || true
-    - npm --prefix apps/web audit --audit-level=critical || true
+    - npm --prefix apps/api audit --audit-level=critical
+    - npm --prefix apps/web audit --audit-level=critical
