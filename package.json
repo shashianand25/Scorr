@@ -38,7 +38,7 @@
     "start": "npm --prefix backend start",
     "dev": "npm --prefix backend run dev",
     "build": "npm --prefix web run build",
-    "test": "npm --prefix mobile test",
+    "test": "npm run test:all",
     "test:mobile": "npm --prefix mobile test",
     "test:web": "npm --prefix web test",
     "test:backend": "npm --prefix backend test",
