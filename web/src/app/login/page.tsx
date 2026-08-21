@@ -52,8 +52,6 @@ export default function LoginPage() {
     }
   };
 
-  if (loading) return null;
-
   return (
     <div
       style={{

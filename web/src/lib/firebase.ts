@@ -210,7 +210,10 @@ export async function signOutUser(): Promise<void> {
 export function onAuth(callback: (user: User | null) => void) {
   if (typeof window === 'undefined') return () => {};
   const authInstance = getSafeAuth();
-  if (!authInstance) return () => {};
+  if (!authInstance) {
+    callback(null);
+    return () => {};
+  }
   return onAuthStateChanged(authInstance, callback);
 }
 
