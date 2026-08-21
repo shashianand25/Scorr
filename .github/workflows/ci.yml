@@ -134,7 +134,6 @@ jobs:
 
       - name: Run Security Audit
         run: |
-          npm audit --audit-level=critical || true
-          cd apps/mobile && (npm audit --audit-level=critical || true) && cd ../..
-          cd apps/web && (npm audit --audit-level=critical || true) && cd ../..
-          cd apps/api && (npm audit --audit-level=critical || true) && cd ../..
+          npm audit --audit-level=critical
+          npm --prefix apps/web audit --audit-level=critical
+          npm --prefix apps/api audit --audit-level=critical

@@ -29,14 +29,13 @@ jobs:
       - name: Check Backend Dependencies
         run: |
           npm --prefix apps/api install --no-audit
-          npm --prefix apps/api audit --audit-level=critical || true
+          npm --prefix apps/api audit --audit-level=critical
 
       - name: Check Web Dependencies
         run: |
           npm --prefix apps/web install --no-audit
-          npm --prefix apps/web audit --audit-level=critical || true
+          npm --prefix apps/web audit --audit-level=critical
 
       - name: Check Mobile Dependencies
         run: |
           npm --prefix apps/mobile install --no-audit --legacy-peer-deps
-          npm --prefix apps/mobile audit --audit-level=critical || true
