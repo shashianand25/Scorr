@@ -27,7 +27,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
  * Extracted from HomeScreen god-file (renderActiveSessionView + renderResultsView).
  * Receives typed QuizSessionProps interface.
  */
-export function ActiveSessionScreen({ p }: { p: any }) {
+export function ActiveSessionScreen({ p }: { p: QuizSessionProps }) {
   const { t } = useTranslation();
   const insets = p.insets || { top: 0, bottom: 0, left: 0, right: 0 };
   const starredQuestions = p.starredQuestions || new Set();
