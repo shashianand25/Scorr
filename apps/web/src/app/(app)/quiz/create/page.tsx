@@ -18,6 +18,7 @@ import { computeContentHash } from "@/lib/contentHash";
 import { parseQstText, questionsToSourceText } from "@/lib/qstParser";
 import { getLocalItem, setLocalItem, SAMPLE_QUIZ } from "@/lib/storage";
 import { QuizRecord } from "@/lib/quizDeduplication";
+import { generateQuizWithGemini } from "@/lib/geminiGenerator";
 import AIGenerationModal from "@/components/ai/AIGenerationModal";
 import { useManualQuiz } from "@/hooks/useManualQuiz";
 import { CreateHeader } from "@/components/quiz/create/CreateHeader";
@@ -196,101 +197,19 @@ export default function CreateQuizPage() {
         throw new Error("AI service temporarily unavailable. Please try again later.");
       }
 
-      const { geminiKey, modelUrl, promptTemplate } = config.aiConfig;
-
-      let effectivePrompt = (promptTemplate || "")
-        .replace("{sourceText}", fileBase64 ? "" : textContent.slice(0, 30000))
-        .replace("{questionCount}", String(effectiveCount))
-        .replace("{includeFlashcards}", String(includeFlashcards))
-        .replace("{language}", activeLang);
-
-      if (!promptTemplate?.includes("{language}")) {
-        effectivePrompt += `\nImportant: Generate all questions, options, explanations, and flashcards in "${activeLang}" language.`;
-      }
-
-      const parts: any[] = [];
-      if (fileBase64) {
-        const mime = selectedFile?.type || (selectedFile?.name?.endsWith(".pdf") ? "application/pdf" : "image/jpeg");
-        const base64Data = fileBase64.includes(",") ? fileBase64.split(",")[1] : fileBase64;
-        parts.push({
-          inlineData: {
-            mimeType: mime,
-            data: base64Data,
-          },
+      const { questions: formattedQuestions, flashcards: formattedFlashcards } =
+        await generateQuizWithGemini({
+          aiConfig: config.aiConfig,
+          textContent,
+          fileBase64,
+          selectedFile,
+          effectiveCount,
+          includeFlashcards,
+          activeLang,
+          signal: abortController.signal,
         });
-      }
-      parts.push({
-        text: effectivePrompt,
-      });
-
-      const requestBody: any = {
-        contents: [
-          {
-            parts,
-          },
-        ],
-        generationConfig: {
-          temperature: 0.7,
-          responseMimeType: "application/json",
-        },
-      };
-
-      const geminiRes = await fetch(modelUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": geminiKey,
-        },
-        body: JSON.stringify(requestBody),
-        signal: abortController.signal,
-      });
-
-      if (!geminiRes.ok) {
-        throw new Error(`Gemini API error (Status ${geminiRes.status})`);
-      }
-
-      const geminiData = await geminiRes.json();
-      const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
 
       if (abortController.signal.aborted) return;
-
-      let parsedQuestions: any[] = [];
-      let parsedFlashcards: any[] = [];
-
-      try {
-        const clean = rawText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-        const json = JSON.parse(clean);
-        parsedQuestions = json.questions || [];
-        parsedFlashcards = json.flashcards || [];
-      } catch {
-        const qstFallback = parseQstText(rawText);
-        parsedQuestions = qstFallback.questions;
-        parsedFlashcards = qstFallback.flashcards;
-      }
-
-      if (parsedQuestions.length === 0 && parsedFlashcards.length === 0) {
-        throw new Error("AI generated no questions. Please provide more detailed notes.");
-      }
-
-      const formattedQuestions = parsedQuestions.map((q: any, i: number) => ({
-        id: `q_${Date.now()}_${i + 1}`,
-        question: q.question || q.prompt || "",
-        prompt: q.question || q.prompt || "",
-        explanation: q.explanation || "",
-        answers: Array.isArray(q.answers)
-          ? q.answers.map((a: any, ai: number) => ({
-              id: `a_${i}_${ai}`,
-              text: typeof a === "string" ? a : a.text || "",
-              isCorrect: typeof a === "object" ? a.isCorrect === true : ai === 0,
-            }))
-          : [],
-      }));
-
-      const formattedFlashcards = parsedFlashcards.map((f: any, i: number) => ({
-        id: `f_${Date.now()}_${i + 1}`,
-        front: f.front || f.term || "",
-        back: f.back || f.definition || "",
-      }));
 
       const quizTitle = title.trim() || selectedFile?.name.replace(/\.[^.]+$/, "") || "Generated Quiz";
       const masterSourceText = questionsToSourceText(quizTitle, category, formattedQuestions, formattedFlashcards);
