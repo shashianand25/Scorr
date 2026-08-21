@@ -15,7 +15,7 @@ import type { HomeScreenProps } from "../types/HomeScreenProps";
 // Extracted from renderInsightsView() in mobile/src/app/index.tsx (lines 2835-3021)
 // Original function: 187 lines
 // ─────────────────────────────────────────────────────────────────────────────
-export function InsightsTabScreen({ p }: { p: any }) {
+export function InsightsTabScreen({ p }: { p: HomeScreenProps }) {
   const { t } = useTranslation();
 
   const {
@@ -226,7 +226,7 @@ export function InsightsTabScreen({ p }: { p: any }) {
 // Extracted from renderDeckInsightsTab() in mobile/src/app/index.tsx (lines 3023-3184)
 // Original function: 162 lines
 // ─────────────────────────────────────────────────────────────────────────────
-export function DeckInsightsTab({ p }: { p: any }) {
+export function DeckInsightsTab({ p }: { p: HomeScreenProps }) {
   const { t } = useTranslation();
 
   const {

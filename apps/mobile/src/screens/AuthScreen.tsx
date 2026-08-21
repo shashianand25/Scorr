@@ -19,7 +19,7 @@ import type { HomeScreenProps } from "../types/HomeScreenProps";
 
 const KeyboardWrapper = Platform.OS === "ios" ? KeyboardAvoidingView : View;
 
-export function AuthScreen({ p }: { p: any }) {
+export function AuthScreen({ p }: { p: HomeScreenProps }) {
   const {
     // Auth view state
     authView,

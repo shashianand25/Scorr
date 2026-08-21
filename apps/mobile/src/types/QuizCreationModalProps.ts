@@ -1,5 +1,6 @@
 import type React from "react";
 import type { QuizQuestion } from "./QuizSessionProps";
+import type { HomeScreenProps } from "./HomeScreenProps";
 
 export interface CreatedQuizInfo {
   title: string;
@@ -15,8 +16,13 @@ export interface SelectedQuizOption {
   [key: string]: unknown;
 }
 
+/**
+ * QuizCreationModalProps — dedicated prop surface for quiz creation/setup modals.
+ * Structurally compatible with HomeScreenProps via the index signature.
+ */
 export interface QuizCreationModalProps {
-  insets?: { top: number; bottom: number; left: number; right: number };
+  insets?: HomeScreenProps["insets"];
+  settingsDarkMode?: boolean;
   optionsScrollRef?: React.RefObject<any>;
   setQuizPreset?: (preset: string) => void;
   totalQuestions?: number;
@@ -30,7 +36,6 @@ export interface QuizCreationModalProps {
   setShowQuizCreatedModal?: (modal: CreatedQuizInfo | null) => void;
   selectedQuiz?: SelectedQuizOption | null;
   setSelectedQuiz?: (quiz: SelectedQuizOption | null) => void;
-  settingsDarkMode?: boolean;
   selectionMode?: string;
   setSelectionMode?: (mode: string) => void;
   randomCount?: number;

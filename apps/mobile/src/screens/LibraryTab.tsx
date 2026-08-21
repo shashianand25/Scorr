@@ -13,7 +13,7 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
  * Extracted from MainContentScreen/library case (~254 lines).
  * Receives all state and handlers via p: any.
  */
-export function LibraryTab({ p }: { p: any }) {
+export function LibraryTab({ p }: { p: HomeScreenProps }) {
   const { t } = useTranslation();
   const isDark = p.settingsDarkMode;
   const {

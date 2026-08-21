@@ -9,7 +9,7 @@ import type { HomeScreenProps } from "../../types/HomeScreenProps";
  *   - QuizActionsSheet (381 lines) — bottom sheet + import loading
  *   - SessionConfirmationModals (529 lines) — reset/logout/quit/settings/report
  */
-export function QuizActionModals({ p }: { p: any }) {
+export function QuizActionModals({ p }: { p: HomeScreenProps }) {
   return (
     <>
       <QuizActionsSheet p={p} />

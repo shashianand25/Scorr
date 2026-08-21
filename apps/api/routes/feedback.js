@@ -3,6 +3,7 @@ const router = express.Router();
 const pool = require('../db/pool');
 const { Resend } = require('resend');
 const { feedbackSchema } = require('../schemas');
+const logger = require('../utils/logger');
 
 // Lazy getter — instantiated on first use
 let _resend = null;
@@ -39,12 +40,12 @@ router.post('/api/feedback', async (req, res) => {
         text: `User ID: ${userId || 'N/A'}\nUser Email: ${userEmail || 'N/A'}\n\nFeedback:\n${message}`
       });
     } else {
-      console.warn("Feedback not emailed: RESEND_API_KEY is missing from environment.");
+      logger.warn('Feedback', 'Feedback not emailed: RESEND_API_KEY is missing from environment');
     }
 
     res.json({ ok: true });
   } catch (err) {
-    console.error(err);
+    logger.error('Feedback', 'Failed to process feedback submission', err, { userId, userEmail });
     res.status(500).json({ error: err.message });
   }
 });

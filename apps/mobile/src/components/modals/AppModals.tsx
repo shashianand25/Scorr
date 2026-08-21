@@ -5,6 +5,7 @@ import { QuizCreationModals } from "./QuizCreationModals";
 import { LibraryAddModals } from "./LibraryAddModals";
 import { BattleResultModal } from "./BattleResultModal";
 import type { HomeScreenProps } from "../../types/HomeScreenProps";
+import type { QuizCreationModalProps } from "../../types/QuizCreationModalProps";
 
 // Re-export previously split modal components
 export { QuizActionsModal } from "./QuizActionsModal";
@@ -16,12 +17,13 @@ export { OfflineModal } from "./OfflineModal";
  * AppModals — thin compositor for all modal groups.
  * Delegates to focused modal group components.
  */
-export function AppModals({ p }: { p: any }) {
+export function AppModals({ p }: { p: HomeScreenProps }) {
+  const qcp = p as unknown as QuizCreationModalProps;
   return (
     <>
       <QuizActionModals p={p} />
       <FeedbackLegalModals p={p} />
-      <QuizCreationModals p={p} />
+      <QuizCreationModals p={qcp} />
       <LibraryAddModals p={p} />
       <BattleResultModal p={p} />
     </>

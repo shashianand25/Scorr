@@ -4,6 +4,7 @@ const multer = require('multer');
 const pdfParse = require('pdf-parse');
 const officeParser = require('officeparser');
 const pptToText = require('ppt-to-text');
+const logger = require('../utils/logger');
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -16,7 +17,7 @@ router.post('/api/parse-pdf', upload.single('file'), async (req, res) => {
     const data = await pdfParse(req.file.buffer);
     res.json({ text: data.text });
   } catch (err) {
-    console.error('PDF Parse Error:', err);
+    logger.error('Parse', 'PDF Parse Error', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -38,7 +39,7 @@ router.post('/api/parse-ppt', upload.single('file'), async (req, res) => {
           return res.json({ text });
         }
       } catch (fallbackErr) {
-        console.error('ppt-to-text fallback error:', fallbackErr);
+        logger.warn('Parse', 'ppt-to-text fallback error', { error: fallbackErr.message });
       }
     }
 
@@ -47,7 +48,7 @@ router.post('/api/parse-ppt', upload.single('file'), async (req, res) => {
     const text = typeof parseResult === 'string' ? parseResult : (parseResult.toText ? parseResult.toText() : '');
     res.json({ text });
   } catch (err) {
-    console.error('PPT Parse Error:', err);
+    logger.error('Parse', 'PPT Parse Error', err);
     res.status(500).json({ error: err.message });
   }
 });

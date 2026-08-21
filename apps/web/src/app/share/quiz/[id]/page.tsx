@@ -1,5 +1,6 @@
 import React from "react";
 import SharedQuizClient from "./SharedQuizClient";
+import { logger } from "@/lib/logger";
 
 export default async function SharedQuizPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -13,7 +14,7 @@ export default async function SharedQuizPage({ params }: { params: Promise<{ id:
       quizData = data.quiz || null;
     }
   } catch (err) {
-    console.error("Failed to fetch shared quiz info", err);
+    logger.error("Share", "Failed to fetch shared quiz info", err, { id });
   }
 
   const quizTitle = quizData?.title || "Shared Quiz";

@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const logger = require('../utils/logger');
 
 // Gemini prompt templates — loaded from env or fallback to defaults
 const GEMINI_MCQ_PROMPT_TEMPLATE = process.env.GEMINI_MCQ_PROMPT_TEMPLATE || `You are an expert tutor and you need to get me full marks.
@@ -105,7 +106,7 @@ router.get('/.well-known/assetlinks.json', (req, res) => {
 router.get('/api/gemini-config', (req, res) => {
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
   if (!GEMINI_API_KEY) {
-    console.error("[Backend] Missing GEMINI_API_KEY environment variable.");
+    logger.error('Config', 'Missing GEMINI_API_KEY environment variable');
     return res.status(500).json({ error: "Server is missing AI configuration.", devError: "Missing GEMINI_API_KEY" });
   }
   const lang = (req.query.lang || '').toLowerCase();
@@ -121,7 +122,7 @@ router.get('/api/gemini-config', (req, res) => {
 router.get('/api/gemini-config-ru', (req, res) => {
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
   if (!GEMINI_API_KEY) {
-    console.error("[Backend] Missing GEMINI_API_KEY environment variable.");
+    logger.error('Config', 'Missing GEMINI_API_KEY environment variable');
     return res.status(500).json({ error: "Server is missing AI configuration.", devError: "Missing GEMINI_API_KEY" });
   }
   res.json({ key: GEMINI_API_KEY, prompt: GEMINI_MCQ_PROMPT_TEMPLATE_RU });
@@ -133,11 +134,11 @@ router.get('/api/app-config', (req, res) => {
   const GEMINI_MODEL_URL = process.env.GEMINI_MODEL_URL;
 
   if (!GEMINI_API_KEY) {
-    console.error("[Backend] Missing GEMINI_API_KEY environment variable.");
+    logger.error('Config', 'Missing GEMINI_API_KEY environment variable');
     return res.status(500).json({ error: "Server is missing AI configuration.", devError: "Missing GEMINI_API_KEY" });
   }
   if (!GEMINI_MODEL_URL) {
-    console.error("[Backend] Missing GEMINI_MODEL_URL environment variable.");
+    logger.error('Config', 'Missing GEMINI_MODEL_URL environment variable');
     return res.status(500).json({ error: "Server is missing AI configuration.", devError: "Missing GEMINI_MODEL_URL" });
   }
 
@@ -207,10 +208,10 @@ router.get(['/download', '/api/download'], (req, res) => {
 // ── App Updates ────────────────────────────────────────────────────────────
 router.get('/api/version-config', (req, res) => {
   if (!process.env.APP_MINIMUM_VERSION) {
-    console.error("[Backend] Missing APP_MINIMUM_VERSION env var — force-update will never trigger.");
+    logger.warn('Config', 'Missing APP_MINIMUM_VERSION env var — force-update will never trigger');
   }
   if (!process.env.APP_LATEST_VERSION) {
-    console.error("[Backend] Missing APP_LATEST_VERSION env var.");
+    logger.warn('Config', 'Missing APP_LATEST_VERSION env var');
   }
   const scheduleStr = process.env.UPDATE_PROMPT_SCHEDULE_DAYS;
   const updatePromptScheduleDays = scheduleStr

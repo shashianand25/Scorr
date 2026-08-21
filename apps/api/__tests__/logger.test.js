@@ -45,18 +45,43 @@ test('Backend Structured JSON Logger Suite', async (t) => {
 
   await t.test('logger.error dispatches to Sentry captureException when SENTRY_DSN is configured', () => {
     process.env.SENTRY_DSN = 'https://fake@o0.ingest.sentry.io/0';
+    let Sentry = null;
+    try {
+      Sentry = require('@sentry/node');
+    } catch {
+      // Sentry package absent
+    }
+
     let captured = null;
-    global.__sentryCaptureException = (err, extra) => {
-      captured = { err, extra };
-    };
+    if (Sentry) {
+      const originalCapture = Sentry.captureException;
+      Sentry.captureException = (err, extra) => {
+        captured = { err, extra };
+      };
+      try {
+        const entry = logger.error('Sync', 'User sync failed', new Error('Sync timeout'), { userId: 'u_999' });
+        assert.strictEqual(entry.level, 'error');
+        assert.strictEqual(entry.tag, 'Sync');
+        assert.ok(captured);
+        assert.strictEqual(captured.extra.tags.tag, 'Sync');
+      } finally {
+        Sentry.captureException = originalCapture;
+      }
+    } else {
+      global.__sentryCaptureException = (err, extra) => {
+        captured = { err, extra };
+      };
+      try {
+        const entry = logger.error('Sync', 'User sync failed', new Error('Sync timeout'), { userId: 'u_999' });
+        assert.strictEqual(entry.level, 'error');
+        assert.strictEqual(entry.tag, 'Sync');
+        assert.ok(captured);
+        assert.strictEqual(captured.extra.tags.tag, 'Sync');
+      } finally {
+        delete global.__sentryCaptureException;
+      }
+    }
 
-    const entry = logger.error('Sync', 'User sync failed', new Error('Sync timeout'), { userId: 'u_999' });
-    assert.strictEqual(entry.level, 'error');
-    assert.strictEqual(entry.tag, 'Sync');
-    assert.ok(captured);
-    assert.strictEqual(captured.extra.tags.tag, 'Sync');
-
-    delete global.__sentryCaptureException;
     delete process.env.SENTRY_DSN;
   });
 });

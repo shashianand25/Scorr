@@ -27,7 +27,7 @@ import type { HomeScreenProps } from "../types/HomeScreenProps";
  * Extracted from index.tsx to reduce god-file size.
  * Receives ALL HomeScreen state and handlers via p: any.
  */
-export function HomeLayout({ p }: { p: any }) {
+export function HomeLayout({ p }: { p: HomeScreenProps }) {
   const { t } = useTranslation();
   const isDark = p.settingsDarkMode;
   const {

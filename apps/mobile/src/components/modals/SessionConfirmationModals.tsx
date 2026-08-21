@@ -7,6 +7,7 @@ import {
   RestartQuizModal,
   QuizCreatedModal,
 } from "./ConfirmationModals";
+import type { HomeScreenProps } from "../../types/HomeScreenProps";
 
 export {
   ResetStatsModal,
@@ -18,7 +19,7 @@ export {
 };
 
 /** Renders all session confirmation modals: reset, logout, delete, quit, settings, restart. */
-export function SessionConfirmationModals({ p }: { p: any }) {
+export function SessionConfirmationModals({ p }: { p: HomeScreenProps }) {
   return (
     <>
       <ResetStatsModal p={p} />

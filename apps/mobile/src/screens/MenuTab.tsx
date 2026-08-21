@@ -15,7 +15,7 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
  * Extracted from MainContentScreen/menu case (~199 lines).
  * Receives all state and handlers via p: any.
  */
-export function MenuTab({ p }: { p: any }) {
+export function MenuTab({ p }: { p: HomeScreenProps }) {
   const { t } = useTranslation();
   const isDark = p.settingsDarkMode;
   const {

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
+const logger = require('../utils/logger');
 
 // Helper for generating simple UUIDs if not provided by client
 const generateId = () => Math.random().toString(36).substring(2) + Date.now().toString(36);
@@ -30,7 +31,7 @@ router.post('/api/quiz-history', async (req, res) => {
     
     res.json({ eventId, xpGain });
   } catch (err) {
-    console.error(err);
+    logger.error('History', 'Failed to save quiz history', err, { userId, quizTitle });
     res.status(500).json({ error: err.message });
   }
 });
@@ -44,7 +45,7 @@ router.get('/api/quiz-history', async (req, res) => {
     );
     res.json({ history: result.rows });
   } catch (err) {
-    console.error(err);
+    logger.error('History', 'Failed to fetch quiz history', err, { userId });
     res.status(500).json({ error: err.message });
   }
 });
@@ -75,7 +76,7 @@ router.post('/api/battle-history', async (req, res) => {
     );
     res.json({ eventId });
   } catch (err) {
-    console.error(err);
+    logger.error('History', 'Failed to save battle history', err, { userId, roomCode });
     res.status(500).json({ error: err.message });
   }
 });
@@ -94,7 +95,7 @@ router.get('/api/battle-history', async (req, res) => {
     }));
     res.json({ history });
   } catch (err) {
-    console.error(err);
+    logger.error('History', 'Failed to fetch battle history', err, { userId });
     res.status(500).json({ error: err.message });
   }
 });

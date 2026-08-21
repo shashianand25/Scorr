@@ -24,7 +24,7 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
  * BattleLobbyScreen — multiplayer battle room UI.
  * Extracted from HomeScreen god-file (renderBattleLobbyView).
  */
-export function BattleLobbyScreen({ p }: { p: any }) {
+export function BattleLobbyScreen({ p }: { p: HomeScreenProps }) {
   const KeyboardWrapper = Platform.OS === "ios" ? KeyboardAvoidingView : View;
   const { t } = useTranslation();
   const {

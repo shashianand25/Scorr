@@ -14,7 +14,7 @@ const KeyboardWrapper = Platform.OS === 'ios'
   : require('react-native').View;
 
 // ── Rename Quiz Modal ──
-export function RenameQuizModal({ p }: { p: any }) {
+export function RenameQuizModal({ p }: { p: HomeScreenProps }) {
   const { t } = useTranslation();
   if (p.renamingQuiz == null) return null;
   return (
@@ -96,7 +96,7 @@ export function RenameQuizModal({ p }: { p: any }) {
 }
 
 // ── Importing Loading Overlay ──
-export function ImportLoadingModal({ p }: { p: any }) {
+export function ImportLoadingModal({ p }: { p: HomeScreenProps }) {
   if (!p.isImporting) return null;
   return (
     <Modal visible={true} animationType="fade" transparent={true}>
@@ -112,7 +112,7 @@ export function ImportLoadingModal({ p }: { p: any }) {
 }
 
 // ── Import Error Modal ──
-export function ImportErrorModal({ p }: { p: any }) {
+export function ImportErrorModal({ p }: { p: HomeScreenProps }) {
   const { t } = useTranslation();
   if (p.importErrorDetails == null) return null;
   return (
@@ -162,7 +162,7 @@ export function ImportErrorModal({ p }: { p: any }) {
 }
 
 // ── Delete Quiz Confirmation Modal ──
-export function DeleteQuizModal({ p }: { p: any }) {
+export function DeleteQuizModal({ p }: { p: HomeScreenProps }) {
   const insets = useSafeAreaInsets();
   if (p.deletingQuizConfirm == null) return null;
   return (

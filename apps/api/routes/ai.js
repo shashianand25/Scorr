@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
+const logger = require('../utils/logger');
 
 // ── AI Usage / Rate Limiting ──────────────────────────────────────────────
 // Called by the mobile app before every AI generation.
@@ -35,7 +36,7 @@ router.post('/api/ai/use', async (req, res) => {
     const newCount = result.rows[0].count;
     return res.json({ allowed: true, used: newCount, limit });
   } catch (err) {
-    console.error('[Backend] ai/use error:', err);
+    logger.error('AI', 'ai/use error', err, { userId });
     // Fail open — don't block generation if the DB is down
     return res.json({ allowed: true, used: 0, limit });
   }

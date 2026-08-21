@@ -1,3 +1,4 @@
+const logger = require('../../utils/logger');
 require('dotenv').config();
 const { Pool } = require('pg');
 const pool = new Pool({
@@ -11,7 +12,10 @@ async function run() {
     ADD COLUMN my_time INTEGER,
     ADD COLUMN opponent_time INTEGER;
   `);
-  console.log('Columns added');
+  logger.info('Migration', 'Columns added');
   process.exit(0);
 }
-run().catch(console.error);
+run().catch((err) => {
+  logger.error('Migration', 'Failed to update battle_history columns', err);
+  process.exit(1);
+});

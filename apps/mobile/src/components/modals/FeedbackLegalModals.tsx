@@ -17,7 +17,7 @@ const KeyboardWrapper = Platform.OS === "ios" ? require("react-native").Keyboard
  * Feedback, privacy policy, terms of service
  * Extracted from AppModals.tsx god-file.
  */
-export function FeedbackLegalModals({ p }: { p: any }) {
+export function FeedbackLegalModals({ p }: { p: HomeScreenProps }) {
   const { t } = useTranslation();
   const insets = p.insets || { top: 0, bottom: 0, left: 0, right: 0 };
   return (

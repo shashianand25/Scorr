@@ -6,7 +6,7 @@ import { styles } from '../../styles/shared';
 import type { HomeScreenProps } from "../../types/HomeScreenProps";
 
 // ── Reset Statistics Confirmation Modal ──
-export function ResetStatsModal({ p }: { p: any }) {
+export function ResetStatsModal({ p }: { p: HomeScreenProps }) {
   if (!p.showResetConfirm) return null;
   return (
     <Modal visible={true} animationType="fade" transparent onRequestClose={() => (p.setShowResetConfirm || (() => {}))(false)}>
@@ -57,7 +57,7 @@ export function ResetStatsModal({ p }: { p: any }) {
 }
 
 // ── Logout Confirm ──
-export function LogoutConfirmModal({ p }: { p: any }) {
+export function LogoutConfirmModal({ p }: { p: HomeScreenProps }) {
   if (!p.showLogoutConfirm) return null;
   return (
     <Modal visible={true} animationType="fade" transparent onRequestClose={() => (p.setShowLogoutConfirm || (() => {}))(false)}>
@@ -94,7 +94,7 @@ export function LogoutConfirmModal({ p }: { p: any }) {
 }
 
 // ── Delete Account Confirm ──
-export function DeleteAccountModal({ p }: { p: any }) {
+export function DeleteAccountModal({ p }: { p: HomeScreenProps }) {
   if (!p.showDeleteAccountConfirm) return null;
   return (
     <Modal visible={true} animationType="fade" transparent onRequestClose={() => (p.setShowDeleteAccountConfirm || (() => {}))(false)}>
@@ -150,7 +150,7 @@ export function DeleteAccountModal({ p }: { p: any }) {
 }
 
 // ── Quit Quiz Confirm ──
-export function QuitQuizModal({ p }: { p: any }) {
+export function QuitQuizModal({ p }: { p: HomeScreenProps }) {
   if (!p.showQuitConfirm) return null;
   return (
     <Modal visible={true} animationType="fade" transparent onRequestClose={() => (p.setShowQuitConfirm || (() => {}))(false)}>
@@ -199,7 +199,7 @@ export function QuitQuizModal({ p }: { p: any }) {
 }
 
 // ── Restart Quiz Confirm ──
-export function RestartQuizModal({ p }: { p: any }) {
+export function RestartQuizModal({ p }: { p: HomeScreenProps }) {
   if (!p.showRestartConfirm) return null;
   return (
     <Modal visible={true} animationType="fade" transparent onRequestClose={() => (p.setShowRestartConfirm || (() => {}))(false)}>
@@ -245,7 +245,7 @@ export function RestartQuizModal({ p }: { p: any }) {
 }
 
 // ── Quiz Created Success Modal ──
-export function QuizCreatedModal({ p }: { p: any }) {
+export function QuizCreatedModal({ p }: { p: HomeScreenProps }) {
   if (p.showQuizCreatedModal == null) return null;
   return (
     <Modal visible={true} animationType="fade" transparent onRequestClose={() => (p.setShowQuizCreatedModal || (() => {}))(null)}>

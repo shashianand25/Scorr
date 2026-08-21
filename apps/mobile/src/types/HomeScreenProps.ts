@@ -163,6 +163,90 @@ export interface HomeScreenProps {
   viewingInsightsQuizFromTab: string;
   setViewingInsightsQuizFromTab: (v: string) => void;
 
+  // ── Auth Handlers ─────────────────────────────────────────────────────────
+  signInWithEmail?: (email: string, password: string) => Promise<any>;
+  signInWithGoogle?: () => Promise<any>;
+  signUpWithEmail?: (email: string, password: string, name: string) => Promise<any>;
+  sendOtpEmail?: (email: string) => Promise<any>;
+  verifyOtpCode?: (email: string, code: string) => Promise<any>;
+  resetPassword?: (email: string) => Promise<any>;
+  renderAuthScreen?: () => React.ReactNode;
+  authViewAnim?: any;
+  setOtpDevCode?: (v: string) => void;
+
+  // ── Search ────────────────────────────────────────────────────────────────
+  homeSearch?: string;
+  setHomeSearch?: (v: string) => void;
+  librarySearch?: string;
+  setLibrarySearch?: (v: string) => void;
+
+  // ── Quiz Helpers ──────────────────────────────────────────────────────────
+  startStudy?: (quiz: any, preset?: string) => void;
+  renderFormattedText?: (text: string, style?: any) => React.ReactNode;
+  toggleSpeech?: (text: string) => void;
+  speakingText?: string | null;
+  jumpPage?: number;
+  setJumpPage?: (v: number) => void;
+  customToast?: any | null;
+  setCustomToast?: (v: any | null) => void;
+
+  // ── Flashcard / Insights ──────────────────────────────────────────────────
+  fcIndex?: number;
+  setFcIndex?: (v: number) => void;
+  fcFlipped?: boolean;
+  setFcFlipped?: (v: boolean) => void;
+  insightsFlipAnim?: any;
+  insightsSwipeX?: any;
+  insightsSwipeY?: any;
+  insightsPanResponder?: any;
+  buttonSlideX?: any;
+  expandedAttemptsMap?: Record<string, boolean>;
+  setExpandedAttemptsMap?: (v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => void;
+  setStudyModeModalVisible?: (v: boolean) => void;
+  deleteFlashcardDeck?: (deckId: string) => void;
+
+  // ── Battle (extended) ─────────────────────────────────────────────────────
+  setBattleRoomState?: (v: any | null) => void;
+  setBattleError?: (v: string | null) => void;
+  joinCodeInput?: string;
+  setJoinCodeInput?: (v: string) => void;
+  showBattleHistory?: boolean;
+  setShowBattleHistory?: (v: boolean) => void;
+  showBattleQuizSelector?: boolean;
+  setShowBattleQuizSelector?: (v: boolean) => void;
+  battleUnsubscribeRef?: React.RefObject<any>;
+
+  // ── Quiz Rename / Delete modals ───────────────────────────────────────────
+  renamingQuiz?: any | null;
+  setRenamingQuiz?: (v: any | null) => void;
+  deletingQuizConfirm?: any | null;
+  setDeletingQuizConfirm?: (v: any | null) => void;
+  renameTitle?: string;
+  setRenameTitle?: (v: string) => void;
+
+  // ── Account / Auth actions ────────────────────────────────────────────────
+  handleLogout?: () => Promise<void> | void;
+  deleteAccount?: () => Promise<void>;
+  deleteAccountLoading?: boolean;
+  setDeleteAccountLoading?: (v: boolean) => void;
+  deleteUserFromNeon?: (uid?: string) => Promise<void>;
+
+  // ── Feedback ──────────────────────────────────────────────────────────────
+  feedbackText?: string;
+  setFeedbackText?: (v: string) => void;
+  feedbackLoading?: boolean;
+  setFeedbackLoading?: (v: boolean) => void;
+  sendFeedback?: () => Promise<void> | void;
+
+  // ── Import ────────────────────────────────────────────────────────────────
+  isImporting?: boolean;
+  importErrorDetails?: string | null;
+  setImportErrorDetails?: (v: string | null) => void;
+
+  // ── Neon / Remote sync ────────────────────────────────────────────────────
+  updateMobileQuiz?: (payload: any) => Promise<void> | void;
+  deleteMobileQuiz?: (quizId: string) => Promise<void> | void;
+
   // Allow additional properties for backward compatibility during migration
   [key: string]: unknown;
 }

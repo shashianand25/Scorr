@@ -1,5 +1,6 @@
 import type React from "react";
 import type { Animated } from "react-native";
+import type { HomeScreenProps } from "./HomeScreenProps";
 
 export interface QuizAnswer {
   id: string;
@@ -65,6 +66,10 @@ export interface InsetsPadding {
   right: number;
 }
 
+/**
+ * QuizSessionProps — dedicated prop surface for quiz session and results screens.
+ * Structurally compatible with HomeScreenProps via the index signature.
+ */
 export interface QuizSessionProps {
   activeSession: ActiveQuizSession | null;
   setActiveSession: (session: ActiveQuizSession | null | ((prev: ActiveQuizSession | null) => ActiveQuizSession | null)) => void;

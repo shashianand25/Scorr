@@ -14,7 +14,7 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
  * HomeQuickActions — Battle Arena, Flashcard banner, and More Options sections.
  * Extracted from HomeTab.tsx to reduce file size.
  */
-export function HomeQuickActions({ p }: { p: any }) {
+export function HomeQuickActions({ p }: { p: HomeScreenProps }) {
   const { t } = useTranslation();
   const isDark = p.settingsDarkMode;
   const {

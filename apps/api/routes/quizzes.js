@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
+const logger = require('../utils/logger');
 
 // Helper for generating simple UUIDs if not provided by client
 const generateId = () => Math.random().toString(36).substring(2) + Date.now().toString(36);
@@ -37,7 +38,7 @@ router.post('/api/master-quizzes/cache-check', async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('[Backend] /api/master-quizzes/cache-check error:', err);
+    logger.error('Quizzes', '/api/master-quizzes/cache-check error', err, { contentHash });
     res.status(500).json({ error: err.message });
   }
 });
@@ -56,19 +57,21 @@ router.post('/api/master-quizzes', async (req, res) => {
     userId
   } = req.body;
 
-  if (!contentHash || !sourceText || !title) {
-    return res.status(400).json({ error: 'contentHash, title, and sourceText are required' });
+  if (!contentHash || !title || !sourceText) {
+    return res.status(400).json({ error: 'contentHash, title, and sourceText required' });
   }
 
   const masterId = id || generateMasterQuizId();
 
   try {
-    const insertResult = await pool.query(
+    const result = await pool.query(
       `INSERT INTO master_quizzes (
         id, content_hash, generation_version, language, title, category,
         question_count, flashcard_count, source_text, created_by_user_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      ON CONFLICT (content_hash) DO NOTHING
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      ON CONFLICT (content_hash) DO UPDATE SET
+        view_count = master_quizzes.view_count + 1
       RETURNING *`,
       [
         masterId,
@@ -84,18 +87,7 @@ router.post('/api/master-quizzes', async (req, res) => {
       ]
     );
 
-    let masterRecord;
-    if (insertResult.rows.length > 0) {
-      masterRecord = insertResult.rows[0];
-    } else {
-      // Conflict on concurrent generation: fetch and return existing canonical record
-      const existing = await pool.query(
-        `SELECT * FROM master_quizzes WHERE content_hash = $1`,
-        [contentHash]
-      );
-      masterRecord = existing.rows[0];
-    }
-
+    const masterRecord = result.rows[0];
     res.json({
       masterQuiz: {
         id: masterRecord.id,
@@ -109,7 +101,7 @@ router.post('/api/master-quizzes', async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('[Backend] /api/master-quizzes error:', err);
+    logger.error('Quizzes', '/api/master-quizzes error', err, { contentHash, title });
     res.status(500).json({ error: err.message });
   }
 });
@@ -251,7 +243,7 @@ router.post('/api/mobile-quizzes', async (req, res) => {
     const r = result.rows[0];
     res.json({ quiz: { ...r, masterQuizId: r.master_quiz_id, questionCount: r.question_count, sourceText: undefined } });
   } catch (err) {
-    console.error('[Backend] POST /api/mobile-quizzes error:', err);
+    logger.error('Quizzes', 'POST /api/mobile-quizzes error', err, { userId, title });
     res.status(500).json({ error: err.message });
   }
 });

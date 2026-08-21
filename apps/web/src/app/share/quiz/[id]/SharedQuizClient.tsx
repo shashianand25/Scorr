@@ -6,6 +6,7 @@ import { parseQstText } from "@/lib/qstParser";
 import { getLocalItem, setLocalItem, SAMPLE_QUIZ } from "@/lib/storage";
 import { computeQuizFingerprint } from "@/lib/quizFingerprint";
 import { mergeQuizPersonalState, QuizRecord } from "@/lib/quizDeduplication";
+import { logger } from "@/lib/logger";
 
 interface SharedQuizClientProps {
   id: string;
@@ -89,7 +90,7 @@ export default function SharedQuizClient({
 
       router.push(`/quiz/${quizToOpen}`);
     } catch (err) {
-      console.error("Failed to import shared quiz:", err);
+      logger.error("Share", "Failed to import shared quiz", err, { id });
       router.push(`/quiz/sample_quiz_welcome`);
     }
   };

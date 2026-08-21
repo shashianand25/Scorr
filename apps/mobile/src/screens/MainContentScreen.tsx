@@ -10,21 +10,22 @@ import { GuideTab } from "./GuideTab";
 import { MenuTab } from "./MenuTab";
 import { HomeTab } from "./HomeTab";
 import type { HomeScreenProps } from "../types/HomeScreenProps";
+import type { QuizSessionProps } from "../types/QuizSessionProps";
 
 /**
  * MainContentScreen — thin tab router.
  * Delegates rendering entirely to per-tab screen components.
- * All state and handlers flow through the p: any prop.
+ * All state and handlers flow through the typed p prop.
  */
 export function MainContentScreen({ p, overrideTab }: { p: HomeScreenProps; overrideTab?: string }) {
   const tabToRender = overrideTab || p?.activeTab || "home";
 
   // Active quiz session takes priority over tab routing
   if (p.activeSession && !p.activeSession.isFinished) {
-    return <ActiveSessionScreen p={p} />;
+    return <ActiveSessionScreen p={p as unknown as QuizSessionProps} />;
   }
   if (p.activeSession?.isFinished) {
-    return <ResultsScreen p={p} />;
+    return <ResultsScreen p={p as unknown as QuizSessionProps} />;
   }
 
   switch (tabToRender) {

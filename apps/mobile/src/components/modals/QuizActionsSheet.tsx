@@ -17,7 +17,7 @@ const KeyboardWrapper = Platform.OS === "ios" ? require("react-native").Keyboard
 /**
  * Quiz actions bottom sheet + import loading modal
  */
-export function QuizActionsSheet({ p }: { p: any }) {
+export function QuizActionsSheet({ p }: { p: HomeScreenProps }) {
   const { t } = useTranslation();
   return (
     <>

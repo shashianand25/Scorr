@@ -14,6 +14,7 @@ import {
 } from "@/lib/multiplayer";
 import { saveBattleHistory } from "@/lib/api";
 import { renderFormattedText } from "@/lib/qstParser";
+import { logger } from "@/lib/logger";
 
 export default function BattleGamePage() {
   const { id } = useParams() as { id: string };
@@ -76,7 +77,7 @@ export default function BattleGamePage() {
         opponentScore: oppScore ?? 0,
         opponentName: oppName || "Opponent",
         won,
-      }).catch((err) => console.error("Failed to save battle history:", err));
+      }).catch((err) => logger.error("Battle", "Failed to save battle history", err));
     }
   }, [room?.status, hasSavedHistory, user?.uid, id, room, myScore, oppScore, oppName]);
 

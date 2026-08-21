@@ -14,6 +14,7 @@ import {
   type User,
   type Auth,
 } from "firebase/auth";
+import { logger } from "./logger";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "",
@@ -130,7 +131,7 @@ export async function signInWithGoogle(): Promise<User | null> {
   } catch (err: any) {
     const isCancelled = err.code === "auth/popup-closed-by-user" || err.code === "auth/cancelled-popup-request";
     if (!isCancelled) {
-      console.error("Google Sign-In Failed", err);
+      logger.error("Auth", "Google Sign-In Failed", err);
       throw new Error(err.message || "Google Sign-In Failed");
     }
     return null;

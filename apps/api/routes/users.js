@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
+const logger = require('../utils/logger');
 
 // ── Users ────────────────────────────────────────────────────────────────
 router.post('/api/sync-user', async (req, res) => {
@@ -21,7 +22,7 @@ router.post('/api/sync-user', async (req, res) => {
     const result = await pool.query(query, [uid, email, displayName, photoURL]);
     res.json({ user: result.rows[0] });
   } catch (err) {
-    console.error(err);
+    logger.error('Users', 'Failed to sync user', err, { uid });
     res.status(500).json({ error: err.message });
   }
 });
@@ -36,7 +37,7 @@ router.delete('/api/sync-user', async (req, res) => {
     await pool.query(`DELETE FROM users WHERE id = $1`, [userId]);
     res.json({ ok: true });
   } catch (err) {
-    console.error(err);
+    logger.error('Users', 'Failed to delete user', err, { userId });
     res.status(500).json({ error: err.message });
   }
 });

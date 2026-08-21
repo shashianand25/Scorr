@@ -1,3 +1,4 @@
+const logger = require('../../utils/logger');
 require('dotenv').config();
 const { Pool } = require('pg');
 const pool = new Pool({
@@ -15,7 +16,10 @@ async function run() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
-  console.log('Feedback table created');
+  logger.info('Migration', 'Feedback table created');
   process.exit(0);
 }
-run().catch(console.error);
+run().catch((err) => {
+  logger.error('Migration', 'Failed to create user_feedback table', err);
+  process.exit(1);
+});

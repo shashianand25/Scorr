@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
 const { Resend } = require('resend');
+const logger = require('../utils/logger');
 
 // Lazy getter — instantiated on first use so missing RESEND_API_KEY doesn't crash on require()
 let _resend = null;
@@ -62,11 +63,11 @@ router.post('/api/send-otp', async (req, res) => {
         return res.json({ ok: true });
       }
     } else {
-      console.warn("[Backend] RESEND_API_KEY missing. Returning OTP code in dev mode.");
+      logger.warn('OTP', 'RESEND_API_KEY missing. Returning OTP code in dev mode');
       res.json({ ok: true, devCode: code });
     }
   } catch (err) {
-    console.error("[Backend] Resend email send failed:", err);
+    logger.error('OTP', 'Resend email send failed', err, { email: cleanEmail });
     res.status(500).json({ error: "Failed to send verification email. Please check your email and try again." });
   }
 });
@@ -104,7 +105,7 @@ router.post('/api/verify-otp', async (req, res) => {
     await pool.query(`DELETE FROM otp_codes WHERE LOWER(email) = LOWER($1)`, [cleanEmail]);
     return res.json({ valid: true });
   } catch (err) {
-    console.error('[Backend] verify-otp error:', err);
+    logger.error('OTP', 'verify-otp error', err, { email: cleanEmail });
     return res.status(500).json({ valid: false, error: 'Failed to verify passcode. Please try again.' });
   }
 });
