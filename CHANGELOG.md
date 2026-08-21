@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Zod API Boundary Schemas**: Enforced input validation schemas across all backend endpoints (`apps/api/schemas.js`) with failing/passing test coverage (`apps/api/__tests__/schemas.test.js`).
+- **Structured JSON Logging & Telemetry**: Upgraded logging in Mobile, Web, and Backend to emit structured JSON events (`timestamp`, `level`, `tag`, `message`, `context`) with optional Sentry error tracking.
+- **Automated Monorepo Setup Engine**: Added single-command `npm run setup` (`scripts/setup.js`) to install workspace dependencies and automatically configure `.env` files from templates.
+- **Backend Coverage Enforcement**: Integrated `c8` into `apps/api` with strict numeric coverage thresholds (70% lines, 60% branches, 70% statements) under `npm run test:coverage`.
+- **End-to-End User Journey Tests**: Added multi-step integration tests covering Mobile study lifecycle (`QuizStudyFlow.test.ts`) and Web creation workflows (`QuizCreationFlow.test.ts`).
+- **Isolated Service Mock Stubs**: Added offline in-memory database and email service mocks (`services.mock.js`) for self-contained CI testing.
+- **Canonical CI Matrix**: Consolidated GitHub Actions workflows into a single high-performance `ci.yml` pipeline with lint, typecheck, test, and security audit jobs.
+
+### Changed
+- Refactored web presentational components to consume unified theme constants from `sharedStyles.ts`.
+- Unified ESLint configurations across Mobile, Web, and Backend workspaces.
+
+---
+
 ## [1.0.0] - 2026-08-19
 
 ### Added
