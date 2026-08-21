@@ -4,6 +4,16 @@ import Link from "next/link";
 
 /** QuizLobbyDetails — score trends chart and quiz directory/study guide sections. */
 export function QuizLobbyDetails(s: { [key: string]: any }) {
+  const {
+    quiz,
+    qQuery = "",
+    setQQuery = () => {},
+    expandedQId = null,
+    setExpandedQId = () => {},
+  } = s;
+
+  if (!quiz) return null;
+
   return (
     <>
       {/* ── SCORE TRENDS BAR CHART ── */}

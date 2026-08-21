@@ -438,22 +438,10 @@ export default function CreateQuizPage() {
       {/* ── TAB 2: MANUAL CREATOR ────────────── (extracted to ManualCreatorTab) ── */}
       {activeTab === "manual" && (
         <ManualCreatorTab
-          manualStep={manualStep}
-          manualQuestions={manualQuestions}
-          setManualQuestions={setManualQuestions}
-          manualTitle={manualTitle}
-          setManualTitle={setManualTitle}
-          manualCategory={manualCategory}
-          setManualCategory={setManualCategory}
-          manualStep2={manualStep2}
-          setManualStep={setManualStep}
-          setManualStep2={setManualStep2}
-          isSaving={isSaving}
-          setIsSaving={setIsSaving}
           user={user}
           router={router}
           showToast={showToast}
-          t={t}
+          t={t as any}
         />
       )}
 

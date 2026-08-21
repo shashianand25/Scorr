@@ -69,6 +69,10 @@ jobs:
         working-directory: web
         run: npm test
 
+      - name: Build Web Application
+        working-directory: web
+        run: npm run build
+
   test-backend:
     name: Backend - Test
     runs-on: ubuntu-latest

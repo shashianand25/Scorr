@@ -1,7 +1,7 @@
-import { QuizLobbyDetails } from './QuizLobbyDetails';
 "use client";
 import React, { useState } from "react";
 import Link from "next/link";
+import { QuizLobbyDetails } from './QuizLobbyDetails';
 
 /** QuizLobbyPhase — quiz options/lobby screen before quiz begins. */
 export function QuizLobbyPhase({ p }: { p: any }) {
@@ -273,8 +273,8 @@ export function QuizLobbyPhase({ p }: { p: any }) {
       </div>
 
 
-      {/* Score Trends + Directory ── extracted to QuizLobbyDetails */
-      <QuizLobbyDetails {...s} />
-
+      {/* Score Trends + Directory ── extracted to QuizLobbyDetails */}
+      <QuizLobbyDetails quiz={quiz} qQuery={qQuery} setQQuery={setQQuery} expandedQId={expandedQId} setExpandedQId={setExpandedQId} />
+    </div>
   );
 }

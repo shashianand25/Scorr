@@ -3,6 +3,7 @@ import React from "react";
 
 /** Import file tab — .qst/.txt file import. */
 export function ImportFileTab(s: { [key: string]: any }) {
+  const { onImport, handleImportFile = onImport } = s;
   return (
         <div
           style={{

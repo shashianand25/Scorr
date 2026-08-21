@@ -3,6 +3,37 @@ import React from "react";
 
 /** AI generator tab — source text input, file upload, settings, and generate button. */
 export function AIGeneratorTab(s: { [key: string]: any }) {
+  const {
+    sourceText = "",
+    setSourceText = () => {},
+    selectedFile = null,
+    setSelectedFile = () => {},
+    fileBase64 = null,
+    setFileBase64 = () => {},
+    title = "",
+    setTitle = () => {},
+    category = "General",
+    setCategory = () => {},
+    questionCount = 10,
+    setQuestionCount = () => {},
+    useCustomCount = false,
+    setUseCustomCount = () => {},
+    customCount = "10",
+    setCustomCount = () => {},
+    includeFlashcards = true,
+    setIncludeFlashcards = () => {},
+    activeLang = "en",
+    setActiveLang = () => {},
+    isGenerating = false,
+    charCount = 0,
+    setCharCount = () => {},
+    errorMsg = null,
+    appConfig = null,
+    handleGenerate = () => {},
+    handleFileChange = () => {},
+    t = (k: string) => k,
+  } = s;
+
   return (
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           {/* File Upload / Paste Card */}
