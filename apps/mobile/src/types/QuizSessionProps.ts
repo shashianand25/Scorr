@@ -1,6 +1,5 @@
 import type React from "react";
 import type { Animated } from "react-native";
-import type { HomeScreenProps } from "./HomeScreenProps";
 
 export interface QuizAnswer {
   id: string;
@@ -66,22 +65,68 @@ export interface InsetsPadding {
   right: number;
 }
 
-/**
- * QuizSessionProps — dedicated prop surface for quiz session and results screens.
- * Structurally compatible with HomeScreenProps via the index signature.
- */
-export interface QuizSessionProps {
-  activeSession: ActiveQuizSession | null;
-  setActiveSession: (session: ActiveQuizSession | null | ((prev: ActiveQuizSession | null) => ActiveQuizSession | null)) => void;
+/** Base visual and environment props shared across all quiz session sub-views */
+export interface BaseSessionProps {
   settingsDarkMode: boolean;
-  isConnected?: boolean;
-  showReconnectedToast?: boolean;
-  offlineModalParams?: unknown;
-  battleRoomState?: BattleRoomState | null;
+  insets?: InsetsPadding;
+  screenFadeAnim?: Animated.Value;
+  renderFormattedText?: (text: string) => React.ReactNode;
+  toggleSpeech?: (text: string) => void;
+  speakingText?: string | null;
   firebaseUser?: { displayName?: string | null; email?: string | null; uid?: string } | null;
-  sessionTimeLeft?: number | null;
+  isConnected?: boolean;
+}
+
+/** Multiplayer battle session state and lifecycle handlers */
+export interface BattleSessionProps {
+  isHost?: boolean;
+  battleRoomState?: BattleRoomState | null;
+  battleHistory?: unknown[];
   battleQuestionTimeLeft?: number | null;
   battleTimePerQuestion?: number | null;
+  battleFinishedCalledRef?: React.MutableRefObject<boolean>;
+  battleUnsubscribeRef?: React.MutableRefObject<any>;
+  saveBattleResult?: (...args: any[]) => void;
+  setBattlePopup?: (popup: unknown) => void;
+  setBattleRoomCode?: (code: string) => void;
+  setBattleRoomState?: (state: any) => void;
+  setIsHost?: (isHost: boolean) => void;
+  setJoinCodeInput?: (code: string) => void;
+  setActiveTab?: (tab: string) => void;
+}
+
+/** Post-quiz review, mistake analysis, and report card state */
+export interface ReviewSessionProps {
+  showWrongReview?: boolean;
+  setShowWrongReview?: (v: boolean) => void;
+  snapshotReviewData?: unknown;
+  setSnapshotReviewData?: (data: unknown) => void;
+  viewingReportCardData?: unknown;
+  setViewingReportCardData?: (data: unknown) => void;
+  selectedAttemptForModal?: unknown;
+  setSelectedAttemptForModal?: (attempt: unknown) => void;
+  reportCardQs?: unknown[];
+  expandedAttemptsMap?: Record<string, boolean>;
+  setExpandedAttemptsMap?: (map: Record<string, boolean>) => void;
+}
+
+/** Dedicated prop contract for ResultsScreen */
+export interface ResultsScreenProps extends BaseSessionProps, BattleSessionProps, ReviewSessionProps {
+  activeSession: ActiveQuizSession | null;
+  setActiveSession: (session: ActiveQuizSession | null | ((prev: ActiveQuizSession | null) => ActiveQuizSession | null)) => void;
+  quizzes?: Array<{ id: string; title: string; questions?: number; questionsList?: QuizQuestion[] }>;
+  starredQuestions?: any;
+  setStarredQuestions?: (fn: any) => void;
+  saveAndExitQuizSession?: (force?: boolean) => void;
+  handleFinishSession?: () => void;
+  triggerConfettiBurst?: () => void;
+}
+
+/** Active interactive study screen props */
+export interface ActiveSessionScreenProps extends BaseSessionProps {
+  activeSession: ActiveQuizSession;
+  setActiveSession: (session: ActiveQuizSession | null | ((prev: ActiveQuizSession | null) => ActiveQuizSession | null)) => void;
+  sessionTimeLeft?: number | null;
   starredQuestions?: any;
   setStarredQuestions?: (fn: any) => void;
   showQuitConfirm?: boolean;
@@ -102,34 +147,9 @@ export interface QuizSessionProps {
   handleNavigateSession?: (idx: number) => void;
   handleFinishSession?: () => void;
   saveAndExitQuizSession?: (force?: boolean) => void;
-  toggleSpeech?: (text: string) => void;
-  speakingText?: string | null;
-  renderFormattedText?: (text: string) => React.ReactNode;
-  screenFadeAnim?: Animated.Value;
-  insets?: InsetsPadding;
-  battleHistory?: unknown[];
-  quizzes?: Array<{ id: string; title: string; questions?: number; questionsList?: QuizQuestion[] }>;
-  isHost?: boolean;
-  battleFinishedCalledRef?: React.MutableRefObject<boolean>;
-  battleUnsubscribeRef?: React.MutableRefObject<any>;
-  saveBattleResult?: (...args: any[]) => void;
-  setBattlePopup?: (popup: unknown) => void;
-  setBattleRoomCode?: (code: string) => void;
-  setBattleRoomState?: (state: any) => void;
-  setIsHost?: (isHost: boolean) => void;
-  setJoinCodeInput?: (code: string) => void;
-  setActiveTab?: (tab: string) => void;
-  viewingReportCardData?: unknown;
-  setViewingReportCardData?: (data: unknown) => void;
-  showWrongReview?: boolean;
-  setShowWrongReview?: (v: boolean) => void;
-  snapshotReviewData?: unknown;
-  setSnapshotReviewData?: (data: unknown) => void;
-  selectedAttemptForModal?: unknown;
-  setSelectedAttemptForModal?: (attempt: unknown) => void;
-  triggerConfettiBurst?: () => void;
-  expandedAttemptsMap?: Record<string, boolean>;
-  setExpandedAttemptsMap?: (map: Record<string, boolean>) => void;
-  reportCardQs?: unknown[];
+}
+
+/** Composite QuizSessionProps maintaining full backwards compatibility */
+export interface QuizSessionProps extends ResultsScreenProps, Partial<ActiveSessionScreenProps> {
   [key: string]: unknown;
 }

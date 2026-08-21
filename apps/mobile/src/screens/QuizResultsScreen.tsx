@@ -18,17 +18,15 @@ import { styles } from "../styles/shared";
 import { AnimatedPressable } from "../components/ui/AnimatedPressable";
 import { BattleTimer } from "../components/ui/BattleTimer";
 import { logger } from "../lib/logger";
-import type { QuizSessionProps } from "../types/QuizSessionProps";
+import type { ResultsScreenProps } from "../types/QuizSessionProps";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 /**
- * QuizSessionScreen — active quiz session and results view.
- * Extracted from HomeScreen god-file (renderActiveSessionView + renderResultsView).
- * Receives typed QuizSessionProps interface.
+ * ResultsScreen — displays battle outcomes, standard quiz summaries, and mistake reviews.
+ * Receives focused ResultsScreenProps interface without any casts.
  */
-
-export function ResultsScreen({ p }: { p: QuizSessionProps }) {
+export function ResultsScreen({ p }: { p: ResultsScreenProps }) {
   const { t } = useTranslation();
   const insets = p.insets || { top: 0, bottom: 0, left: 0, right: 0 };
   const quizzes = p.quizzes || [];
