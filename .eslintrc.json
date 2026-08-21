@@ -1,7 +1,17 @@
 {
   "root": true,
-  "extends": ["eslint:recommended"],
-  "env": { "node": true, "es2021": true },
-  "parserOptions": { "ecmaVersion": 2021, "sourceType": "module" },
-  "ignorePatterns": ["node_modules/", "dist/", ".expo/"]
+  "extends": [
+    "eslint:recommended"
+  ],
+  "env": {
+    "node": true,
+    "es2022": true
+  },
+  "ignorePatterns": [
+    "node_modules",
+    "dist",
+    "build",
+    ".next",
+    ".expo"
+  ]
 }

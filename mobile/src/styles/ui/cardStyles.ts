@@ -266,4 +266,5 @@ export const cardStyles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 14,
     fontWeight: "500",
+  },
 });

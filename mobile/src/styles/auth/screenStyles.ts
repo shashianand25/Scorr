@@ -317,4 +317,5 @@ export const screenStyles = StyleSheet.create({
     fontWeight: "700",
     color: "#ffffff",
     letterSpacing: 0.2,
+  },
 });

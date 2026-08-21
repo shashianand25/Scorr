@@ -331,6 +331,7 @@ export function HomeTab({ p }: { p: any }) {
 
                 {/* ── Battle Arena, Flashcard Banner, More Options ── */}
                 {!homeSearch && <HomeQuickActions p={p} />}
+              </ScrollView>
             </View>
           );
         })();

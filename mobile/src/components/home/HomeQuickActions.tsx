@@ -17,7 +17,6 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 export function HomeQuickActions({ p }: { p: any }) {
   const { t } = useTranslation();
   const isDark = p.settingsDarkMode;
-  const isDark = p.settingsDarkMode;
   const {
     settingsDarkMode = true, quizzes = [], flashcardDecks = [],
     sampleDismissed = false, setSampleDismissed = () => {}, sampleQuiz = null,
@@ -228,7 +227,7 @@ export function HomeQuickActions({ p }: { p: any }) {
                     </Pressable>
                   </View>
                 )}
-              </ScrollView>
     </>
   );
+  })();
 }

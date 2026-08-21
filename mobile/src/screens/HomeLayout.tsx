@@ -15,10 +15,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
 import { styles } from "../styles/shared";
-import { AppModals } 
-import { ReportCardModal } from "../components/home/ReportCardModal";
-import { BattleModals } from "../components/home/BattleModals";
-import { HomeModals } from "../components/home/HomeModals" from "../components/modals/AppModals";
+import { AppModals } from "../components/modals/AppModals";
 import { MainContentScreen } from "../screens/MainContentScreen";
 import { AIGeneratingScreen, FullscreenBattleCountdown } from "../components/AIGeneratingScreen";
 import { AuthScreen } from "../screens/AuthScreen";

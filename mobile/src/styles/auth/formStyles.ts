@@ -3,7 +3,6 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 /** Form inputs, buttons, and login/signup controls */
 export const formStyles = StyleSheet.create({
-export const authStyles = StyleSheet.create({
   switchSubCompact: {
     color: "#6e727a",
     fontSize: 11,

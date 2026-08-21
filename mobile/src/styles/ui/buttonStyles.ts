@@ -3,7 +3,6 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 /** Button variants, interactive controls, and action styles */
 export const buttonStyles = StyleSheet.create({
-export const uiStyles = StyleSheet.create({
   dialogIcon: {
     width: 64,
     height: 64,

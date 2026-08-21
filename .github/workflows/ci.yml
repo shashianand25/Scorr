@@ -27,7 +27,7 @@ jobs:
 
       - name: Lint Mobile
         working-directory: mobile
-        run: npm run lint || true
+        run: npm run lint
 
       - name: Dependency Vulnerability Audit
         working-directory: mobile
@@ -59,7 +59,7 @@ jobs:
 
       - name: Lint Web
         working-directory: web
-        run: npm run lint || true
+        run: npm run lint
 
       - name: Dependency Vulnerability Audit
         working-directory: web
