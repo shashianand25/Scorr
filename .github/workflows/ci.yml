@@ -7,92 +7,115 @@ on:
     branches: [main, develop]
 
 jobs:
-  test-mobile:
-    name: Mobile - Test & TypeCheck
+  lint:
+    name: Lint (ESLint)
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 20
           cache: 'npm'
-          cache-dependency-path: mobile/package-lock.json
 
-      - name: Install Mobile dependencies
-        working-directory: mobile
-        run: npm install --no-audit --legacy-peer-deps
+      - name: Cache Node Modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            mobile/node_modules
+            web/node_modules
+            backend/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json', 'mobile/package-lock.json', 'web/package-lock.json', 'backend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
 
-      - name: Lint Mobile
-        working-directory: mobile
+      - name: Install dependencies
+        run: |
+          npm install --legacy-peer-deps
+          cd mobile && npm install --legacy-peer-deps && cd ..
+          cd web && npm install && cd ..
+          cd backend && npm install && cd ..
+
+      - name: Run Linter (Mobile & Web)
         run: npm run lint
 
-      - name: Dependency Vulnerability Audit
-        working-directory: mobile
-        run: npm audit --audit-level=critical || true
+  typecheck:
+    name: TypeCheck (TypeScript)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Type check Mobile
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Cache Node Modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            mobile/node_modules
+            web/node_modules
+            backend/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json', 'mobile/package-lock.json', 'web/package-lock.json', 'backend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        run: |
+          npm install --legacy-peer-deps
+          cd mobile && npm install --legacy-peer-deps && cd ..
+          cd web && npm install && cd ..
+
+      - name: Run TypeCheck (Mobile)
         working-directory: mobile
         run: npm run typecheck
 
-      - name: Run Mobile tests
-        working-directory: mobile
-        run: npm test
+      - name: Run TypeCheck (Web)
+        working-directory: web
+        run: npx tsc --noEmit
 
-  test-web:
-    name: Web - Test
+  test:
+    name: Test (Monorepo Test Suites)
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 20
+          cache: 'npm'
 
-      - name: Install Web dependencies
-        working-directory: web
-        run: npm install
+      - name: Cache Node Modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            mobile/node_modules
+            web/node_modules
+            backend/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json', 'mobile/package-lock.json', 'web/package-lock.json', 'backend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
 
-      - name: Lint Web
-        working-directory: web
-        run: npm run lint
+      - name: Install dependencies
+        run: |
+          npm install --legacy-peer-deps
+          cd mobile && npm install --legacy-peer-deps && cd ..
+          cd web && npm install && cd ..
+          cd backend && npm install && cd ..
 
-      - name: Dependency Vulnerability Audit
-        working-directory: web
-        run: npm audit --audit-level=critical || true
-
-      - name: Run Web tests
-        working-directory: web
+      - name: Run All Test Suites
         run: npm test
 
       - name: Build Web Application
         working-directory: web
         run: npm run build
-
-  test-backend:
-    name: Backend - Test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install Backend dependencies
-        working-directory: backend
-        run: npm install
-
-      - name: Dependency Vulnerability Audit
-        working-directory: backend
-        run: npm audit --audit-level=critical || true
-
-      - name: Run Backend tests
-        working-directory: backend
-        run: npm test
