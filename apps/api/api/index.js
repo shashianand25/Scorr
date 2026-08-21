@@ -97,6 +97,28 @@ pool.query(`
   WHERE deleted_at IS NULL AND master_quiz_id IS NOT NULL;
 `).catch(err => logger.error('Database', 'Failed to ensure master_quizzes table', err));
 
+// ── Health Check Endpoint ──────────────────────────────────────────────────
+app.get(['/health', '/api/health'], async (_req, res) => {
+  let dbStatus = 'ok';
+  try {
+    if (pool) {
+      await pool.query('SELECT 1');
+      dbStatus = 'connected';
+    } else {
+      dbStatus = 'disconnected';
+    }
+  } catch (_err) {
+    dbStatus = 'error';
+  }
+  res.status(200).json({
+    status: 'ok',
+    db: dbStatus,
+    service: 'scorr-backend-api',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // ── Domain Route Modules ──────────────────────────────────────────────────
 app.use(require('../routes/ai'));
 app.use(require('../routes/users'));
@@ -118,9 +140,11 @@ app.use((err, req, res, _next) => {
 
 // ── Server ────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  logger.info('Server', `Backend running on port ${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    logger.info('Server', `Backend running on port ${PORT}`);
+  });
+}
 
-// Export for Vercel serverless
+// Export for Vercel serverless and tests
 module.exports = app;

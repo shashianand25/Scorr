@@ -226,14 +226,5 @@ router.get('/api/version-config', (req, res) => {
   });
 });
 
-// ── Health Check Endpoint ──────────────────────────────────────────────────
-router.get('/api/health', (_req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'scorr-backend-api',
-    uptime: process.uptime(),
-    timestamp: new Date().toISOString(),
-  });
-});
-
 module.exports = router;
+
