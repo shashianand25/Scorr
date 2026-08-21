@@ -88,7 +88,7 @@ export function ActiveSessionScreen({ p }: { p: QuizSessionProps }) {
     return (
       <View style={{ flex: 1, backgroundColor: settingsDarkMode ? "#0a1020" : "#f4f4f8" }}>
         {/* Offline Banner for Battle */}
-        {activeSession.isBattle && (!isConnected || showReconnectedToast) && !offlineModalParams && (
+        {Boolean(activeSession.isBattle && (!isConnected || showReconnectedToast) && !offlineModalParams) && (
           <View style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 100, backgroundColor: isConnected ? "#34d399" : "#fbbf24", paddingVertical: 12, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 8, elevation: 5, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4 }}>
             <Ionicons name={isConnected ? "checkmark-circle" : "warning"} size={16} color={isConnected ? "#064e3b" : "#78350f"} />
             <Text style={{ color: isConnected ? "#064e3b" : "#78350f", fontSize: 13, fontWeight: "700" }}>{isConnected ? "Reconnected" : "Connection lost. Reconnecting..."}</Text>

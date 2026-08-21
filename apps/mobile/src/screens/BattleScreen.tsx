@@ -15,16 +15,15 @@ import {
 import { AnimatedPressable } from "../components/ui/AnimatedPressable";
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
-import { styles } from "../styles/shared";
-import type { HomeScreenProps } from "../types/HomeScreenProps";
+import type { BattleScreenProps } from "../types/BattleScreenProps";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 /**
  * BattleLobbyScreen — multiplayer battle room UI.
- * Extracted from HomeScreen god-file (renderBattleLobbyView).
+ * Receives typed BattleScreenProps interface without any type casts.
  */
-export function BattleLobbyScreen({ p }: { p: HomeScreenProps }) {
+export function BattleLobbyScreen({ p }: { p: BattleScreenProps }) {
   const KeyboardWrapper = Platform.OS === "ios" ? KeyboardAvoidingView : View;
   const { t } = useTranslation();
   const {
@@ -38,8 +37,8 @@ export function BattleLobbyScreen({ p }: { p: HomeScreenProps }) {
   // Optional battle fields with safe defaults — always provided when battle screen is active
   const battleUnsubscribeRef = p.battleUnsubscribeRef;
   const setBattleRoomState = p.setBattleRoomState || ((_v: any) => {});
-  const isHost = (p as any).isHost;
-  const setIsHost = (p as any).setIsHost || ((_v: boolean) => {});
+  const isHost = p.isHost;
+  const setIsHost = p.setIsHost || ((_v: boolean) => {});
   const joinCodeInput = p.joinCodeInput ?? "";
   const setJoinCodeInput = p.setJoinCodeInput || ((_v: string) => {});
   const battleError = p.battleError;
@@ -49,7 +48,7 @@ export function BattleLobbyScreen({ p }: { p: HomeScreenProps }) {
   const showBattleOptions = p.showBattleOptions;
   const setShowBattleOptions = p.setShowBattleOptions || ((_v: boolean) => {});
   const battleOptionsQuiz = p.battleOptionsQuiz;
-  const battleOptionsSource = (p as any).battleOptionsSource;
+  const battleOptionsSource = p.battleOptionsSource;
   const battleShuffleQ = p.battleShuffleQ;
   const setBattleShuffleQ = p.setBattleShuffleQ || ((_v: boolean) => {});
   const battleShuffleA = p.battleShuffleA;
@@ -65,16 +64,16 @@ export function BattleLobbyScreen({ p }: { p: HomeScreenProps }) {
   const showBattleHistory = p.showBattleHistory;
   const setShowBattleHistory = p.setShowBattleHistory || ((_v: boolean) => {});
   const battleHistory = p.battleHistory || [];
-  const battleConnError = (p as any).battleConnError;
+  const battleConnError = p.battleConnError;
   const battleCreating = p.battleCreating;
   const battleTimePerQuestion = p.battleTimePerQuestion;
   const setBattleTimePerQuestion = p.setBattleTimePerQuestion || ((_v: number | null) => {});
   const battleCountdown = p.battleCountdown;
   const quizzes = p.quizzes || [];
-  const handleCreateBattle = (p as any).handleCreateBattle || (() => {});
+  const handleCreateBattle = p.handleCreateBattle || (() => {});
   const handleJoinBattle = p.handleJoinBattle || (async () => {});
   const handleStartBattle = p.handleStartBattle || (async () => {});
-  const showBottomPillToast = (p as any).showBottomPillToast;
+  const showBottomPillToast = p.showBottomPillToast;
 
     const isDark = settingsDarkMode;
 
@@ -119,8 +118,8 @@ export function BattleLobbyScreen({ p }: { p: HomeScreenProps }) {
     // Compute current day streak (consecutive days played)
     let dayStreak = 0;
     if (battleHistory.length > 0) {
-      const sortedHistory = [...battleHistory].sort((a, b) => b.date - a.date);
-      const uniqueDays = new Set(sortedHistory.map((h: any) => new Date(h.date).toDateString()));
+      const sortedHistory = [...battleHistory].sort((a: any, b: any) => ((b.date || 0) - (a.date || 0)));
+      const uniqueDays = new Set(sortedHistory.map((h: any) => new Date(h.date || Date.now()).toDateString()));
       
       const today = new Date();
       const yesterday = new Date(today);
@@ -155,7 +154,7 @@ export function BattleLobbyScreen({ p }: { p: HomeScreenProps }) {
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8, marginBottom: 28 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
               <AnimatedPressable
-                onPress={() => setActiveTab("home" as any)}
+                onPress={() => setActiveTab && setActiveTab("home" as any)}
                 style={{
                   width: 36, height: 36, borderRadius: 18,
                   backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
@@ -183,7 +182,7 @@ export function BattleLobbyScreen({ p }: { p: HomeScreenProps }) {
               </AnimatedPressable>
               
               <AnimatedPressable
-                onPress={() => setActiveTab("menu")}
+                onPress={() => setActiveTab && setActiveTab("menu")}
                 style={{
                   width: 32, height: 32, borderRadius: 16,
                   backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
@@ -434,8 +433,8 @@ export function BattleLobbyScreen({ p }: { p: HomeScreenProps }) {
               <Pressable
                 onPress={() => {
                   if (battleUnsubscribeRef?.current) battleUnsubscribeRef.current();
-                  setBattleRoomCode("");
-                  setBattleRoomState(null);
+                  if (setBattleRoomCode) setBattleRoomCode("");
+                  if (setBattleRoomState) setBattleRoomState(null);
                 }}
                 style={({ pressed }) => [{ paddingVertical: 10, paddingHorizontal: 20 }, pressed && { opacity: 0.7 }]}
               >

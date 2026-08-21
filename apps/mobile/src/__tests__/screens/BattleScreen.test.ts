@@ -63,4 +63,23 @@ describe('Multiplayer BattleScreen Suite (apps/mobile/src/screens/BattleScreen.t
     expect(tieBreaker.winner).toBe('host');
     expect(tieBreaker.reason).toBe('time');
   });
+
+  it('satisfies narrowed BattleScreenProps contract without any type casts', () => {
+    const props: import('../../types/BattleScreenProps').BattleScreenProps = {
+      settingsDarkMode: true,
+      setShowAuthScreen: jest.fn(),
+      battleRoomCode: 'XYZ987',
+      isHost: true,
+      battleTimePerQuestion: 15,
+      battleShuffleQ: true,
+      battleShuffleA: true,
+      battleHistory: [
+        { id: 'b1', room_code: 'XYZ987', quiz_title: 'Biology', my_score: 8, opponent_score: 5, won: true },
+      ],
+    };
+
+    expect(props.battleRoomCode).toBe('XYZ987');
+    expect(props.isHost).toBe(true);
+    expect(props.battleHistory).toHaveLength(1);
+  });
 });

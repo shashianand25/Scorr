@@ -124,7 +124,7 @@ export interface ResultsScreenProps extends BaseSessionProps, BattleSessionProps
 
 /** Active interactive study screen props */
 export interface ActiveSessionScreenProps extends BaseSessionProps {
-  activeSession: ActiveQuizSession;
+  activeSession: ActiveQuizSession | null;
   setActiveSession: (session: ActiveQuizSession | null | ((prev: ActiveQuizSession | null) => ActiveQuizSession | null)) => void;
   sessionTimeLeft?: number | null;
   starredQuestions?: any;
@@ -150,6 +150,23 @@ export interface ActiveSessionScreenProps extends BaseSessionProps {
 }
 
 /** Composite QuizSessionProps maintaining full backwards compatibility */
-export interface QuizSessionProps extends ResultsScreenProps, Partial<ActiveSessionScreenProps> {
+export interface QuizSessionProps extends ResultsScreenProps {
+  sessionTimeLeft?: number | null;
+  showQuitConfirm?: boolean;
+  setShowQuitConfirm?: (v: boolean) => void;
+  showQuizSettingsModal?: boolean;
+  setShowQuizSettingsModal?: (v: boolean) => void;
+  autoSlideEnabled?: boolean;
+  setAutoSlideEnabled?: (v: boolean) => void;
+  showRestartConfirm?: boolean;
+  setShowRestartConfirm?: (v: boolean) => void;
+  jumpPage?: number;
+  setJumpPage?: (v: number) => void;
+  quizFlatListRef?: React.RefObject<any>;
+  quizNumbersScrollRef?: React.RefObject<any>;
+  handleTimerExpiredRef?: React.MutableRefObject<any>;
+  handleCheckAnswer?: (questionId: string) => void;
+  handleAnswerSelect?: (question: QuizQuestion, answerId: string) => void;
+  handleNavigateSession?: (idx: number) => void;
   [key: string]: unknown;
 }

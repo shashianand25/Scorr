@@ -53,6 +53,8 @@ export interface StartQuizSettingsModalProps {
   setShuffleAnswers?: (shuffle: boolean) => void;
   showAnswerOnSubmit?: boolean;
   setShowAnswerOnSubmit?: (show: boolean) => void;
+  setQuizSetupStep?: (step: string) => void;
+  questionCount?: number;
   handleStartQuiz?: () => void;
   optionsScrollRef?: React.RefObject<any>;
   Stepper?: React.ComponentType<any>;

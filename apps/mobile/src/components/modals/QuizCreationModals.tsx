@@ -66,7 +66,10 @@ export function QuizCreationModals({ p }: { p: QuizCreationModalProps }) {
           animationType="fade"
           transparent={true}
           statusBarTranslucent={true}
-          onRequestClose={() => closeOrDismiss(() => { (p.setSelectedQuiz || (() => {}))(null); setQuizSetupStep("presets"); })}
+          onRequestClose={() => {
+            if (p.setSelectedQuiz) p.setSelectedQuiz(null);
+            setQuizSetupStep("presets");
+          }}
         >
           <KeyboardWrapper style={{ flex: 1, backgroundColor: p.settingsDarkMode ? "#0f172a" : "#f4f4f8" }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
             <SafeAreaView style={{ flex: 1, backgroundColor: p.settingsDarkMode ? "#0f172a" : "#f4f4f8" }} edges={["top", "left", "right"]}>
@@ -77,7 +80,13 @@ export function QuizCreationModals({ p }: { p: QuizCreationModalProps }) {
                   <View style={{ flex: 1, marginRight: 12 }}>
                     <Text style={{ fontSize: 24, fontWeight: "600", color: p.settingsDarkMode ? "#ffffff" : "#0d0f14", fontFamily: "serif" }}>{t('study_modes.how_to_study') || "How would you like to study?"}</Text>
                   </View>
-                  <Pressable onPress={() => closeOrDismiss(() => { (p.setSelectedQuiz || (() => {}))(null); setQuizSetupStep("presets"); })} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 6 })}>
+                  <Pressable
+                    onPress={() => {
+                      if (p.setSelectedQuiz) p.setSelectedQuiz(null);
+                      setQuizSetupStep("presets");
+                    }}
+                    style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, padding: 6 })}
+                  >
                     <Feather name="x" size={24} color={p.settingsDarkMode ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.6)"} />
                   </Pressable>
                 </View>
@@ -327,7 +336,10 @@ export function QuizCreationModals({ p }: { p: QuizCreationModalProps }) {
                 <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 16) + (p.selectedQuiz?.category === "AI Generated" ? 10 : 14), paddingTop: 14, backgroundColor: p.settingsDarkMode ? "#0f172a" : "#f4f4f8" }}>
                   <Pressable
                     disabled={questionCount === 0 || (quizPreset === "mistakes" && wrongCount === 0)}
-                    onPress={() => { (p.handleStartQuiz || (() => {}))(); setQuizSetupStep("presets"); }}
+                    onPress={() => {
+                      if (p.handleStartQuiz) p.handleStartQuiz();
+                      setQuizSetupStep("presets");
+                    }}
                     style={({ pressed }) => [
                       { backgroundColor: "#ffffff", borderRadius: 30, paddingVertical: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
                       (questionCount === 0 || (quizPreset === "mistakes" && wrongCount === 0)) && { backgroundColor: p.settingsDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" },
@@ -335,7 +347,7 @@ export function QuizCreationModals({ p }: { p: QuizCreationModalProps }) {
                     ]}
                   >
                     <Ionicons name="play" size={18} color={(questionCount === 0 || (quizPreset === "mistakes" && wrongCount === 0)) ? (p.settingsDarkMode ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.3)") : "#000000"} />
-                    <Text style={{ fontSize: 16, fontWeight: "700", color: (questionCount === 0 || (quizPreset === "mistakes" && wrongCount === 0)) ? (p.settingsDarkMode ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.3)") : "#000000" }}>{t('study_modes.start_quiz_btn') || "Start Quiz"} ({questionCount} Qs)</Text>
+                    <Text style={{ fontSize: 16, fontWeight: "700", color: (questionCount === 0 || (quizPreset === "mistakes" && wrongCount === 0)) ? (p.settingsDarkMode ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.3)") : "#000000" }}>{String(t('study_modes.start_quiz_btn') || "Start Quiz")} ({questionCount || 0} Qs)</Text>
                   </Pressable>
                   {p.selectedQuiz?.category === "AI Generated" && (
                     <Text style={{ textAlign: "center", fontSize: 11, color: p.settingsDarkMode ? "rgba(255,255,255,0.38)" : "rgba(0,0,0,0.4)", marginTop: 8 }}>
