@@ -68,7 +68,7 @@ export function AuthScreen({ p }: { p: any }) {
       setOtpResendCountdown((prev: number) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
     return () => clearInterval(timer);
-  }, [otpResendCountdown]);
+  }, [otpResendCountdown, setOtpResendCountdown]);
 
   const isValidEmail = (email: string) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());

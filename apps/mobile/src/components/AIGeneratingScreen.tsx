@@ -57,7 +57,7 @@ export function AIGeneratingScreen({
 
     const timer = setTimeout(() => setShowLongWait(true), 50000);
     return () => clearTimeout(timer);
-  }, []);
+  }, [blink, progress, sway]);
 
   React.useEffect(() => {
     if (connectionLost) {
@@ -67,7 +67,7 @@ export function AIGeneratingScreen({
       Animated.timing(progress, { toValue: 1, duration: remaining, easing: Easing.out(Easing.ease), useNativeDriver: false }).start();
       progressPausedAt.current = null;
     }
-  }, [connectionLost]);
+  }, [connectionLost, progress]);
 
   const swayRotate = sway.interpolate({ inputRange: [-1, 0], outputRange: ["-6deg", "0deg"] });
   const swayTranslateY = sway.interpolate({ inputRange: [-1, 0], outputRange: [-5, 0] });
@@ -163,7 +163,7 @@ export function FullscreenBattleCountdown({ count, isDark = true }: { count: num
       Animated.spring(scaleAnim, { toValue: 1, friction: 6, tension: 140, useNativeDriver: true }),
       Animated.timing(opacityAnim, { toValue: 1, duration: 150, useNativeDriver: true }),
     ]).start();
-  }, [count]);
+  }, [count, opacityAnim, scaleAnim]);
 
   return (
     <Modal visible={true} transparent={false} animationType="none" statusBarTranslucent>

@@ -50,9 +50,10 @@ export function useBattle(deps: {
 
   // Cleanup listener on unmount
   useEffect(() => {
+    const unsubRef = battleUnsubscribeRef;
     return () => {
-      if (battleUnsubscribeRef.current) {
-        battleUnsubscribeRef.current();
+      if (unsubRef.current) {
+        unsubRef.current();
       }
     };
   }, []);

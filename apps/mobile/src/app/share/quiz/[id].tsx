@@ -24,7 +24,7 @@ export default function SharedQuizDeepLink() {
       router.replace("/");
     };
     redirect();
-  }, [id]);
+  }, [id, router]);
 
   return (
     <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#0b1021" }}>
