@@ -28,6 +28,12 @@ let cachedApp: FirebaseApp | null = null;
 let cachedAuth: Auth | null = null;
 let cachedDb: Firestore | null = null;
 
+export function assertFirebaseConfigured(): void {
+  if (!process.env.NEXT_PUBLIC_FIREBASE_API_KEY) {
+    throw new Error("Missing NEXT_PUBLIC_FIREBASE_API_KEY environment variable. Firebase features cannot initialize without a valid API key.");
+  }
+}
+
 function getFirebaseApp(): FirebaseApp | null {
   if (cachedApp) return cachedApp;
   try {
@@ -36,6 +42,9 @@ function getFirebaseApp(): FirebaseApp | null {
       return cachedApp;
     }
     if (!firebaseConfig.apiKey) {
+      if (typeof window !== "undefined") {
+        console.error("[Firebase Startup Error] Missing NEXT_PUBLIC_FIREBASE_API_KEY environment variable.");
+      }
       return null;
     }
     cachedApp = initializeApp(firebaseConfig);

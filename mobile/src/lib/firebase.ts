@@ -28,31 +28,45 @@ if (Platform.OS !== "web") {
   });
 }
 
+export function assertFirebaseConfigured(): void {
+  if (!process.env.EXPO_PUBLIC_FIREBASE_API_KEY) {
+    throw new Error("Missing EXPO_PUBLIC_FIREBASE_API_KEY environment variable. Firebase features cannot initialize without a valid API key.");
+  }
+}
+
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || "",
-  authDomain: "sample-firebase-ai-app-228f1.firebaseapp.com",
-  projectId: "sample-firebase-ai-app-228f1",
-  storageBucket: "sample-firebase-ai-app-228f1.firebasestorage.app",
-  messagingSenderId: "767058687564",
-  appId: "1:767058687564:android:5546bf83bba280b8e826e9",
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || "sample-firebase-ai-app-228f1.firebaseapp.com",
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || "sample-firebase-ai-app-228f1",
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || "sample-firebase-ai-app-228f1.firebasestorage.app",
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "767058687564",
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || "1:767058687564:android:5546bf83bba280b8e826e9",
 };
 
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+let app: any = null;
+try {
+  app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+} catch (err) {
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    console.warn("[Firebase Mobile] Safe initialization fallback:", err);
+  }
+}
 
-let authInstance;
-if (Platform.OS === "web") {
-  authInstance = getAuth(app);
-} else {
-  try {
-    authInstance = initializeAuth(app, {
-      persistence: getReactNativePersistence(ReactNativeAsyncStorage),
-    });
-  } catch (error: any) {
-    if (error.code === "auth/already-initialized") {
+let authInstance: any = null;
+if (app) {
+  if (Platform.OS === "web") {
+    try {
       authInstance = getAuth(app);
-    } else {
-      console.warn("Firebase Auth Error:", error);
-      authInstance = getAuth(app);
+    } catch {}
+  } else {
+    try {
+      authInstance = initializeAuth(app, {
+        persistence: getReactNativePersistence(ReactNativeAsyncStorage),
+      });
+    } catch (error: any) {
+      try {
+        authInstance = getAuth(app);
+      } catch {}
     }
   }
 }
@@ -173,6 +187,6 @@ export async function deleteAccount(): Promise<void> {
   }
 }
 
-export const db = getFirestore(app);
+export const db = app ? getFirestore(app) : (null as any);
 
 export type { User };
