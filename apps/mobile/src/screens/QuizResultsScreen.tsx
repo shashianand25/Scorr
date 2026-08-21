@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import { styles } from "../styles/shared";
 import { AnimatedPressable } from "../components/ui/AnimatedPressable";
 import { BattleTimer } from "../components/ui/BattleTimer";
+import { logger } from "../lib/logger";
 import type { QuizSessionProps } from "../types/QuizSessionProps";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -72,7 +73,9 @@ export function ResultsScreen({ p }: { p: QuizSessionProps }) {
         // This is in render — use a ref to ensure only called once
         if (battleFinishedCalledRef && !battleFinishedCalledRef.current) {
           battleFinishedCalledRef.current = true;
-          finishBattle(activeSession.battleRoomCode || "").catch(console.error);
+          finishBattle(activeSession.battleRoomCode || "").catch((err) =>
+            logger.error("Battle", "Failed to finish battle room", err)
+          );
         }
       } else if (!bothFinished && battleFinishedCalledRef) {
         battleFinishedCalledRef.current = false;

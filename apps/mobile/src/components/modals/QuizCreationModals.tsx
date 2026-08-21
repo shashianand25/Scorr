@@ -16,7 +16,7 @@ const KeyboardWrapper = Platform.OS === "ios" ? require("react-native").Keyboard
  * Extracted from AppModals.tsx god-file.
  * Receives typed QuizCreationModalProps interface.
  */
-export function QuizCreationModals({ p }: { p: any }) {
+export function QuizCreationModals({ p }: { p: QuizCreationModalProps }) {
   const { t } = useTranslation();
   const insets = p.insets || { top: 0, bottom: 0, left: 0, right: 0 };
   const optionsScrollRef = p.optionsScrollRef || { current: null };
