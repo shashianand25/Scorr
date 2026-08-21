@@ -167,43 +167,46 @@ docker-compose up --build
 - npm `v9.0.0` or higher
 - (Optional) PostgreSQL instance
 
-#### 1. Repository Setup & Dependencies
+#### 1. Repository Setup & Dependencies (Fresh Clone)
 ```bash
 # Clone the repository
 git clone https://github.com/shashianand25/Scorr.git
 cd Scorr
 
-# Install monorepo dependencies
+# Install all monorepo workspace dependencies reproducibly
 npm install
+
+# Run the complete test suite (38 suites / 115+ tests)
+npm test
+
+# Build production assets
+npm run build
 ```
 
 #### 2. Configure Environment Files
 ```bash
 cp .env.example .env
-cp backend/.env.example backend/.env
-cp mobile/.env.example mobile/.env
-cp web/.env.example web/.env
+cp apps/api/.env.example apps/api/.env
+cp apps/mobile/.env.example apps/mobile/.env
+cp apps/web/.env.example apps/web/.env
 ```
 
 #### 3. Run Backend API
 ```bash
-cd backend
-npm install
 npm run dev
+# or: cd apps/api && npm run dev
 ```
 
 #### 4. Run Mobile App (Expo)
 ```bash
-cd ../mobile
-npm install
+cd apps/mobile
 npx expo start
 ```
 
 #### 5. Run Web Frontend
 ```bash
-cd ../web
-npm install
-npm run dev
+npm --prefix apps/web run dev
+# or: cd apps/web && npm run dev
 ```
 
 ---
@@ -225,59 +228,78 @@ All environment variables have documented defaults and placeholders in [`.env.ex
 
 ## 🧪 Testing & Quality Assurance
 
-Scorr enforces a multi-tier test matrix with over **34 test suites and 95+ unit tests**:
+Scorr enforces a multi-tier test matrix with over **38 test suites and 115+ automated unit tests**:
 
 ```bash
-# Run all test suites across Mobile, Web, and Backend
+# Run ALL test suites across Mobile, Web, and Backend (Default test command)
+npm test
+
+# Alternatively:
 npm run test:all
 
-# Run Mobile tests with Jest
-npm --prefix mobile test
+# Run Mobile tests with Jest (31 suites / 101 tests)
+npm run test:mobile
 
 # Run Mobile TypeScript typecheck
-npm --prefix mobile run typecheck
+npm run typecheck
 
-# Run Web test suites
-npm --prefix web test
+# Run Web test suites (4 suites / 7 tests)
+npm run test:web
 
-# Run Backend test suites
-npm --prefix backend test
+# Run Backend test suites (3 suites / 7 tests)
+npm run test:backend
+
+# Run Monorepo Linting (ESLint across Mobile & Web)
+npm run lint
+
+# Build Web Application
+npm run build
 ```
 
 ---
 
 ## 📂 Monorepo Structure
 
-```
+```text
 Scorr/
 ├── .devcontainer/          # VS Code Dev Container definitions
 ├── .github/
 │   ├── dependabot.yml      # Dependabot automated dependency updater
 │   └── workflows/
-│       └── ci.yml          # Multi-tier GitHub Actions CI pipeline
-├── backend/                # Express API, document parsers, database adapters
-│   ├── __tests__/          # Backend test suites (API, Deduplication, Sanitization)
-│   ├── api/                # Express routes and controllers
-│   ├── Dockerfile          # Backend container image definition
-│   └── package.json
-├── mobile/                 # React Native / Expo SDK 56 mobile app
-│   ├── src/
-│   │   ├── __tests__/      # 28 Jest unit test suites (Utils, Hooks, Screens, Components)
-│   │   ├── components/     # UI design system components
-│   │   ├── hooks/          # React state hooks and session management
-│   │   ├── lib/            # Algorithm implementations & telemetry
-│   │   └── screens/        # Screen views (Home, Battle, Flashcards, Library)
-│   ├── babel.config.js     # Babel transpilation configuration
-│   ├── jest.config.js      # Jest unit test configuration
-│   └── package.json
-├── web/                    # Next.js 15 web application
-│   ├── src/__tests__/      # Web algorithmic parity test suites
-│   ├── Dockerfile          # Next.js container image definition
-│   └── package.json
+│       ├── ci.yml          # Multi-tier GitHub Actions CI pipeline (runs on every push)
+│       ├── build.yml       # Production build verification pipeline
+│       ├── lint.yml        # ESLint & typecheck pipeline
+│       └── security.yml    # Automated vulnerability audit pipeline
+├── apps/
+│   ├── api/                # Express API, document parsers, database adapters
+│   │   ├── __tests__/      # Backend test suites (API, Deduplication, Sanitization)
+│   │   ├── api/            # Express routes and controllers
+│   │   ├── db/             # Neon PostgreSQL pool and schemas
+│   │   ├── Dockerfile      # Backend container image definition
+│   │   ├── vercel.json     # Vercel serverless API deployment config
+│   │   └── package.json
+│   ├── mobile/             # React Native / Expo SDK 56 mobile app
+│   │   ├── src/
+│   │   │   ├── __tests__/  # 31 Jest unit test suites (Utils, Hooks, Screens, Components)
+│   │   │   ├── components/ # UI design system components
+│   │   │   ├── hooks/      # React state hooks and session management
+│   │   │   ├── lib/        # Algorithm implementations & telemetry
+│   │   │   └── screens/    # Screen views (Home, Battle, Flashcards, Library)
+│   │   ├── babel.config.js # Babel transpilation configuration
+│   │   ├── jest.config.js  # Jest unit test configuration
+│   │   └── package.json
+│   └── web/                # Next.js 16 web application
+│       ├── src/__tests__/  # Web algorithmic parity test suites
+│       ├── src/app/        # Next.js App Router pages
+│       ├── Dockerfile      # Next.js container image definition
+│       └── package.json
+├── packages/               # Shared workspace packages
 ├── CHANGELOG.md            # Version release history and updates
 ├── Dockerfile              # Monorepo production multi-stage Dockerfile
 ├── docker-compose.yml      # Multi-container orchestration
+├── eas.json                # Expo Application Services configuration
 ├── package.json            # Monorepo root manifest and workspace scripts
+├── package-lock.json       # Deterministic lockfile for reproducible builds
 ├── renovate.json           # Renovate bot automated upgrade rules
 └── README.md
 ```
