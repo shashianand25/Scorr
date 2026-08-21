@@ -1,3 +1,5 @@
+import { evaluateAnswers, calculateAccuracyPercentage } from '../../utils/scoring';
+
 describe('Quiz Session Scoring & Evaluation Algorithms', () => {
   const questions = [
     {
@@ -18,41 +20,6 @@ describe('Quiz Session Scoring & Evaluation Algorithms', () => {
       ],
     },
   ];
-
-  function evaluateAnswers(questionsList: any[], userAnswers: Record<string, string[]>) {
-    let correctCount = 0;
-    let wrongCount = 0;
-    let skippedCount = 0;
-    const correctIds: string[] = [];
-    const wrongIds: string[] = [];
-
-    questionsList.forEach((q) => {
-      const selected = userAnswers[q.id] || [];
-      const expectedCorrect = q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.id);
-
-      if (selected.length === 0) {
-        skippedCount++;
-        return;
-      }
-
-      const isCorrect =
-        selected.length === expectedCorrect.length &&
-        selected.every((id: string) => expectedCorrect.includes(id));
-
-      if (isCorrect) {
-        correctCount++;
-        correctIds.push(q.id);
-      } else {
-        wrongCount++;
-        wrongIds.push(q.id);
-      }
-    });
-
-    const total = questionsList.length;
-    const scorePct = total > 0 ? Math.round((correctCount / total) * 100) : 0;
-
-    return { correctCount, wrongCount, skippedCount, correctIds, wrongIds, scorePct };
-  }
 
   it('correctly grades perfect single and multi-select answers as 100%', () => {
     const answers = {
