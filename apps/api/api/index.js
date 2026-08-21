@@ -8,8 +8,24 @@ const cors = require('cors');
 const compression = require('compression');
 require('dotenv').config();
 
+let Sentry = null;
+try {
+  Sentry = require('@sentry/node');
+} catch {
+  // Sentry optional fallback
+}
+
 const pool = require('../db/pool');
 const logger = require('../utils/logger');
+
+// ── Sentry Error Tracking ──────────────────────────────────────────────────
+if (process.env.SENTRY_DSN && Sentry) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV || 'development',
+    tracesSampleRate: 1.0,
+  });
+}
 
 const app = express();
 app.use(compression());
@@ -131,6 +147,9 @@ app.use(require('../routes/config'));
 
 // ── Global Error Handling Middleware ──────────────────────────────────────
 app.use((err, req, res, _next) => {
+  if (process.env.SENTRY_DSN) {
+    Sentry.captureException(err);
+  }
   logger.error('UnhandledException', err.message || 'Internal Server Error', err, {
     path: req.originalUrl || req.url,
     method: req.method,

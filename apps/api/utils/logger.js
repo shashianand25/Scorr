@@ -1,8 +1,9 @@
-/**
- * Structured JSON Logger for Scorr Backend API.
- * Emits machine-readable JSON log events with ISO timestamps, log levels, tags, and context.
- * Includes optional Sentry error tracking integration.
- */
+let Sentry = null;
+try {
+  Sentry = require('@sentry/node');
+} catch {
+  // Fallback if package is unavailable
+}
 
 function formatLogEntry(level, tag, message, context = {}) {
   return {
@@ -39,13 +40,20 @@ const logger = {
 
     console.error(JSON.stringify(entry));
 
-    // Optional error tracking sink (e.g. Sentry)
-    if (process.env.SENTRY_DSN && typeof global.__sentryCaptureException === 'function') {
+    // Error tracking sink (Sentry)
+    if (process.env.SENTRY_DSN) {
       try {
-        global.__sentryCaptureException(error || new Error(message), {
-          tags: { tag },
-          extra: entry.context,
-        });
+        if (Sentry && typeof Sentry.captureException === 'function') {
+          Sentry.captureException(error instanceof Error ? error : new Error(message), {
+            tags: { tag },
+            extra: entry.context,
+          });
+        } else if (typeof global.__sentryCaptureException === 'function') {
+          global.__sentryCaptureException(error || new Error(message), {
+            tags: { tag },
+            extra: entry.context,
+          });
+        }
       } catch {
         // Fallback silently if tracker fails
       }
