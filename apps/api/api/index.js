@@ -9,6 +9,7 @@ const compression = require('compression');
 require('dotenv').config();
 
 const pool = require('../db/pool');
+const logger = require('../utils/logger');
 
 const app = express();
 app.use(compression());
@@ -38,6 +39,21 @@ app.use(cors({
 
 app.use(express.json({ limit: `${process.env.JSON_BODY_LIMIT_MB || '10'}mb` }));
 
+// ── Structured Request Logging Middleware ─────────────────────────────────
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const durationMs = Date.now() - start;
+    logger.info('HTTP', `${req.method} ${req.originalUrl || req.url} ${res.statusCode}`, {
+      method: req.method,
+      path: req.originalUrl || req.url,
+      statusCode: res.statusCode,
+      durationMs,
+    });
+  });
+  next();
+});
+
 // ── Database Bootstrap ────────────────────────────────────────────────────
 // Ensure all required tables exist on cold start
 pool.query(`
@@ -47,7 +63,7 @@ pool.query(`
     count   INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (user_id, date)
   )
-`).catch(err => console.error('[Backend] Failed to ensure ai_usage table:', err));
+`).catch(err => logger.error('Database', 'Failed to ensure ai_usage table', err));
 
 pool.query(`
   CREATE TABLE IF NOT EXISTS otp_codes (
@@ -55,7 +71,7 @@ pool.query(`
     code TEXT NOT NULL,
     expires_at BIGINT NOT NULL
   )
-`).catch(err => console.error('[Backend] Failed to ensure otp_codes table:', err));
+`).catch(err => logger.error('Database', 'Failed to ensure otp_codes table', err));
 
 pool.query(`
   CREATE TABLE IF NOT EXISTS master_quizzes (
@@ -79,7 +95,7 @@ pool.query(`
   CREATE UNIQUE INDEX IF NOT EXISTS idx_mobile_quizzes_user_master_unique 
   ON mobile_quizzes(user_id, master_quiz_id) 
   WHERE deleted_at IS NULL AND master_quiz_id IS NOT NULL;
-`).catch(err => console.error('[Backend] Failed to ensure master_quizzes table:', err));
+`).catch(err => logger.error('Database', 'Failed to ensure master_quizzes table', err));
 
 // ── Domain Route Modules ──────────────────────────────────────────────────
 app.use(require('../routes/ai'));
@@ -91,10 +107,19 @@ app.use(require('../routes/quizzes'));
 app.use(require('../routes/parse'));
 app.use(require('../routes/config'));
 
+// ── Global Error Handling Middleware ──────────────────────────────────────
+app.use((err, req, res, _next) => {
+  logger.error('UnhandledException', err.message || 'Internal Server Error', err, {
+    path: req.originalUrl || req.url,
+    method: req.method,
+  });
+  res.status(500).json({ error: 'Internal server error' });
+});
+
 // ── Server ────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`Backend running on port ${PORT}`);
+  logger.info('Server', `Backend running on port ${PORT}`);
 });
 
 // Export for Vercel serverless
