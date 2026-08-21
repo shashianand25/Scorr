@@ -14,6 +14,7 @@ services:
       - '5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U postgres']
       interval: 5s
@@ -34,6 +35,11 @@ services:
       PORT: 3000
       DATABASE_URL: postgresql://postgres:postgrespassword@postgres:5432/scorr_db?sslmode=disable
       GEMINI_API_KEY: your_gemini_api_key_here
+      GEMINI_MODEL_URL: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent
+      RESEND_API_KEY: re_placeholder_key
+      RESEND_FROM_EMAIL: support@scorrapp.com
+      AI_DAILY_LIMIT: 10
+      JSON_BODY_LIMIT_MB: 10
     depends_on:
       postgres:
         condition: service_healthy
@@ -41,7 +47,7 @@ services:
       - ./backend:/app
       - /app/node_modules
 
-  # Scorr Web Landing & Preview
+  # Scorr Web Landing & App Preview
   web:
     build:
       context: ./web
