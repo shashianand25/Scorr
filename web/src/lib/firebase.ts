@@ -29,9 +29,33 @@ let cachedAuth: Auth | null = null;
 let cachedDb: Firestore | null = null;
 
 export function assertFirebaseConfigured(): void {
-  if (!process.env.NEXT_PUBLIC_FIREBASE_API_KEY) {
+  const key = process.env.NEXT_PUBLIC_FIREBASE_API_KEY || firebaseConfig.apiKey;
+  if (!key) {
     throw new Error("Missing NEXT_PUBLIC_FIREBASE_API_KEY environment variable. Firebase features cannot initialize without a valid API key.");
   }
+}
+
+export function configureFirebase(dynamicConfig: {
+  apiKey?: string;
+  authDomain?: string;
+  projectId?: string;
+  storageBucket?: string;
+  messagingSenderId?: string;
+  appId?: string;
+}): FirebaseApp | null {
+  if (dynamicConfig && dynamicConfig.apiKey) {
+    Object.assign(firebaseConfig, dynamicConfig);
+    try {
+      if (!cachedApp) {
+        cachedApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+      }
+      if (cachedApp) {
+        cachedAuth = getAuth(cachedApp);
+        cachedDb = getFirestore(cachedApp);
+      }
+    } catch {}
+  }
+  return cachedApp;
 }
 
 function getFirebaseApp(): FirebaseApp | null {

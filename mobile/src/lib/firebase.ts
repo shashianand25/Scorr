@@ -29,9 +29,29 @@ if (Platform.OS !== "web") {
 }
 
 export function assertFirebaseConfigured(): void {
-  if (!process.env.EXPO_PUBLIC_FIREBASE_API_KEY) {
+  const key = process.env.EXPO_PUBLIC_FIREBASE_API_KEY || firebaseConfig.apiKey;
+  if (!key) {
     throw new Error("Missing EXPO_PUBLIC_FIREBASE_API_KEY environment variable. Firebase features cannot initialize without a valid API key.");
   }
+}
+
+export function configureFirebase(dynamicConfig: {
+  apiKey?: string;
+  authDomain?: string;
+  projectId?: string;
+  storageBucket?: string;
+  messagingSenderId?: string;
+  appId?: string;
+}): any {
+  if (dynamicConfig && dynamicConfig.apiKey) {
+    Object.assign(firebaseConfig, dynamicConfig);
+    try {
+      if (!app) {
+        app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+      }
+    } catch {}
+  }
+  return app;
 }
 
 const firebaseConfig = {

@@ -439,6 +439,12 @@ export async function recordAiGeneration(
 
 export async function fetchAppConfig(): Promise<{ config: AppConfig | null; error: string | null }> {
   const { data, error } = await apiFetch<AppConfig>("/api/app-config");
+  if (data && (data as any).firebaseConfig) {
+    try {
+      const { configureFirebase } = await import("./firebase");
+      configureFirebase((data as any).firebaseConfig);
+    } catch {}
+  }
   return { config: data ?? null, error };
 }
 

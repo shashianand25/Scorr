@@ -174,6 +174,14 @@ router.get('/api/app-config', (req, res) => {
       pdfExtractThresholdMB: 4.2,
       pptMaxMB: 4.5
     },
+    firebaseConfig: {
+      apiKey: process.env.FIREBASE_API_KEY || process.env.EXPO_PUBLIC_FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "",
+      authDomain: process.env.FIREBASE_AUTH_DOMAIN || "sample-firebase-ai-app-228f1.firebaseapp.com",
+      projectId: process.env.FIREBASE_PROJECT_ID || "sample-firebase-ai-app-228f1",
+      storageBucket: process.env.FIREBASE_STORAGE_BUCKET || "sample-firebase-ai-app-228f1.firebasestorage.app",
+      messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || "767058687564",
+      appId: process.env.FIREBASE_APP_ID || "1:767058687564:web:8e16972e2cf66f0ee826e9",
+    },
     appLinks: {
       shareBaseUrl: "https://scorrapp.com/share/quiz/",
       playStoreUrl: "https://scorrapp.com/download",
