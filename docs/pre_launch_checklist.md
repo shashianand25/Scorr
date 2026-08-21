@@ -121,7 +121,7 @@ Do this on a **real device**, not the simulator.
 
 ## 🟡 Security
 
-- [ ] API keys are **not** committed to Git — run `git log -p | grep -i "AIzaSy"` to check
+- [ ] API keys are **not** committed to Git — check git history before release
 - [ ] Firebase rules prevent users from reading/writing other users' data
 - [ ] Confirm Neon/Postgres is not publicly accessible without auth
 - [ ] All backend routes that mutate data require a valid Firebase auth token

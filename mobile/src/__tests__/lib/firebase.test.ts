@@ -24,7 +24,7 @@ describe("Mobile Firebase Configuration Environment Assertions", () => {
   });
 
   it("succeeds when EXPO_PUBLIC_FIREBASE_API_KEY is present", () => {
-    process.env.EXPO_PUBLIC_FIREBASE_API_KEY = "AIzaSyDummyMobileKeyForUnitTestingOnly";
+    process.env.EXPO_PUBLIC_FIREBASE_API_KEY = "test_dummy_mobile_firebase_api_key";
     expect(() => assertFirebaseConfigured()).not.toThrow();
   });
 });

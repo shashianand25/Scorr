@@ -15,7 +15,7 @@ describe("Web Firebase Configuration Environment Assertions", () => {
   });
 
   it("succeeds when NEXT_PUBLIC_FIREBASE_API_KEY is defined", () => {
-    process.env.NEXT_PUBLIC_FIREBASE_API_KEY = "AIzaSyDummyKeyForUnitTestingPurposesOnly";
+    process.env.NEXT_PUBLIC_FIREBASE_API_KEY = "test_dummy_firebase_api_key_valid";
     expect(() => assertFirebaseConfigured()).not.toThrow();
   });
 });
