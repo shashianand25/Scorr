@@ -20,11 +20,11 @@ jobs:
           node-version: '20'
 
       - name: Install Web Dependencies
-        working-directory: web
+        working-directory: apps/web
         run: npm install --no-audit
 
       - name: Build Web Application
-        working-directory: web
+        working-directory: apps/web
         run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: 1
@@ -43,7 +43,7 @@ jobs:
       - name: Build Backend Image
         uses: docker/build-push-action@v5
         with:
-          context: ./backend
-          file: ./backend/Dockerfile
+          context: ./apps/api
+          file: ./apps/api/Dockerfile
           push: false
           tags: scorr-backend:latest

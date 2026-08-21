@@ -13,17 +13,17 @@ steps:
     displayName: 'Install Node.js 20'
 
   - script: |
-      npm --prefix backend install --no-audit
-      npm --prefix backend test
+      npm --prefix apps/api install --no-audit
+      npm --prefix apps/api test
     displayName: 'Backend Tests'
 
   - script: |
-      npm --prefix web install --no-audit
-      npm --prefix web test
+      npm --prefix apps/web install --no-audit
+      npm --prefix apps/web test
     displayName: 'Web Tests'
 
   - script: |
-      npm --prefix mobile install --no-audit --legacy-peer-deps
-      npm --prefix mobile run typecheck
-      npm --prefix mobile test
+      npm --prefix apps/mobile install --no-audit --legacy-peer-deps
+      npm --prefix apps/mobile run typecheck
+      npm --prefix apps/mobile test
     displayName: 'Mobile Tests & TypeCheck'

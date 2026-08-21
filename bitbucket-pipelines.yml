@@ -6,6 +6,6 @@ pipelines:
     - step:
         name: Multi-Tier Test Suite
         script:
-          - cd backend && npm install --no-audit && npm test
+          - cd apps/api && npm install --no-audit && npm test
           - cd ../web && npm install --no-audit && npm test
           - cd ../mobile && npm install --no-audit --legacy-peer-deps && npm run typecheck && npm test

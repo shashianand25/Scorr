@@ -19,26 +19,26 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: mobile/package-lock.json
+          cache-dependency-path: apps/mobile/package-lock.json
 
       - name: Install Mobile dependencies
-        working-directory: mobile
+        working-directory: apps/mobile
         run: npm install --no-audit --legacy-peer-deps
 
       - name: Lint Mobile
-        working-directory: mobile
+        working-directory: apps/mobile
         run: npm run lint || true
 
       - name: Dependency Vulnerability Audit
-        working-directory: mobile
+        working-directory: apps/mobile
         run: npm audit --audit-level=critical || true
 
       - name: Type check Mobile
-        working-directory: mobile
+        working-directory: apps/mobile
         run: npm run typecheck
 
       - name: Run Mobile tests
-        working-directory: mobile
+        working-directory: apps/mobile
         run: npm test
 
   test-web:
@@ -54,19 +54,19 @@ jobs:
           node-version: '20'
 
       - name: Install Web dependencies
-        working-directory: web
+        working-directory: apps/web
         run: npm install
 
       - name: Lint Web
-        working-directory: web
+        working-directory: apps/web
         run: npm run lint || true
 
       - name: Dependency Vulnerability Audit
-        working-directory: web
+        working-directory: apps/web
         run: npm audit --audit-level=critical || true
 
       - name: Run Web tests
-        working-directory: web
+        working-directory: apps/web
         run: npm test
 
   test-backend:
@@ -82,13 +82,13 @@ jobs:
           node-version: '20'
 
       - name: Install Backend dependencies
-        working-directory: backend
+        working-directory: apps/api
         run: npm install
 
       - name: Dependency Vulnerability Audit
-        working-directory: backend
+        working-directory: apps/api
         run: npm audit --audit-level=critical || true
 
       - name: Run Backend tests
-        working-directory: backend
+        working-directory: apps/api
         run: npm test

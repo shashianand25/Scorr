@@ -26,29 +26,28 @@
     "gemini"
   ],
   "workspaces": [
-    "mobile",
-    "web",
-    "backend"
+    "apps/*",
+    "packages/*"
   ],
   "engines": {
     "node": ">=20.0.0",
     "npm": ">=9.0.0"
   },
   "scripts": {
-    "start": "npm --prefix backend start",
-    "dev": "npm --prefix backend run dev",
-    "build": "npm --prefix web run build",
+    "start": "npm --prefix apps/api start",
+    "dev": "npm --prefix apps/api run dev",
+    "build": "npm --prefix apps/web run build",
     "test": "npm run test:all",
-    "test:mobile": "npm --prefix mobile test",
-    "test:web": "npm --prefix web test",
-    "test:backend": "npm --prefix backend test",
-    "test:all": "npm --prefix mobile test && npm --prefix web test && npm --prefix backend test",
-    "test:coverage": "npm --prefix mobile run test:coverage",
-    "lint": "npm --prefix mobile run lint && npm --prefix web run lint",
-    "lint:mobile": "npm --prefix mobile run lint",
-    "lint:web": "npm --prefix web run lint",
+    "test:mobile": "npm --prefix apps/mobile test",
+    "test:web": "npm --prefix apps/web test",
+    "test:backend": "npm --prefix apps/api test",
+    "test:all": "npm --prefix apps/mobile test && npm --prefix apps/web test && npm --prefix apps/api test",
+    "test:coverage": "npm --prefix apps/mobile run test:coverage",
+    "lint": "npm --prefix apps/mobile run lint && npm --prefix apps/web run lint",
+    "lint:mobile": "npm --prefix apps/mobile run lint",
+    "lint:web": "npm --prefix apps/web run lint",
     "format": "prettier --write .",
-    "typecheck": "npm --prefix mobile run typecheck",
+    "typecheck": "npm --prefix apps/mobile run typecheck",
     "audit:deps": "npm audit --audit-level=critical"
   },
   "dependencies": {

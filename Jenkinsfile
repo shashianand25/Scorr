@@ -13,17 +13,17 @@ pipeline {
         }
         stage('Backend Test') {
             steps {
-                sh 'cd backend && npm install --no-audit && npm test'
+                sh 'cd apps/api && npm install --no-audit && npm test'
             }
         }
         stage('Web Test') {
             steps {
-                sh 'cd web && npm install --no-audit && npm test'
+                sh 'cd apps/web && npm install --no-audit && npm test'
             }
         }
         stage('Mobile Test & TypeCheck') {
             steps {
-                sh 'cd mobile && npm install --no-audit --legacy-peer-deps && npm run typecheck && npm test'
+                sh 'cd apps/mobile && npm install --no-audit --legacy-peer-deps && npm run typecheck && npm test'
             }
         }
     }

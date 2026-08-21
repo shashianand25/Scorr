@@ -14,7 +14,7 @@ services:
       - '5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./apps/api/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U postgres']
       interval: 5s
@@ -24,7 +24,7 @@ services:
   # Scorr Backend API Service
   backend:
     build:
-      context: ./backend
+      context: ./apps/api
       dockerfile: Dockerfile
     container_name: scorr-backend
     restart: unless-stopped
@@ -44,13 +44,13 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      - ./backend:/app
+      - ./apps/api:/app
       - /app/node_modules
 
   # Scorr Web Landing & App Preview
   web:
     build:
-      context: ./web
+      context: ./apps/web
       dockerfile: Dockerfile
     container_name: scorr-web
     restart: unless-stopped
@@ -62,7 +62,7 @@ services:
     depends_on:
       - backend
     volumes:
-      - ./web:/app
+      - ./apps/web:/app
       - /app/node_modules
 
 volumes:

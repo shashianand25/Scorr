@@ -21,14 +21,14 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          npm --prefix mobile install --no-audit --legacy-peer-deps
-          npm --prefix web install --no-audit
-          npm --prefix backend install --no-audit
+          npm --prefix apps/mobile install --no-audit --legacy-peer-deps
+          npm --prefix apps/web install --no-audit
+          npm --prefix apps/api install --no-audit
 
       - name: Typecheck Mobile
-        working-directory: mobile
+        working-directory: apps/mobile
         run: npm run typecheck
 
       - name: Verify Prettier & ESLint (if configured)
         run: |
-          npm --prefix mobile run lint || true
+          npm --prefix apps/mobile run lint || true

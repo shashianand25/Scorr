@@ -35,9 +35,9 @@ jobs:
       - name: Install dependencies
         run: |
           npm install --legacy-peer-deps
-          cd mobile && npm install --legacy-peer-deps && cd ..
-          cd web && npm install && cd ..
-          cd backend && npm install && cd ..
+          cd apps/mobile && npm install --legacy-peer-deps && cd ..
+          cd apps/web && npm install && cd ..
+          cd apps/api && npm install && cd ..
 
       - name: Run Linter (Mobile & Web)
         run: npm run lint
@@ -70,15 +70,15 @@ jobs:
       - name: Install dependencies
         run: |
           npm install --legacy-peer-deps
-          cd mobile && npm install --legacy-peer-deps && cd ..
-          cd web && npm install && cd ..
+          cd apps/mobile && npm install --legacy-peer-deps && cd ..
+          cd apps/web && npm install && cd ..
 
       - name: Run TypeCheck (Mobile)
-        working-directory: mobile
+        working-directory: apps/mobile
         run: npm run typecheck
 
       - name: Run TypeCheck (Web)
-        working-directory: web
+        working-directory: apps/web
         run: npx tsc --noEmit
 
   test:
@@ -109,13 +109,13 @@ jobs:
       - name: Install dependencies
         run: |
           npm install --legacy-peer-deps
-          cd mobile && npm install --legacy-peer-deps && cd ..
-          cd web && npm install && cd ..
-          cd backend && npm install && cd ..
+          cd apps/mobile && npm install --legacy-peer-deps && cd ..
+          cd apps/web && npm install && cd ..
+          cd apps/api && npm install && cd ..
 
       - name: Run All Test Suites
         run: npm test
 
       - name: Build Web Application
-        working-directory: web
+        working-directory: apps/web
         run: npm run build

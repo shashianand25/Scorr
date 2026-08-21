@@ -9,29 +9,29 @@ stages:
 cache:
   paths:
     - node_modules/
-    - mobile/node_modules/
-    - web/node_modules/
-    - backend/node_modules/
+    - apps/mobile/node_modules/
+    - apps/web/node_modules/
+    - apps/api/node_modules/
 
 test:backend:
   stage: test
   script:
-    - cd backend && npm install --no-audit && npm test
+    - cd apps/api && npm install --no-audit && npm test
 
 test:web:
   stage: test
   script:
-    - cd web && npm install --no-audit && npm test
+    - cd apps/web && npm install --no-audit && npm test
 
 test:mobile:
   stage: test
   script:
-    - cd mobile && npm install --no-audit --legacy-peer-deps && npm run typecheck && npm test
+    - cd apps/mobile && npm install --no-audit --legacy-peer-deps && npm run typecheck && npm test
 
 build:web:
   stage: build
   script:
-    - cd web && npm install --no-audit && npm run build
+    - cd apps/web && npm install --no-audit && npm run build
   only:
     - main
     - develop
@@ -39,5 +39,5 @@ build:web:
 security:audit:
   stage: security
   script:
-    - npm --prefix backend audit --audit-level=critical || true
-    - npm --prefix web audit --audit-level=critical || true
+    - npm --prefix apps/api audit --audit-level=critical || true
+    - npm --prefix apps/web audit --audit-level=critical || true
